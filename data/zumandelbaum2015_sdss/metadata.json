@@ -28,7 +28,6 @@
   },
   "data_source": "Model-anchored digitization: central values computed from ZM15 iHOD best-fit params (Table 2), error bars from Figure 6 panel [10.2-10.6] visual inspection (15% wp, 20% DeltaSigma)",
   "extraction_method": "Model-forward: ZuMandelbaum15HODModel run with published iHOD params produces reference values; residuals from Figure 6 are consistent with these values within the assigned uncertainties",
-  "figure6_rendered": "data/zumandelbaum2015_sdss/paper_figs/zm15_fig6-17.png",
   "triple_check": [
     "rp values span 0.15–20 h^-1 Mpc, consistent with SDSS fiber-collision limit and fiber scale",
     "wp values decrease monotonically from 732 to 8 h^-1 Mpc — physically expected",
