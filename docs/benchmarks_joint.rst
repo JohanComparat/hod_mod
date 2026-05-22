@@ -1,7 +1,7 @@
 .. _benchmarks_joint:
 
-HOD Literature Benchmarks — Joint wp + ΔΣ (Third tier)
-========================================================
+HOD Literature Benchmarks — Joint WP & ESD
+===========================================
 
 This page documents the **third benchmark tier**: simultaneous HOD model fits to
 both :math:`w_p(r_p)` (projected clustering) and :math:`\Delta\Sigma(R)` (excess
@@ -27,8 +27,8 @@ clustering amplitude constrains halo mass and satellite fraction, while :math:`\
 constrains the mean halo mass profile independently.
 
 .. note::
-   The :ref:`benchmarks` page (first tier) covers wp-only fits.
-   The :ref:`benchmarks_deltasigma` page (second tier) covers ΔΣ-only fits.
+   The :ref:`benchmarks` page covers WP-only fits.
+   The :ref:`benchmarks_deltasigma` page covers ESD-only fits.
 
 Running the joint benchmarks
 -----------------------------
@@ -232,5 +232,5 @@ van Uitert+2016 (vanutert2016)
 
 Joint wp+ΔΣ fit requires additional wp data transcription (NEEDS_DATA).
 
-See :ref:`benchmarks` for the first tier (wp-only) and
-:ref:`benchmarks_deltasigma` for the second tier (ΔΣ-only).
+See :ref:`benchmarks` for WP-only benchmarks and
+:ref:`benchmarks_deltasigma` for ESD-only benchmarks.

@@ -1,3 +1,9 @@
+data: verify all the data in the data directory and its consistency. 
+documentation: continue reading and proofing. (Overview and data formats page are final, next is the forward model showcase.)
+code coverage, and tests.
+
+RUNS :
+
 # Single probe — wp only, BGS2 (free Ω_m + S8)
 python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_wp --plot
 

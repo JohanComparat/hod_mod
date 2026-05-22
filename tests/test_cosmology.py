@@ -24,6 +24,9 @@ from hod_mod.cosmology.halo_mass_function import (
 from hod_mod.cosmology.distances import (
     hubble_e, comoving_distance, angular_diameter_distance,
     luminosity_distance, distance_modulus,
+    comoving_distance_z1z2, angular_diameter_distance_z1z2,
+    comoving_volume_element, comoving_volume,
+    lookback_time, age_of_universe,
 )
 
 
@@ -748,3 +751,153 @@ class TestHaloModelPowerSpectrum:
         p1h = float(model.pk_1h_mm(k, z=0.0, theta=theta)[0])
         p2h = float(model.pk_2h_mm(k, z=0.0, theta=theta)[0])
         assert p1h > p2h
+
+
+# ---------------------------------------------------------------------------
+# Untested distance functions
+# ---------------------------------------------------------------------------
+
+class TestDistanceFunctions:
+    """Tests for comoving_distance_z1z2, angular_diameter_distance_z1z2,
+    comoving_volume_element, comoving_volume, lookback_time, age_of_universe."""
+
+    _H  = 0.6736
+    _OM = 0.3111
+
+    # --- comoving_distance_z1z2 ---
+
+    def test_comoving_z1z2_shape(self):
+        d = comoving_distance_z1z2(jnp.array([0.1]), jnp.array([0.5]),
+                                    self._H, self._OM)
+        assert d.shape == (1,)
+
+    def test_comoving_z1z2_positive(self):
+        d = comoving_distance_z1z2(jnp.array([0.1, 0.5]),
+                                    jnp.array([0.5, 1.0]),
+                                    self._H, self._OM)
+        assert jnp.all(d > 0)
+
+    def test_comoving_z1z2_identity(self):
+        """chi(z1, z2) == chi(0, z2) - chi(0, z1)."""
+        z1 = jnp.array([0.2])
+        z2 = jnp.array([1.0])
+        d12  = comoving_distance_z1z2(z1, z2, self._H, self._OM)
+        chi2 = comoving_distance(z2, self._H, self._OM)
+        chi1 = comoving_distance(z1, self._H, self._OM)
+        np.testing.assert_allclose(d12, chi2 - chi1, rtol=1e-5)
+
+    # --- angular_diameter_distance_z1z2 ---
+
+    def test_ang_diam_z1z2_shape(self):
+        d = angular_diameter_distance_z1z2(jnp.array([0.1]),
+                                            jnp.array([0.5]),
+                                            self._H, self._OM)
+        assert d.shape == (1,)
+
+    def test_ang_diam_z1z2_positive(self):
+        d = angular_diameter_distance_z1z2(jnp.array([0.1, 0.5]),
+                                            jnp.array([0.5, 1.0]),
+                                            self._H, self._OM)
+        assert jnp.all(d > 0)
+
+    def test_ang_diam_z1z2_less_than_comoving(self):
+        """D_A(z1,z2) < chi(z1,z2) because of the (1+z2) denominator."""
+        z1 = jnp.array([0.2])
+        z2 = jnp.array([1.0])
+        da12 = angular_diameter_distance_z1z2(z1, z2, self._H, self._OM)
+        d12  = comoving_distance_z1z2(z1, z2, self._H, self._OM)
+        assert jnp.all(da12 < d12)
+
+    # --- comoving_volume_element ---
+
+    def test_volume_element_shape(self):
+        z = jnp.linspace(0.1, 2.0, 20)
+        dv = comoving_volume_element(z, self._H, self._OM)
+        assert dv.shape == (20,)
+
+    def test_volume_element_positive(self):
+        z = jnp.linspace(0.1, 2.0, 20)
+        dv = comoving_volume_element(z, self._H, self._OM)
+        assert jnp.all(dv > 0)
+
+    def test_volume_element_increasing(self):
+        """dV/dz is increasing with z (comoving volume grows)."""
+        z = jnp.linspace(0.1, 1.5, 15)
+        dv = comoving_volume_element(z, self._H, self._OM)
+        assert jnp.all(jnp.diff(dv) > 0)
+
+    def test_volume_element_finite(self):
+        z = jnp.linspace(0.01, 3.0, 30)
+        dv = comoving_volume_element(z, self._H, self._OM)
+        assert jnp.all(jnp.isfinite(dv))
+
+    # --- comoving_volume ---
+
+    def test_comoving_volume_shape(self):
+        z = jnp.linspace(0.1, 2.0, 10)
+        v = comoving_volume(z, self._H, self._OM)
+        assert v.shape == (10,)
+
+    def test_comoving_volume_positive(self):
+        z = jnp.linspace(0.1, 2.0, 10)
+        v = comoving_volume(z, self._H, self._OM)
+        assert jnp.all(v > 0)
+
+    def test_comoving_volume_increasing(self):
+        z = jnp.linspace(0.1, 2.0, 10)
+        v = comoving_volume(z, self._H, self._OM)
+        assert jnp.all(jnp.diff(v) > 0)
+
+    def test_comoving_volume_z1_sanity(self):
+        """V_c(z=1) should be of order 10^10 to 10^12 Mpc^3 for Planck18."""
+        v = float(comoving_volume(jnp.array([1.0]), self._H, self._OM)[0])
+        assert 1e10 < v < 1e12
+
+    # --- lookback_time ---
+
+    def test_lookback_time_shape(self):
+        z = jnp.linspace(0.01, 3.0, 20)
+        t = lookback_time(z, self._H, self._OM)
+        assert t.shape == (20,)
+
+    def test_lookback_time_positive(self):
+        z = jnp.linspace(0.01, 3.0, 20)
+        t = lookback_time(z, self._H, self._OM)
+        assert jnp.all(t > 0)
+
+    def test_lookback_time_increasing(self):
+        z = jnp.linspace(0.01, 3.0, 20)
+        t = lookback_time(z, self._H, self._OM)
+        assert jnp.all(jnp.diff(t) > 0)
+
+    def test_lookback_time_z0_near_zero(self):
+        """t_L(z→0) → 0."""
+        t_small = float(lookback_time(jnp.array([0.001]), self._H, self._OM)[0])
+        assert t_small < 0.1  # less than 0.1 Gyr
+
+    def test_lookback_time_z1_planck(self):
+        """t_L(z=1) ≈ 7.7 Gyr for Planck18 (within 20%)."""
+        t = float(lookback_time(jnp.array([1.0]), self._H, self._OM)[0])
+        assert 6.0 < t < 9.5
+
+    def test_lookback_time_finite(self):
+        z = jnp.linspace(0.01, 5.0, 30)
+        t = lookback_time(z, self._H, self._OM)
+        assert jnp.all(jnp.isfinite(t))
+
+    # --- age_of_universe ---
+
+    def test_age_of_universe_planck18(self):
+        """Age should be ~13.8 Gyr for Planck18 (within 10%)."""
+        t0 = float(age_of_universe(self._H, self._OM))
+        assert 12.0 < t0 < 15.5
+
+    def test_age_increases_with_lower_h(self):
+        """Lower H0 → older Universe."""
+        t_high_h = float(age_of_universe(0.72, self._OM))
+        t_low_h  = float(age_of_universe(0.60, self._OM))
+        assert t_low_h > t_high_h
+
+    def test_age_finite(self):
+        t0 = age_of_universe(self._H, self._OM)
+        assert jnp.all(jnp.isfinite(t0))

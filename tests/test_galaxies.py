@@ -22,8 +22,10 @@ from hod_mod.galaxies.hod import (
 )
 from hod_mod.galaxies.clustering import (
     _ogata_table, _pk_to_xi, HODClusteringPrediction,
+    FullHaloModelPrediction,
     _hubble_E, _comoving_dist_h,
 )
+from hod_mod.cosmology.halo_profiles import HaloProfile
 from hod_mod.galaxies.sham import (
     smhm_moster13, smhm_behroozi13, smhm_girelli20,
     SHAMModel, _GIRELLI20_NO_SCATTER, _GIRELLI20_SCATTER,
@@ -1067,3 +1069,165 @@ class TestSHAMModelGirelli20:
             m = SHAMModel(parametrisation=p)
             out = m.log10mstar(_SHAM_LOG10M, 0.3)
             assert jnp.all(jnp.isfinite(out))
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures for FullHaloModelPrediction tests
+# ---------------------------------------------------------------------------
+
+_THETA_FULL = LinearPowerSpectrum.default_cosmology()
+
+_COLOSSUS_FULL = {
+    "flat": True,
+    "H0": _THETA_FULL["h"] * 100.0,
+    "Om0": _THETA_FULL["Omega_m"],
+    "Ob0": _THETA_FULL["Omega_b"],
+    "sigma8": 0.811,
+    "ns": _THETA_FULL["n_s"],
+}
+
+_MORE_HOD_P = MoreHODModel.default_params()
+
+
+@pytest.fixture(scope="module")
+def full_hm_objects():
+    pk_lin = LinearPowerSpectrum()
+    hmf    = make_hmf("tinker08", pk_func=pk_lin.pk_linear)
+    hp     = HaloProfile(_COLOSSUS_FULL, cm_relation="diemer19")
+    hod    = MoreHODModel(hmf, hmf.bias)
+    return pk_lin, hmf, hp, hod
+
+
+# ---------------------------------------------------------------------------
+# FullHaloModelPrediction — Einasto profile
+# ---------------------------------------------------------------------------
+
+class TestFullHaloModelEinasto:
+    """Verify FullHaloModelPrediction works with the Einasto profile."""
+
+    _RP = jnp.logspace(-1, 1.5, 8)
+
+    def test_wp_einasto_shape(self, full_hm_objects):
+        pk_lin, hmf, hp, hod = full_hm_objects
+        pred = FullHaloModelPrediction(pk_lin, hod, hp, profile="einasto")
+        wp = pred.wp(self._RP, 60.0, 0.3, _THETA_FULL, _MORE_HOD_P)
+        assert wp.shape == (8,)
+
+    def test_wp_einasto_positive(self, full_hm_objects):
+        pk_lin, hmf, hp, hod = full_hm_objects
+        pred = FullHaloModelPrediction(pk_lin, hod, hp, profile="einasto")
+        wp = pred.wp(self._RP, 60.0, 0.3, _THETA_FULL, _MORE_HOD_P)
+        assert jnp.all(wp > 0)
+
+    def test_wp_einasto_finite(self, full_hm_objects):
+        pk_lin, hmf, hp, hod = full_hm_objects
+        pred = FullHaloModelPrediction(pk_lin, hod, hp, profile="einasto")
+        wp = pred.wp(self._RP, 60.0, 0.3, _THETA_FULL, _MORE_HOD_P)
+        assert jnp.all(jnp.isfinite(wp))
+
+    def test_invalid_profile_raises(self, full_hm_objects):
+        pk_lin, hmf, hp, hod = full_hm_objects
+        with pytest.raises(ValueError, match="profile"):
+            FullHaloModelPrediction(pk_lin, hod, hp, profile="plummer")
+
+    def test_delta_sigma_einasto_shape(self, full_hm_objects):
+        pk_lin, hmf, hp, hod = full_hm_objects
+        pred = FullHaloModelPrediction(pk_lin, hod, hp, profile="einasto")
+        R = jnp.logspace(-1, 1.0, 6)
+        ds = pred.delta_sigma(R, 0.3, _THETA_FULL, _MORE_HOD_P)
+        assert ds.shape == (6,)
+
+
+# ---------------------------------------------------------------------------
+# FullHaloModelPrediction — off-centering correction
+# ---------------------------------------------------------------------------
+
+class TestFullHaloModelOffCentering:
+    """f_off / sigma_off branch in _pk_tables_full."""
+
+    _RP = jnp.logspace(-1, 1.5, 8)
+
+    def test_off_centering_changes_wp(self, full_hm_objects):
+        pk_lin, hmf, hp, hod = full_hm_objects
+        pred = FullHaloModelPrediction(pk_lin, hod, hp)
+        hod_p_off = dict(_MORE_HOD_P, f_off=0.3, sigma_off=0.1)
+        wp_no_off = pred.wp(self._RP, 60.0, 0.3, _THETA_FULL, _MORE_HOD_P)
+        wp_off    = pred.wp(self._RP, 60.0, 0.3, _THETA_FULL, hod_p_off)
+        assert not jnp.allclose(wp_no_off, wp_off)
+
+    def test_off_centering_reduces_small_scale(self, full_hm_objects):
+        """Off-centering smears the central galaxy → smaller 1h at small rp."""
+        pk_lin, hmf, hp, hod = full_hm_objects
+        pred = FullHaloModelPrediction(pk_lin, hod, hp)
+        hod_p_off = dict(_MORE_HOD_P, f_off=0.5, sigma_off=0.3)
+        rp_small = jnp.array([0.1, 0.2])
+        wp_no_off = pred.wp(rp_small, 60.0, 0.3, _THETA_FULL, _MORE_HOD_P)
+        wp_off    = pred.wp(rp_small, 60.0, 0.3, _THETA_FULL, hod_p_off)
+        assert jnp.all(wp_off < wp_no_off)
+
+    def test_off_centering_zero_same_as_default(self, full_hm_objects):
+        """f_off=0 must give exactly the same result as not passing off-centering."""
+        pk_lin, hmf, hp, hod = full_hm_objects
+        pred = FullHaloModelPrediction(pk_lin, hod, hp)
+        hod_p_zero = dict(_MORE_HOD_P, f_off=0.0, sigma_off=0.1)
+        wp_default  = pred.wp(self._RP, 60.0, 0.3, _THETA_FULL, _MORE_HOD_P)
+        wp_zero_off = pred.wp(self._RP, 60.0, 0.3, _THETA_FULL, hod_p_zero)
+        np.testing.assert_allclose(np.asarray(wp_default),
+                                    np.asarray(wp_zero_off), rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# HODClusteringPrediction — w_theta with explicit n(z) tuple
+# ---------------------------------------------------------------------------
+
+class TestHODClusteringWTheta:
+    """w_theta with and without an explicit redshift distribution."""
+
+    _THETA_DEG = np.array([0.01, 0.02, 0.05, 0.1])
+
+    @pytest.fixture(scope="class")
+    def predictor(self):
+        pk_lin = LinearPowerSpectrum()
+        hmf    = make_hmf("tinker08", pk_func=pk_lin.pk_linear)
+        hod    = MoreHODModel(hmf, hmf.bias)
+        return HODClusteringPrediction(pk_lin, hod)
+
+    def test_w_theta_default_nz_shape(self, predictor):
+        w = predictor.w_theta(self._THETA_DEG, z=0.3,
+                              theta_cosmo=_THETA_FULL, hod_params=_MORE_HOD_P)
+        assert w.shape == (4,)
+
+    def test_w_theta_default_nz_positive(self, predictor):
+        w = predictor.w_theta(self._THETA_DEG, z=0.3,
+                              theta_cosmo=_THETA_FULL, hod_params=_MORE_HOD_P)
+        assert jnp.all(w > 0)
+
+    def test_w_theta_with_nz_tuple_shape(self, predictor):
+        z_arr  = np.linspace(0.25, 0.35, 20)
+        nz_arr = np.exp(-0.5 * ((z_arr - 0.30) / 0.02) ** 2)
+        w = predictor.w_theta(self._THETA_DEG, z=0.3,
+                              theta_cosmo=_THETA_FULL, hod_params=_MORE_HOD_P,
+                              n_z=(z_arr, nz_arr))
+        assert w.shape == (4,)
+
+    def test_w_theta_with_nz_tuple_positive(self, predictor):
+        z_arr  = np.linspace(0.25, 0.35, 20)
+        nz_arr = np.exp(-0.5 * ((z_arr - 0.30) / 0.02) ** 2)
+        w = predictor.w_theta(self._THETA_DEG, z=0.3,
+                              theta_cosmo=_THETA_FULL, hod_params=_MORE_HOD_P,
+                              n_z=(z_arr, nz_arr))
+        assert jnp.all(w > 0)
+
+    def test_w_theta_with_nz_tuple_finite(self, predictor):
+        z_arr  = np.linspace(0.25, 0.35, 20)
+        nz_arr = np.exp(-0.5 * ((z_arr - 0.30) / 0.02) ** 2)
+        w = predictor.w_theta(self._THETA_DEG, z=0.3,
+                              theta_cosmo=_THETA_FULL, hod_params=_MORE_HOD_P,
+                              n_z=(z_arr, nz_arr))
+        assert jnp.all(jnp.isfinite(w))
+
+    def test_w_theta_decreasing_with_angle(self, predictor):
+        """w(theta) should decrease with increasing angular separation."""
+        w = predictor.w_theta(self._THETA_DEG, z=0.3,
+                              theta_cosmo=_THETA_FULL, hod_params=_MORE_HOD_P)
+        assert jnp.all(jnp.diff(w) < 0)

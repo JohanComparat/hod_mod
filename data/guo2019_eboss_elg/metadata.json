@@ -3,9 +3,9 @@
   "arxiv": "1810.05318",
   "doi": "10.3847/1538-4357/ab0d0f",
   "survey": "eBOSS ELG",
-  "sample": "eBOSS Emission Line Galaxies, z ~ 0.8",
-  "z_eff": 0.80,
-  "pi_max_hMpc": 60.0,
+  "sample": "eBOSS Emission Line Galaxies, 10.5 < log10(M_*/Msun) < 11, 0.7 < z < 0.8",
+  "z_eff": 0.75,
+  "pi_max_hMpc": 20.0,
   "cosmology": {
     "Omega_m": 0.307,
     "h": 0.677,
@@ -19,15 +19,16 @@
     "wp_hMpc": "projected correlation function w_p in h^-1 Mpc",
     "wp_err_hMpc": "1-sigma uncertainty in h^-1 Mpc"
   },
-  "data_source": "Guo+2019 or eBOSS ELG data release (arXiv:1810.05318)",
-  "extraction_method": "transcribe from paper or eBOSS data release",
+  "data_source": "Guo+2019 Figure 4 (wp.pdf), first panel (0.7<z<0.8), blue square symbols, 10.5<M*<11 bin",
+  "extraction_method": "visually digitized from arXiv source wp.pdf converted to PNG at 150dpi",
   "triple_check": [
-    "z_eff = 0.8 matches eBOSS ELG survey redshift",
-    "rp bins and wp values match Figure 3 of Guo+2019",
-    "units: h^-1 Mpc",
-    "verify pi_max used in their analysis"
+    "rp values span 1.3-31.6 h^-1 Mpc (8 log-spaced bins, Δlog r=0.2)",
+    "wp values decrease monotonically from 24 to 0.4 h^-1 Mpc — physically expected",
+    "wp_err is ~20-25% of wp — consistent with eBOSS ELG shot noise at z~0.75",
+    "pi_max=20 h^-1 Mpc confirmed from paper TeX source (rpi_max = 20)",
+    "units: h^-1 Mpc throughout"
   ],
-  "status": "NEEDS_DATA",
+  "status": "ready",
   "published_params": {
     "log10m_star0": 9.5,
     "log10m1_shmr": 11.5,

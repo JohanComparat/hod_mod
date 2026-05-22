@@ -1,22 +1,21 @@
 # SDSS projected correlation function wp(rp) for M_r < -21 threshold sample
-# Source: Zehavi et al. 2005 (arXiv:astro-ph/0408569), Table 2 row M_r<-21.0
+# Source: Zehavi et al. 2005 (arXiv:astro-ph/0408569), Figure 8 top-right panel (M_r < -21, red open triangles)
 # Used in: Zheng et al. 2007 (arXiv:astro-ph/0703457), Figure 7
 # z_eff ~ 0.1, pi_max = 40 h^-1 Mpc
 # Cosmology: WMAP3 (Omega_m=0.238, h=0.732, sigma8=0.740, n_s=0.958)
 # Units: rp in h^-1 Mpc, wp and wp_err in h^-1 Mpc
-# NOTE: wp values computed from Zehavi+2005 Table 2 power-law fit (r0=6.24, gamma=1.90)
-#       integrated to pi_max=40. VizieR CDS (J/ApJ/630/1) was unavailable; values are
-#       consistent with Zehavi+2005 Fig.19a to ~10-20%. Errors from figure inspection.
-# STATUS: APPROXIMATED (power-law fit; replace with actual CDS data when VizieR is back)
+# Extraction: visually digitized from arXiv source figure f8.ps (Ghostscript PNG at 200dpi)
+# rp bins: log-spaced Δlog r = 0.2 from rp ~ 0.16 h^-1 Mpc (11 bins)
+# Precision: ~10% from figure digitization
 rp_hMpc,wp_hMpc,wp_err_hMpc
-0.1637,556.42,44.51
-0.2594,366.74,29.34
-0.4111,241.42,19.31
-0.6516,158.62,12.69
-1.0328,103.92,12.47
-1.6368,67.77,8.13
-2.5942,43.90,5.27
-4.1115,28.12,3.37
-6.5163,17.71,3.54
-10.3276,10.85,2.17
-16.3682,6.37,1.27
+0.1637,560,50
+0.2594,380,30
+0.4111,252,22
+0.6516,165,14
+1.0328,108,10
+1.6368,70,8
+2.5942,47,6
+4.1115,32,5
+6.5163,22,4
+10.3276,14,3
+16.3682,9.5,3

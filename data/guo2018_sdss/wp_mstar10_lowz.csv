@@ -1,17 +1,18 @@
-# BOSS LOWZ projected correlation function wp(rp), 0.1<z<0.2, lower mass bin
-# Source: Guo et al. 2018 (arXiv:1804.01993), Figure 5 (top-left panel, blue x symbols)
-# Stellar mass bin: 11 < log10(M_*/Msun) < 11.5
+# SDSS BOSS wp(rp) for stellar mass bin 11 < log10(M_*/Msun) < 11.5, 0.1 < z < 0.2
+# Source: Guo et al. 2018 (arXiv:1804.01993), Figure 5 (sdss.pdf), top-left panel, blue × symbols
 # z_eff ~ 0.15, pi_max = 100 h^-1 Mpc
 # Cosmology: Planck15 (Omega_m=0.307, h=0.677, sigma8=0.829, n_s=0.961)
 # Units: rp in h^-1 Mpc, wp and wp_err in h^-1 Mpc
-# rp bins: log-spaced Δlog r = 0.2 from 1 to 63.1 h^-1 Mpc (9 bins total)
-# Precision: ~20% from figure digitization
+# Extraction: visually digitized from arXiv source sdss.pdf (Ghostscript PNG at 150dpi)
+# rp bins: log-spaced Δlog r = 0.2 from rp ~ 1 h^-1 Mpc (9 bins)
+# Precision: ~15-20% from figure digitization
 rp_hMpc,wp_hMpc,wp_err_hMpc
-1.000,60.0,13.0
-1.585,38.0,8.0
-2.512,24.0,5.0
-3.981,15.5,3.5
-6.310,10.0,2.5
-10.00,6.5,1.8
-15.85,4.5,1.5
-25.12,3.0,1.2
+1.259,100,18
+1.995,61,12
+3.162,37,7
+5.012,22,4.5
+7.943,13,2.5
+12.589,7.5,2
+19.953,4.2,1.5
+31.623,2.5,1.5
+50.119,1.5,1.5

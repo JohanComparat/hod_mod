@@ -409,3 +409,219 @@ class TestMultiProbeFitterPhysics:
         )
         # ΔΣ_IA < 0 → total ESD is lower with IA
         assert np.all(ds_with_ia <= ds_no_ia * 1.001)
+
+
+# ---------------------------------------------------------------------------
+# load_config from a minimal YAML file
+# ---------------------------------------------------------------------------
+
+_MINIMAL_YAML = """\
+model:
+  hod_model: MoreHODModel
+  hmf_backend: tinker08
+  z: 0.16
+  pi_max: 60.0
+
+data:
+  file: data/placeholder.csv
+  rp_min: 0.1
+  rp_max: 30.0
+  format: csv
+
+fitting:
+  method: map
+  n_walkers: 16
+  n_steps: 100
+  n_burnin: 20
+
+output:
+  dir: results/test/
+
+parameters:
+  log10mmin:
+    init: 11.35
+    free: true
+    bounds: [10.5, 13.5]
+    prior_type: uniform
+  sigma_logm:
+    init: 0.25
+    free: true
+    bounds: [0.01, 1.5]
+    prior_type: gaussian
+    prior_mean: 0.25
+    prior_sigma: 0.3
+  log10m0:
+    init: 11.20
+    free: false
+  log10m1:
+    init: 12.40
+    free: true
+    bounds: [11.0, 14.0]
+    prior_type: uniform
+  alpha:
+    init: 1.0
+    free: false
+  kappa:
+    init: 1.13
+    free: false
+  alpha_inc:
+    init: 0.0
+    free: false
+  log10m_inc:
+    init: 11.5
+    free: false
+"""
+
+
+class TestLoadConfig:
+    def test_returns_fitconfig(self, tmp_path):
+        from hod_mod.fitting.hod_wp import load_config, FitConfig
+        cfg_path = tmp_path / "test.yml"
+        cfg_path.write_text(_MINIMAL_YAML)
+        cfg = load_config(str(cfg_path))
+        assert isinstance(cfg, FitConfig)
+
+    def test_free_params_parsed(self, tmp_path):
+        from hod_mod.fitting.hod_wp import load_config
+        cfg_path = tmp_path / "test.yml"
+        cfg_path.write_text(_MINIMAL_YAML)
+        cfg = load_config(str(cfg_path))
+        assert "log10mmin" in cfg.free_params
+        assert "log10m1" in cfg.free_params
+        assert "log10m0" not in cfg.free_params
+
+    def test_gaussian_prior_detected(self, tmp_path):
+        from hod_mod.fitting.hod_wp import load_config
+        cfg_path = tmp_path / "test.yml"
+        cfg_path.write_text(_MINIMAL_YAML)
+        cfg = load_config(str(cfg_path))
+        assert cfg.param_prior_types.get("sigma_logm") == "gaussian"
+        assert cfg.param_prior_means.get("sigma_logm") == pytest.approx(0.25)
+        assert cfg.param_prior_sigmas.get("sigma_logm") == pytest.approx(0.3)
+
+    def test_uniform_prior_detected(self, tmp_path):
+        from hod_mod.fitting.hod_wp import load_config
+        cfg_path = tmp_path / "test.yml"
+        cfg_path.write_text(_MINIMAL_YAML)
+        cfg = load_config(str(cfg_path))
+        assert cfg.param_prior_types.get("log10mmin") == "uniform"
+
+    def test_model_fields(self, tmp_path):
+        from hod_mod.fitting.hod_wp import load_config
+        cfg_path = tmp_path / "test.yml"
+        cfg_path.write_text(_MINIMAL_YAML)
+        cfg = load_config(str(cfg_path))
+        assert cfg.hod_model == "MoreHODModel"
+        assert cfg.hmf_backend == "tinker08"
+        assert cfg.z == pytest.approx(0.16)
+        assert cfg.pi_max == pytest.approx(60.0)
+
+
+# ---------------------------------------------------------------------------
+# FitConfig dataclass defaults
+# ---------------------------------------------------------------------------
+
+class TestFitConfigDefaults:
+    def test_fitconfig_creates(self):
+        from hod_mod.fitting.hod_wp import FitConfig
+        cfg = FitConfig(
+            data_file="dummy.csv",
+            rp_min=0.1, rp_max=30.0,
+            hod_model="MoreHODModel",
+            hmf_backend="tinker08",
+            z=0.16, pi_max=60.0,
+            free_params=["log10mmin"],
+            param_bounds={"log10mmin": (10.5, 13.5)},
+            param_init={"log10mmin": 11.35},
+        )
+        assert cfg.n_walkers == 32
+        assert cfg.n_steps == 2000
+        assert cfg.method == "both"
+        assert cfg.data_format == "csv"
+        assert cfg.ds_file is None
+        assert cfg.use_free_cosmo is False
+
+    def test_backward_compat_aliases(self):
+        from hod_mod.fitting.hod_wp import WpFitConfig, JointFitConfig, FitConfig
+        assert WpFitConfig is FitConfig
+        assert JointFitConfig is FitConfig
+
+
+# ---------------------------------------------------------------------------
+# log_prob_wp standalone call
+# ---------------------------------------------------------------------------
+
+class TestLogProbWp:
+    @pytest.fixture(scope="class")
+    def predictor_and_data(self):
+        import jax.numpy as jnp
+        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+        from hod_mod.cosmology.halo_mass_function import make_hmf
+        from hod_mod.cosmology.halo_profiles import HaloProfile
+        from hod_mod.galaxies.hod import MoreHODModel
+        from hod_mod.galaxies.clustering import FullHaloModelPrediction
+
+        theta = LinearPowerSpectrum.default_cosmology()
+        colossus = {
+            "flat": True, "H0": theta["h"] * 100.0,
+            "Om0": theta["Omega_m"], "Ob0": theta["Omega_b"],
+            "sigma8": 0.811, "ns": theta["n_s"],
+        }
+        pk_lin = LinearPowerSpectrum()
+        hmf    = make_hmf("tinker08", pk_func=pk_lin.pk_linear)
+        hp     = HaloProfile(colossus, cm_relation="diemer19")
+        hod    = MoreHODModel(hmf, hmf.bias)
+        pred   = FullHaloModelPrediction(pk_lin, hod, hp)
+
+        rp = np.logspace(-1, 1.5, 10)
+        hod_p = MoreHODModel.default_params()
+        wp_obs = np.asarray(pred.wp(jnp.array(rp), 60.0, 0.16, theta, hod_p))
+        icov = np.diag(1.0 / (0.15 * wp_obs) ** 2)
+        return pred, rp, wp_obs, icov, theta
+
+    def test_log_prob_wp_finite_at_true_params(self, predictor_and_data):
+        from hod_mod.fitting.hod_wp import log_prob_wp
+        pred, rp, wp_obs, icov, theta = predictor_and_data
+        default = MoreHODModel.default_params()
+        free = ["log10mmin", "sigma_logm", "log10m1", "alpha"]
+        bounds = {
+            "log10mmin":  (10.5, 13.5),
+            "sigma_logm": (0.01, 1.5),
+            "log10m1":    (11.0, 14.0),
+            "alpha":      (0.01, 3.0),
+        }
+        fixed = {k: v for k, v in default.items() if k not in free}
+        theta_vec = np.array([default[k] for k in free])
+
+        lp = log_prob_wp(theta_vec, free, fixed, bounds,
+                         pred, rp, wp_obs, icov, 0.16, theta, 60.0)
+        assert np.isfinite(lp)
+        assert lp <= 0.0
+
+    def test_log_prob_wp_out_of_bounds_returns_neginf(self, predictor_and_data):
+        from hod_mod.fitting.hod_wp import log_prob_wp
+        pred, rp, wp_obs, icov, theta = predictor_and_data
+        default = MoreHODModel.default_params()
+        free = ["log10mmin"]
+        bounds = {"log10mmin": (10.5, 13.5)}
+        fixed = {k: v for k, v in default.items() if k not in free}
+
+        # log10mmin=9.0 is below the lower bound
+        lp = log_prob_wp(np.array([9.0]), free, fixed, bounds,
+                         pred, rp, wp_obs, icov, 0.16, theta, 60.0)
+        assert lp == -np.inf
+
+    def test_log_prob_wp_at_true_params_higher_than_random(self, predictor_and_data):
+        """True parameters should give a higher log-posterior than a random draw."""
+        from hod_mod.fitting.hod_wp import log_prob_wp
+        pred, rp, wp_obs, icov, theta = predictor_and_data
+        default = MoreHODModel.default_params()
+        free = ["log10mmin"]
+        bounds = {"log10mmin": (10.5, 13.5)}
+        fixed = {k: v for k, v in default.items() if k not in free}
+
+        lp_true = log_prob_wp(np.array([default["log10mmin"]]), free, fixed,
+                              bounds, pred, rp, wp_obs, icov, 0.16, theta, 60.0)
+        lp_off  = log_prob_wp(np.array([12.5]), free, fixed,
+                              bounds, pred, rp, wp_obs, icov, 0.16, theta, 60.0)
+        assert lp_true > lp_off

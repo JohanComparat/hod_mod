@@ -1,8 +1,0 @@
-# COSMOS projected correlation function wp(rp), PHOTO_z2 bin, log10(M_*/Msun) > 10.6
-# Source: Leauthaud et al. 2012 (arXiv:1104.0928), from their PRIMUS+DEEP2 analysis
-# z_eff = 0.66 (PHOTO_z2: z in [0.48, 0.74])
-# pi_max = 40 h^-1 Mpc
-# Cosmology: WMAP5 (Omega_m=0.258, h=0.72, sigma8=0.796, n_s=0.963)
-# Units: rp in h^-1 Mpc, wp and wp_err in h^-1 Mpc
-# STATUS: NEEDS_DATA — see README_data.md
-rp_hMpc,wp_hMpc,wp_err_hMpc

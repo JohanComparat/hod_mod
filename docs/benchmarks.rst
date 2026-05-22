@@ -1,7 +1,7 @@
 .. _benchmarks:
 
-HOD Literature Benchmarks
-==========================
+HOD Literature Benchmarks — WP only
+=====================================
 
 This section documents validation runs comparing **hod_mod** predictions against
 published data vectors from the reference papers that introduced each HOD or CSMF
@@ -98,26 +98,11 @@ Data transcription instructions for each NEEDS_DATA benchmark are in
 
 .. seealso::
 
-   :ref:`benchmarks_deltasigma` — Second benchmark tier: ΔΣ-only fits for
+   :ref:`benchmarks_deltasigma` — ESD-only fits for
    Leauthaud+2012, van Uitert+2016, Zu & Mandelbaum+2015.
 
-   :ref:`benchmarks_joint` — Third benchmark tier: joint :math:`w_p + \Delta\Sigma`
-   fits using the same data as the first two tiers.
+   :ref:`benchmarks_joint` — Joint :math:`w_p + \Delta\Sigma`
+   fits for Zu & Mandelbaum+2015, Zacharegkas+2025, and Lange+2025.
 
    :ref:`benchmark_lange2025` — DESI DR1 benchmark with free cosmological parameters
    (Ω_m, S8) and assembly bias (Lange+2025).
-
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-   benchmark_more2015
-   benchmark_kravtsov2004
-   benchmark_zheng2007
-   benchmark_leauthaud2012
-   benchmark_vanutert2016
-   benchmark_zumandelbaum2015
-   benchmark_guo2018
-   benchmark_guo2019
-   benchmark_zacharegkas2025
-   benchmark_lange2025

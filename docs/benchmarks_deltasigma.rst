@@ -1,7 +1,7 @@
 .. _benchmarks_deltasigma:
 
-HOD Literature Benchmarks — ΔΣ only (Second tier)
-===================================================
+HOD Literature Benchmarks — ESD only
+======================================
 
 This page documents the **second benchmark tier**: HOD model fits to the
 galaxy–matter excess surface density :math:`\Delta\Sigma(R)` *alone*, without
@@ -14,8 +14,8 @@ DS-only parameters to the published joint fits (see :ref:`benchmarks_joint`)
 quantifies the information gain from adding :math:`w_p`.
 
 .. note::
-   The :ref:`benchmarks` page (first tier) covers wp-only fits.
-   The :ref:`benchmarks_joint` page (third tier) covers joint wp+ΔΣ fits.
+   The :ref:`benchmarks` page covers WP-only fits.
+   The :ref:`benchmarks_joint` page covers joint WP & ESD fits.
 
 Running the ΔΣ benchmarks
 --------------------------
@@ -208,5 +208,5 @@ Leauthaud+2012 DS-only (leauthaud2012_ds)
 MAP fit: pending (data from Figure 6 digitization; no machine-readable table in paper).
 **Status: in progress** — see :ref:`benchmark_leauthaud2012` for details.
 
-See :ref:`benchmarks` for the first benchmark tier (wp-only) and
-:ref:`benchmarks_joint` for the third tier (joint wp+ΔΣ).
+See :ref:`benchmarks` for WP-only benchmarks and
+:ref:`benchmarks_joint` for joint WP & ESD benchmarks.

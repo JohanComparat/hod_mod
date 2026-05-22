@@ -38,3 +38,9 @@ include = ["hod_mod*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+omit = ["*/hod_mod/scripts/*"]
+
+[tool.coverage.report]
+omit = ["*/hod_mod/scripts/*"]
