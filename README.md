@@ -105,8 +105,9 @@ The sample data file `data/more2015_boss_cmass/wp_cmass_z052.csv` is included in
 
 ## Citation
 
-If you use `hod_mod` in published work please cite the papers for the HOD models
-you use (see table above) and include a reference to this package.
+If you use `hod_mod` in published work please include a reference to this package's url and to Comparat et al. 2025 (https://ui.adsabs.harvard.edu/abs/2025A%26A...697A.173C). Depending on the model used, cite the relevant paper(s) accordingly (see table above).
+
+---
 
 ## License
 

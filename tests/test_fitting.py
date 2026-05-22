@@ -249,7 +249,7 @@ class TestJointFitterNgTerm:
         ds_path = wp_path.replace("wp_test", "ds_test")
         np.savetxt(ds_path,
                    np.column_stack([rp[:6], 100.0 * np.ones(6), 10.0 * np.ones(6)]),
-                   header="rp_hMpc,ds_hMpc,ds_err_hMpc", delimiter=",", comments="")
+                   header="R_hMpc,ds_Msun_h_pc2,ds_err_Msun_h_pc2", delimiter=",", comments="")
 
         cfg = JointFitConfig(
             data_file    = wp_path,
@@ -320,10 +320,12 @@ class TestMultiProbeFitterPhysics:
         mean.  The prior contribution to log_prob must be lower at 10.0.
         Reference: arXiv:2512.15960v3 BGS HOD prior.
         """
-        import sys, importlib
-        sys.path.insert(
-            0, "/home/comparat/software/hod_mod/hod_mod/scripts/fitting/bgs_ls10"
+        import sys, importlib, pathlib
+        _bgs_dir = (
+            pathlib.Path(__file__).parent.parent
+            / "hod_mod" / "scripts" / "fitting" / "bgs_ls10"
         )
+        sys.path.insert(0, str(_bgs_dir))
         mod = importlib.import_module("fit_bgs_multiprobe")
 
         pred, theta = minimal_predictor

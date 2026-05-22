@@ -103,17 +103,8 @@ Halo mass                   :math:`M`              :math:`M_\odot/h`
 Power spectrum              :math:`P(k)`           :math:`({\rm Mpc}/h)^3`
 Wavenumber                  :math:`k`              :math:`h\,{\rm Mpc}^{-1}`
 Galaxy number density       :math:`n_g`            :math:`({\rm Mpc}/h)^{-3}`
-SMF                         :math:`\Phi`           :math:`({\rm Mpc}/h)^{-3}\,{\rm dex}^{-1}`
-X-ray luminosity            :math:`L_X`            :math:`10^{44}` erg/s
-Temperature                 :math:`T`              keV
+Stellar Mass Function       :math:`\Phi`           :math:`({\rm Mpc}/h)^{-3}\,{\rm dex}^{-1}`
 =========================== ====================== =======================
-
-The :math:`h`-unit convention means that, e.g., a halo of mass
-:math:`M = 10^{13}\,M_\odot` should be passed as
-:math:`M/h = 10^{13}/0.6736 \approx 1.485 \times 10^{13}\,M_\odot/h`.
-
-Input survey data is stored in **Mpc** (h-free) by ``sum_stat``.
-``SumStatReader.from_hdf5()`` applies the conversion automatically.
 
 ---
 
@@ -128,13 +119,13 @@ keys (produced by ``LinearPowerSpectrum.default_cosmology()``):
     theta = {
         "h":              0.6736,   # H₀ / (100 km/s/Mpc)
         "Omega_b":        0.0493,   # baryon density parameter
-        "Omega_cdm":      0.2607,   # cold dark matter density
-        "Omega_m":        0.3100,   # total matter = Omega_b + Omega_cdm
+        "Omega_cdm":      0.2644,   # cold dark matter density
+        "Omega_m":        0.3137,   # total matter = Omega_b + Omega_cdm
         "n_s":            0.9649,   # scalar spectral index
         "ln10^{10}A_s":   3.044,    # log amplitude of primordial spectrum
     }
 
-These are the Planck 2018 TT,TE,EE+lowE best-fit values
+These are the Planck 2018 TT,TE,EE+lowE+lensing best-fit values
 (`Planck Collaboration 2020 <https://arxiv.org/abs/1807.06209>`_, Table 2) [PlanckCollaboration2018]_.
 
 ---
@@ -142,9 +133,9 @@ These are the Planck 2018 TT,TE,EE+lowE best-fit values
 JAX conventions
 ---------------
 
-The package follows strict JAX idioms to enable gradient-based inference:
+The package follows JAX idioms to enable gradient-based inference:
 
-* Use ``jnp.*`` everywhere inside hot functions; only use ``np.*`` at I/O boundaries.
+* Use ``jnp.*`` everywhere inside hot functions; only use numpy ``np.*`` at I/O boundaries.
 * Pure functions are decorated with ``@jax.jit``; class methods use
   ``@partial(jax.jit, static_argnums=(0,))``.
 * Avoid Python-level ``if``/``for`` inside JIT-compiled code; use ``jax.lax.cond``
@@ -175,13 +166,12 @@ Repository structure
     └── fitting/
         ├── bgs_ls10/        BGS/LS10 fitting campaign
         ├── mocks/           Uchuu mock fitting campaign
-        ├── gama/            GAMA SMF visualisation
-        ├── cosmos/          COSMOS SMF visualisation
         └── paper_reproductions/
 
     configs/                 YAML configurations for WpFitter
     results/                 output directory (not tracked by git)
     tests/                   pytest test suite
+    data/                    data sets for testing
 
 ---
 
@@ -220,8 +210,6 @@ Acronym glossary
      - eROSITA All-Sky Survey
    * - **GAMA**
      - Galaxy And Mass Assembly survey
-   * - **gNFW**
-     - Generalised Navarro-Frenk-White (pressure) profile
    * - **GP**
      - Gaussian Process emulator
    * - **HMC**
@@ -230,8 +218,6 @@ Acronym glossary
      - Halo Mass Function — dn/dM or dn/d ln M
    * - **HOD**
      - Halo Occupation Distribution — P(N | M)
-   * - **ICM**
-     - Intracluster Medium
    * - **ICSMF**
      - Inverse Conditional Stellar Mass Function
    * - **iHOD**
@@ -262,34 +248,21 @@ Acronym glossary
      - Stellar-to-Halo Mass Relation
    * - **SMF**
      - Stellar Mass Function — Φ(M\ :sub:`*`)
-   * - **SZ / tSZ**
-     - (thermal) Sunyaev-Zel'dovich effect
    * - **XLA**
      - Accelerated Linear Algebra — the compiler backend used by JAX
-   * - **XLF**
-     - X-ray Luminosity Function
    * - **ΔΣ(R)**
-     - Excess Surface Density — the weak gravitational lensing observable
+     - Excess Surface Density — a weak gravitational lensing observable
    * - **w\ :sub:`p`\ (r\ :sub:`p`\ )**
-     - Projected galaxy two-point correlation function
+     - Projected galaxy two-point correlation function — the clustering observable
 
 ---
 
 Citing this work
 -----------------
 
-If you use ``hod_mod`` in published research, please cite:
-
-* `Comparat et al. 2023 <https://ui.adsabs.harvard.edu/abs/2023A%26A...673A.122C>`_ [Comparat2023]_
-  — eFEDS X-ray AGN HOD analysis (A&A 673, A122)
-* `Comparat et al. 2025 <https://ui.adsabs.harvard.edu/abs/2025A%26A...697A.173C>`_
-  — X-ray × galaxy HOD (A&A 697, A173)
-* `Comparat & Macias-Perez et al. 2025 <https://ui.adsabs.harvard.edu/abs/2025A%26A...700A.271C>`_
-  — eRASS1 cluster HOD (A&A 700, A271)
+If you use ``hod_mod`` in published research, please cite: 
+`Comparat et al. 2025 <https://ui.adsabs.harvard.edu/abs/2025A%26A...697A.173C>`_ (A&A 697, A173)
 
 ---
 
-.. rubric:: Key references
 
-Recent cosmological results from galaxy clustering analyses:
-[Porredon2025]_, [Semenaite2025]_.
