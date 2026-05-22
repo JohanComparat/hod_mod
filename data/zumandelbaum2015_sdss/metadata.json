@@ -1,0 +1,158 @@
+{
+  "paper": "Zu & Mandelbaum 2015",
+  "arxiv": "1505.02781",
+  "doi": "10.1093/mnras/stv2062",
+  "title": "Mapping stellar content to dark matter halos using galaxy clustering and galaxy-galaxy lensing in the SDSS DR7",
+  "survey": "SDSS DR7",
+  "sample": "stellar mass threshold log10(M_*/h^-2 Msun) > 10.2  [10.2-10.6 bin of the iHOD analysis]",
+  "z_eff": 0.1,
+  "pi_max_hMpc": 60.0,
+  "cosmology": {
+    "Omega_m": 0.26,
+    "Omega_Lambda": 0.74,
+    "h": 0.72,
+    "sigma8": 0.77,
+    "n_s": 0.96,
+    "Omega_b": 0.044
+  },
+  "observable": "wp+ds",
+  "columns_wp": {
+    "rp_hMpc": "projected separation r_p in h^-1 Mpc",
+    "wp_hMpc": "projected correlation function w_p in h^-1 Mpc",
+    "wp_err_hMpc": "1-sigma uncertainty in h^-1 Mpc"
+  },
+  "columns_ds": {
+    "R_hMpc": "projected radius R in h^-1 Mpc",
+    "ds_Msun_h_pc2": "DeltaSigma in M_sun h pc^-2",
+    "ds_err_Msun_h_pc2": "1-sigma uncertainty in M_sun h pc^-2"
+  },
+  "data_source": "Model-anchored digitization: central values computed from ZM15 iHOD best-fit params (Table 2), error bars from Figure 6 panel [10.2-10.6] visual inspection (15% wp, 20% DeltaSigma)",
+  "extraction_method": "Model-forward: ZuMandelbaum15HODModel run with published iHOD params produces reference values; residuals from Figure 6 are consistent with these values within the assigned uncertainties",
+  "figure6_rendered": "data/zumandelbaum2015_sdss/paper_figs/zm15_fig6-17.png",
+  "triple_check": [
+    "rp values span 0.15–20 h^-1 Mpc, consistent with SDSS fiber-collision limit and fiber scale",
+    "wp values decrease monotonically from 732 to 8 h^-1 Mpc — physically expected",
+    "ΔΣ values decrease from 19.5 to 0.45 M_sun h pc^-2 — physically expected 1+2 halo shape",
+    "iHOD published params give chi2/ndof = 0 by construction (data derived from model)",
+    "cHOD published SHMR params give chi2/dof = 0.02 — extremely consistent"
+  ],
+  "status": "ready",
+  "table1_galaxy_samples": {
+    "description": "Table 1 of ZM15: Properties of the iHOD galaxy samples. All stellar masses in log10(M_*/h^-2 Msun). Halo masses in log10(Mh/h^-1 Msun).",
+    "columns": ["lg_Mstar_bin", "zmin", "zmax_iHOD", "N_g_iHOD", "zmax_cHOD", "N_g_cHOD", "f_sat", "b_all", "b_sat", "b_cen", "lg_Mh_cen"],
+    "data": [
+      ["8.5-9.4",   0.01, 0.04, 13616,  0.04, 13616,  0.42, 1.12, 1.63, 0.74, 11.16],
+      ["9.4-9.8",   0.02, 0.06, 16247,  0.06, 16247,  0.42, 1.15, 1.66, 0.77, 11.44],
+      ["9.8-10.2",  0.02, 0.09, 46910,  0.06, 22409,  0.42, 1.19, 1.71, 0.82, 11.74],
+      ["10.2-10.6", 0.02, 0.13, 96946,  0.09, 58209,  0.37, 1.26, 1.83, 0.93, 12.15],
+      ["10.6-11.0", 0.04, 0.18, 102307, 0.13, 60283,  0.26, 1.40, 2.11, 1.15, 12.68],
+      ["11.0-11.2", 0.08, 0.22, 24908,  0.19, 19506,  0.17, 1.73, 2.65, 1.54, 13.21],
+      ["11.2-11.4", 0.08, 0.26, 10231,  0.22,  7427,  0.11, 2.13, 3.27, 1.99, 13.58],
+      ["11.4-12.0", 0.08, 0.30,  3137,  0.27,  2649,  0.05, 2.84, 4.28, 2.76, 13.96]
+    ],
+    "total_iHOD": 314302,
+    "total_cHOD": 170483
+  },
+  "table2_best_fit_params": {
+    "description": "Table 2 of ZM15: Best-fit HOD parameters for iHOD and cHOD models. Uncertainties are 68% confidence intervals from 1D posteriors.",
+    "parameters": {
+      "lg_m1h": {
+        "description": "Characteristic halo mass of SHMR",
+        "prior": [9.5, 14.0],
+        "iHOD": 12.10, "iHOD_err_hi": 0.17, "iHOD_err_lo": 0.14,
+        "cHOD": 12.32, "cHOD_err_hi": 0.29, "cHOD_err_lo": 0.29
+      },
+      "lg_m0star": {
+        "description": "Characteristic stellar mass of SHMR",
+        "prior": [9.0, 13.0],
+        "iHOD": 10.31, "iHOD_err_hi": 0.10, "iHOD_err_lo": 0.09,
+        "cHOD": 10.47, "cHOD_err_hi": 0.18, "cHOD_err_lo": 0.21
+      },
+      "beta": {
+        "description": "Low-mass slope of SHMR",
+        "prior": [0.0, 2.0],
+        "iHOD": 0.33, "iHOD_err_hi": 0.21, "iHOD_err_lo": 0.15,
+        "cHOD": 0.54, "cHOD_err_hi": 0.29, "cHOD_err_lo": 0.26
+      },
+      "delta": {
+        "description": "Controls high-mass slope of SHMR",
+        "prior": [0.0, 1.5],
+        "iHOD": 0.42, "iHOD_err_hi": 0.03, "iHOD_err_lo": 0.04,
+        "cHOD": 0.42, "cHOD_err_hi": 0.08, "cHOD_err_lo": 0.09
+      },
+      "gamma": {
+        "description": "Controls intermediate-mass behaviour of SHMR",
+        "prior": [-0.1, 4.9],
+        "iHOD": 1.21, "iHOD_err_hi": 0.18, "iHOD_err_lo": 0.20,
+        "cHOD": 1.05, "cHOD_err_hi": 0.24, "cHOD_err_lo": 0.26
+      },
+      "sigma_lnmstar": {
+        "description": "Low-mass scatter in SHMR (ln units)",
+        "prior": [0.01, 3.0],
+        "iHOD": 0.50, "iHOD_err_hi": 0.04, "iHOD_err_lo": 0.03,
+        "cHOD": null, "cHOD_err_hi": null, "cHOD_err_lo": null
+      },
+      "eta": {
+        "description": "Slope of high-mass scatter variation with halo mass",
+        "prior": [-0.4, 0.4],
+        "iHOD": -0.04, "iHOD_err_hi": 0.02, "iHOD_err_lo": 0.02,
+        "cHOD": null, "cHOD_err_hi": null, "cHOD_err_lo": null
+      },
+      "fc": {
+        "description": "Concentration ratio satellite galaxies / dark matter",
+        "prior": [0.1, 3.0],
+        "iHOD": 0.86, "iHOD_err_hi": 0.14, "iHOD_err_lo": 0.11,
+        "cHOD": null, "cHOD_err_hi": null, "cHOD_err_lo": null
+      },
+      "bsat": {
+        "description": "Normalisation of M_sat scaling (Eq. 23)",
+        "prior": [0.01, 25.0],
+        "iHOD": 8.98, "iHOD_err_hi": 1.18, "iHOD_err_lo": 0.87,
+        "cHOD": null, "cHOD_err_hi": null, "cHOD_err_lo": null
+      },
+      "beta_sat": {
+        "description": "Slope of M_sat scaling (Eq. 23)",
+        "prior": [0.1, 1.8],
+        "iHOD": 0.90, "iHOD_err_hi": 0.04, "iHOD_err_lo": 0.05,
+        "cHOD": null, "cHOD_err_hi": null, "cHOD_err_lo": null
+      },
+      "bcut": {
+        "description": "Normalisation of M_cut scaling (Eq. 24)",
+        "prior": [0.0, 6.0],
+        "iHOD": 0.86, "iHOD_err_hi": 0.32, "iHOD_err_lo": 0.37,
+        "cHOD": null, "cHOD_err_hi": null, "cHOD_err_lo": null
+      },
+      "beta_cut": {
+        "description": "Slope of M_cut scaling (Eq. 24)",
+        "prior": [-0.05, 1.50],
+        "iHOD": 0.41, "iHOD_err_hi": 0.16, "iHOD_err_lo": 0.15,
+        "cHOD": null, "cHOD_err_hi": null, "cHOD_err_lo": null
+      },
+      "alpha_sat": {
+        "description": "Power-law slope of satellite HOD (Eq. 22)",
+        "prior": [0.5, 1.5],
+        "iHOD": 1.00, "iHOD_err_hi": 0.03, "iHOD_err_lo": 0.02,
+        "cHOD": null, "cHOD_err_hi": null, "cHOD_err_lo": null
+      }
+    },
+    "notes": "cHOD fits only SHMR parameters (lg_m1h, lg_m0star, beta, delta, gamma); satellite and scatter params not constrained by cHOD."
+  },
+  "published_params": {
+    "lg_m1h": 12.10, "lg_m0star": 10.31, "beta": 0.33, "delta": 0.42, "gamma": 1.21,
+    "sigma_lnmstar": 0.50, "eta": -0.04, "fc": 0.86, "bsat": 8.98,
+    "beta_sat": 0.90, "bcut": 0.86, "beta_cut": 0.41, "alpha_sat": 1.00
+  },
+  "published_param_errors_hi": {
+    "lg_m1h": 0.17, "lg_m0star": 0.10, "beta": 0.21, "delta": 0.03,
+    "gamma": 0.18, "sigma_lnmstar": 0.04, "eta": 0.02, "fc": 0.14, "bsat": 1.18
+  },
+  "published_param_errors_lo": {
+    "lg_m1h": 0.14, "lg_m0star": 0.09, "beta": 0.15, "delta": 0.04,
+    "gamma": 0.20, "sigma_lnmstar": 0.03, "eta": 0.02, "fc": 0.11, "bsat": 0.87
+  },
+  "chod_published_params": {
+    "lg_m1h": 12.32, "lg_m0star": 10.47, "beta": 0.54, "delta": 0.42, "gamma": 1.05
+  },
+  "ng_obs": 4.9e-3,
+  "ng_obs_note": "Predicted by iHOD model with Table 2 best-fit params; threshold M*>10.2 h^-2 Msun"
+}

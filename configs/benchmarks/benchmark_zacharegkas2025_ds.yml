@@ -1,0 +1,46 @@
+# Benchmark: Zacharegkas+2025 DeltaSigma-only fit, DES Y3 bin 1
+# Paper: Zacharegkas et al. 2025 (arXiv:2506.22367)
+# IMPORTANT: This paper measures gamma_t(theta) and w(theta), NOT DeltaSigma(R) or wp(rp).
+#            This config is a STUB for potential future work converting angular → projected.
+#            The data file is NOT_APPLICABLE_FOR_PROJECTED_BENCHMARKS.
+# See data/zacharegkas2025_des/README_data.md for details.
+# STATUS: NOT_APPLICABLE -- paper uses angular statistics; projected data not available
+
+ds:
+  file:    data/zacharegkas2025_des/ds_des_bin1.csv
+  rp_min:  0.10
+  rp_max:  20.0
+  ng_obs:     7.0e-3
+  ng_frac_err: 0.20
+
+cosmology:
+  Omega_m: 0.339
+  h:       0.677
+  sigma8:  0.760
+  n_s:     0.968
+  Omega_b: 0.046
+
+model:
+  hod_model:   Zacharegkas25HODModel
+  hmf_backend: tinker08
+  z:           0.30
+  pi_max:      100.0
+
+parameters:
+  log10m1_shmr:      {free: true,  bounds: [10.0, 13.0], init: 11.506}
+  log10eps:          {free: true,  bounds: [-3.0, 0.0],  init: -1.632}
+  alpha_shmr:        {free: true,  bounds: [-3.0, 0.0],  init: -1.638}
+  gamma_shmr:        {free: true,  bounds: [0.0, 2.0],   init: 0.596}
+  delta_shmr:        {free: true,  bounds: [0.5, 8.0],   init: 3.810}
+  sigma_logm_star:   {free: true,  bounds: [0.1, 1.0],   init: 0.300}
+  alpha_sat:         {free: false, init: 1.0}
+  kappa:             {free: false, init: 1.0}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/zacharegkas2025_ds/

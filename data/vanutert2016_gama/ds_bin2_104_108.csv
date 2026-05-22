@@ -1,0 +1,23 @@
+# GAMA+KiDS excess surface mass density DeltaSigma(R), stellar mass bin M3
+# Source: van Uitert et al. 2016 (arXiv:1601.06791), Figure 2 (Panel M3)
+# IMPORTANT: Paper has NO Table B2 and NO wp(rp) measurements.
+# Data digitized from PostScript source of Figure 2 using axis calibration.
+# Paper bin M3: 10.24 < log10(M*/h^-2 Msun) < 10.59 (Nlens=24459, <z>=0.25)
+# In Msun (with h=0.673): 10.58 < log10(M*/Msun) < 10.93
+# Closest to user's bin 2 (10.4-10.8 Msun) when ignoring h^-2 factor.
+# See also M2 data (10.24 < log10(M*/Msun) < 10.58 with h=0.673) for overlap.
+# Cosmology: Planck 2013 (Omega_m=0.315, h=0.673, sigma8=0.829, n_s=0.9603)
+# Units: R in h^-1 Mpc (comoving), DeltaSigma and err in h M_sun pc^-2
+# sigma_DS = DS * ln(10) * (half_ebar_height / y_per_decade), approx linear 1-sigma
+# Digitization precision: ~2-3% in DS, ~5% in sigma_DS
+R_hMpc,ds_Msun_h_pc2,ds_err_Msun_h_pc2
+0.0324,64.53,14.61
+0.0514,48.48,8.82
+0.0815,13.14,5.88
+0.1291,14.22,3.55
+0.2048,13.18,2.24
+0.3242,8.23,1.45
+0.5142,4.39,0.95
+0.8141,3.26,0.63
+1.2911,3.13,0.44
+2.0476,1.22,0.33

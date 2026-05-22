@@ -1,0 +1,40 @@
+# Benchmark: Zheng+2007 HOD fit to SDSS wp(rp), M_r < -21
+# Paper: Zheng et al. 2007, ApJ 667, 760 (arXiv:astro-ph/0703457)
+# Data: Zehavi+2005 Table 1 (arXiv:astro-ph/0408564), M_r < -21 sample
+# Published best-fit: Mmin=12.78, sigma_logm=0.68, M0=11.92, M1=13.88, alpha=1.39
+# STATUS: data/zheng2007_sdss/wp_mr21_sdss.csv needs to be filled (NEEDS_DATA)
+
+data:
+  file:   data/zheng2007_sdss/wp_mr21_sdss.csv
+  format: csv
+  rp_min: 0.10
+  rp_max: 20.0
+
+cosmology:
+  Omega_m: 0.238
+  h:       0.732
+  sigma8:  0.740
+  n_s:     0.958
+  Omega_b: 0.041
+
+model:
+  hod_model:   HODModel
+  hmf_backend: tinker08
+  z:           0.1
+  pi_max:      40.0
+
+parameters:
+  log10mmin:  {free: true,  bounds: [11.5, 14.0], init: 12.78}
+  sigma_logm: {free: true,  bounds: [0.05, 1.50], init: 0.68}
+  log10m0:    {free: true,  bounds: [10.0, 14.0], init: 11.92}
+  log10m1:    {free: true,  bounds: [12.0, 15.0], init: 13.88}
+  alpha:      {free: true,  bounds: [0.50, 2.50], init: 1.39}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/zheng2007_sdss/

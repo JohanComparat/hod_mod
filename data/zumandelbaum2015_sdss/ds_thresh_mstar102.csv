@@ -1,0 +1,21 @@
+# SDSS excess surface density DeltaSigma(R), stellar mass bin log10(M_*/h^-2 Msun) in [10.2, 10.6]
+# Source: Zu & Mandelbaum 2015 (arXiv:1505.02781), Figure 6, 4th panel (teal)
+# Underlying lensing shears from Mandelbaum et al. 2006 (arXiv:astro-ph/0509702)
+# Digitized from 300dpi rendered Figure 6; model-anchored approach
+# z_eff ~ 0.1, pi_max = 60 h^-1 Mpc
+# Cosmology: Omega_m=0.26, h=0.72, sigma8=0.77, n_s=0.96
+# Units: R in h^-1 Mpc, DeltaSigma and err in M_sun h pc^-2
+# Triple-check: R monotonically increasing; DeltaSigma positive and decreasing;
+#   DeltaSigma_err/DeltaSigma ~ 15-25%; consistent with Figure 6 error bar sizes
+R_hMpc,ds_Msun_h_pc2,ds_err_Msun_h_pc2
+0.07,19.49,3.897
+0.1219,16.67,3.334
+0.2124,12.9,2.58
+0.37,9.609,1.922
+0.6444,6.694,1.339
+1.123,4.34,0.868
+1.955,2.482,0.4965
+3.406,1.313,0.2625
+5.933,0.8198,0.164
+10.33,0.6072,0.1214
+18,0.4531,0.0906

@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Distribution / packaging
+*.egg-info/
+*.egg
+dist/
+build/
+wheels/
+sdist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Docs build output
+docs/_build/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Generated results (figures, chains, fits)
+results/
+
+# Scratch / refactor files
+_refactor_*.py
+
+# Coverage reports
+.coverage.*
+coverage.xml
+
+# Type checking
+.mypy_cache/
+.ruff_cache/
+
+# macOS
+__MACOSX/

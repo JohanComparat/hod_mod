@@ -1,0 +1,55 @@
+{
+  "paper": "Leauthaud et al. 2012",
+  "arxiv": "1104.0928",
+  "doi": "10.1088/0004-637X/744/2/159",
+  "survey": "COSMOS",
+  "sample": "PHOTO_z2, log10(M_*/Msun) > 10.6",
+  "z_eff": 0.66,
+  "z_range": [0.48, 0.74],
+  "pi_max_hMpc": 40.0,
+  "cosmology": {
+    "Omega_m": 0.258,
+    "h": 0.72,
+    "sigma8": 0.796,
+    "n_s": 0.963,
+    "Omega_b": 0.044
+  },
+  "observable": "wp+ds",
+  "columns_wp": {
+    "rp_hMpc": "projected separation r_p in h^-1 Mpc",
+    "wp_hMpc": "projected correlation function w_p in h^-1 Mpc",
+    "wp_err_hMpc": "1-sigma uncertainty in h^-1 Mpc"
+  },
+  "columns_ds": {
+    "R_hMpc": "projected radius R in h^-1 Mpc",
+    "ds_Msun_h_pc2": "DeltaSigma in M_sun h pc^-2",
+    "ds_err_Msun_h_pc2": "1-sigma uncertainty in M_sun h pc^-2"
+  },
+  "data_source": "Leauthaud+2012 Figure 6 panel j (DeltaSigma, PHOTO_z2, 10.65<log10M*<10.88); wp(rp) NOT available -- paper uses w(theta)",
+  "extraction_method": "digitize from Figure 6 panel j of arXiv:1104.0928 (no machine-readable tables exist)",
+  "triple_check": [
+    "R values in Table A2 match the labelled radial bins",
+    "DeltaSigma units: check paper states h Msun/pc^2 or Msun h/pc^2",
+    "wp units: h^-1 Mpc (standard PRIMUS/DEEP2 convention)",
+    "cross-check at least 3 values against Figure 2 of Leauthaud+2012",
+    "verify z_eff=0.66 matches the PHOTO_z2 bin definition in their Table 1"
+  ],
+  "status": "NEEDS_DATA",
+  "published_params": {
+    "log10m1": 12.52,
+    "log10m_star0": 10.916,
+    "beta": 0.457,
+    "delta": 0.566,
+    "gamma": 1.53,
+    "sigma_logm": 0.206
+  },
+  "published_param_errors": {
+    "log10m1": 0.05,
+    "log10m_star0": 0.02,
+    "beta": 0.02,
+    "delta": 0.02,
+    "gamma": 0.05,
+    "sigma_logm": 0.01
+  },
+  "notes": "WMAP5 cosmology. Joint wp+DeltaSigma fit. Table 1 PHOTO_z2 column. Fixed params: log10m_star_thresh=10.6, alpha_sat=1.0."
+}

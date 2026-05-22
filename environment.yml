@@ -1,0 +1,44 @@
+name: hod_mod
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  # Core scientific stack
+  - numpy
+  - scipy
+  - astropy
+  - matplotlib
+  - pandas
+  # HDF5 / FITS I/O
+  - h5py
+  # YAML config loading
+  - pyyaml
+  # Jupyter / interactive
+  - jupyter
+  - ipykernel
+  - ipywidgets
+  - ipython
+  # Utilities
+  - tqdm
+  # JAX ecosystem
+  - jax
+  - jaxlib
+  # Dev & testing
+  - pytest
+  - pytest-cov
+  - sphinx
+  - sphinx-rtd-theme
+  - numpydoc
+  - pip
+  - pip:
+    # Linear power spectrum (Lewis & Bridle 2002)
+    - camb
+    # Halo profiles, concentration–mass relations (Diemer 2018, ApJS..239...35D)
+    - colossus
+    # MCMC sampling
+    - emcee
+    # Non-linear P(k) emulator — Aletheia (Sanchez 2025, arXiv:2511.13826)
+    - AletheiaCosmo
+    # Boltzmann solver — CLASS (Lesgourgues 2011)
+    - classy

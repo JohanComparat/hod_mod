@@ -1,0 +1,36 @@
+# HOD fit to BOSS CMASS wp(rp) following More et al. 2015
+# Reference: More+2015, ApJ 806, 2 (arXiv:1407.1856)
+#
+# Usage:
+#   python scripts/fit_hod_wp.py configs/hod_fit_more2015_cmass.yml [--plot]
+
+data:
+  file: data/more2015_boss_cmass/wp_cmass_z052.csv
+  rp_min: 0.3    # avoid deeply 1-halo-dominated scales
+  rp_max: 50.0
+
+model:
+  hod_model:   MoreHODModel
+  hmf_backend: tinker08
+  z:           0.52
+  pi_max:      60.0   # [Mpc/h], same as More+2015
+
+# Parameters: free ones are fitted; fixed ones are held at init value.
+# Bounds apply only to free parameters and define the flat prior.
+parameters:
+  log10mmin:  {free: true,  bounds: [12.0, 14.0], init: 13.03}
+  sigma_logm: {free: true,  bounds: [0.05, 1.5],  init: 0.38}
+  log10m1:    {free: true,  bounds: [13.5, 15.0], init: 14.00}
+  alpha:      {free: true,  bounds: [0.5,  2.5],  init: 1.0}
+  kappa:      {free: true,  bounds: [0.1,  5.0],  init: 1.0}
+  alpha_inc:  {free: false, init: 1.0}
+  log10m_inc: {free: false, init: 13.0}
+
+fitting:
+  method:   both     # map (MAP only) | emcee (MCMC only) | both
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/more2015_cmass/

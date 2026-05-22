@@ -1,0 +1,49 @@
+# Benchmark: Leauthaud+2012 DeltaSigma-only fit, COSMOS z2=[0.48,0.74]
+# Paper: Leauthaud et al. 2012, ApJ 744, 159 (arXiv:1104.0928)
+# Data: COSMOS PHOTO_z2, 10.65 < log10(M_*/Msun) < 10.88 (Figure 6, panel j)
+# NOTE: Paper has no Table A2 and no wp(rp). DeltaSigma data must be digitized
+#       from Figure 6 panel j. See data/leauthaud2012_cosmos/README_data.md.
+# STATUS: data file NEEDS DIGITIZATION from Figure 6
+
+ds:
+  file:    data/leauthaud2012_cosmos/ds_photo_z2_thresh106.csv
+  rp_min:  0.05
+  rp_max:  15.0
+  ng_obs:     3.5e-4
+  ng_frac_err: 0.20
+
+cosmology:
+  Omega_m: 0.258
+  h:       0.720
+  sigma8:  0.796
+  n_s:     0.963
+  Omega_b: 0.044
+
+model:
+  hod_model:   Leauthaud12HODModel
+  hmf_backend: tinker08
+  z:           0.66
+  pi_max:      40.0
+
+parameters:
+  log10m1:       {free: true,  bounds: [11.5, 14.0], init: 12.725}
+  log10m_star0:  {free: true,  bounds: [9.5, 12.0],  init: 11.038}
+  beta:          {free: true,  bounds: [0.1, 1.5],   init: 0.466}
+  delta:         {free: true,  bounds: [0.1, 2.0],   init: 0.61}
+  gamma:         {free: true,  bounds: [0.5, 5.0],   init: 1.95}
+  sigma_logm:    {free: true,  bounds: [0.05, 0.8],  init: 0.249}
+  log10m_star_thresh: {free: false, init: 10.6}
+  alpha_sat:     {free: false, init: 1.0}
+  # log10m_sat = log10(B_sat * (M_min/1e12)^beta_sat * 1e12) with B_sat=9.04, beta_sat=0.74, M_min~10^11.78
+  log10m_sat:    {free: false, init: 12.79}
+  # log10m_cut = log10(B_cut * (M_min/1e12)^beta_cut * 1e12) with B_cut=1.65, beta_cut=0.59, M_min~10^11.78
+  log10m_cut:    {free: false, init: 12.09}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/leauthaud2012_ds/

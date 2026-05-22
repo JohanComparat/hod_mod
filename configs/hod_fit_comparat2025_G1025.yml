@@ -1,0 +1,101 @@
+# HOD fit to galaxy auto-correlation wp(rp) for the G1025 sample
+# Comparat & Macias-Perez+2025, A&A 700 A271
+#
+# Sample: LS10 VLIM galaxies with log10(M_star/M_sun) > 10.25
+#         z in [0.05, 0.22],  N = 3,308,841
+# Effective redshift: z_eff ~ 0.16
+# pi_max = 100 Mpc/h (files labelled pimax100)
+#
+# HOD model: Zu & Mandelbaum 2015 (iHOD), stellar mass threshold sample
+# Free parameters: lg_m1h, lg_m0star, sigma_lnmstar, fc, bsat, alpha_sat
+# Fixed: beta, delta, gamma, eta, bcut, beta_cut, beta_sat from ZM15 Table 2
+#        log10m_star_thresh = 10.25  (survey selection threshold)
+
+fits:
+  jk_dir:    data/comparat_macias2025/_ANY_10.25_Mstar_12.0_0.05_z_0.22_N_3308841_JK_wprp100
+  jk_pattern: NSIDE_04
+  h:          0.6736
+
+data:
+  rp_min:  0.2      # Mpc/h  (avoid fibre-collision scale)
+  rp_max:  30.0     # Mpc/h  (2-halo regime dominated)
+
+model:
+  hod_model:   ZuMandelbaum15HODModel
+  hmf_backend: tinker08
+  z:           0.16
+  pi_max:      100.0
+
+fitting:
+  method:   map          # map | mcmc | both
+  n_walkers: 40
+  n_steps:   3000
+  n_burnin:  800
+
+output:
+  dir: results/G1025_ZM15/
+
+parameters:
+  # ----- fixed cosmology/SHMR shape (ZM15 Table 2 best-fit) -----
+  log10m_star_thresh:
+    init: 10.25
+    free: false
+
+  beta:
+    init:  0.33
+    free:  false
+
+  delta:
+    init:  0.42
+    free:  false
+
+  gamma:
+    init:  1.21
+    free:  false
+
+  eta:
+    init: -0.04
+    free:  false
+
+  bcut:
+    init:  0.86
+    free:  false
+
+  beta_cut:
+    init:  0.41
+    free:  false
+
+  beta_sat:
+    init:  0.90
+    free:  false
+
+  # ----- free HOD parameters -----
+  lg_m1h:
+    init:  12.10
+    free:  true
+    bounds: [11.0, 14.0]
+
+  lg_m0star:
+    init:  10.31
+    free:  true
+    bounds: [9.5, 11.5]
+
+  sigma_lnmstar:
+    init:  0.50
+    free:  true
+    bounds: [0.05, 1.5]
+
+  fc:
+    init:  0.86
+    free:  true
+    bounds: [0.3, 1.0]
+
+  bsat:
+    init:  8.98
+    free:  true
+    bounds: [1.0, 50.0]
+
+  alpha_sat:
+    init:  1.00
+    free:  true
+    bounds: [0.5, 2.0]

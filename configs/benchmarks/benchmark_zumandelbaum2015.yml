@@ -1,0 +1,55 @@
+# Benchmark: Zu & Mandelbaum 2015 iHOD fit, SDSS DR7
+# Paper: Zu & Mandelbaum 2015, MNRAS 454, 1161 (arXiv:1505.02781)
+# Data: SDSS DR7, log10(M_*/Msun) > 10.2 threshold sample
+# STATUS: data files need to be filled (NEEDS_DATA)
+
+data:
+  file:   data/zumandelbaum2015_sdss/wp_thresh_mstar102.csv
+  format: csv
+  rp_min: 0.05
+  rp_max: 20.0
+
+cosmology:
+  Omega_m: 0.260
+  h:       0.720
+  sigma8:  0.770
+  n_s:     0.960
+  Omega_b: 0.044
+
+model:
+  hod_model:   ZuMandelbaum15HODModel
+  hmf_backend: tinker08
+  z:           0.1
+  pi_max:      60.0
+
+parameters:
+  lg_m1h:        {free: true,  bounds: [11.0, 14.0], init: 12.10}
+  lg_m0star:     {free: true,  bounds: [9.0, 12.0],  init: 10.31}
+  beta:          {free: true,  bounds: [0.1, 1.5],   init: 0.33}
+  delta:         {free: true,  bounds: [0.1, 2.0],   init: 0.42}
+  gamma:         {free: true,  bounds: [0.5, 5.0],   init: 1.21}
+  sigma_lnmstar: {free: true,  bounds: [0.1, 1.5],   init: 0.50}
+  eta:           {free: true,  bounds: [-0.5, 0.2],  init: -0.04}
+  fc:            {free: true,  bounds: [0.5, 1.0],   init: 0.86}
+  bsat:          {free: true,  bounds: [1.0, 50.0],  init: 8.98}
+  log10m_star_thresh: {free: false, init: 10.2}
+  beta_sat:      {free: false, init: 0.90}
+  bcut:          {free: false, init: 0.86}
+  beta_cut:      {free: false, init: 0.41}
+  alpha_sat:     {free: false, init: 1.00}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/zumandelbaum2015_sdss/
+
+joint:
+  ds_file:     data/zumandelbaum2015_sdss/ds_thresh_mstar102.csv
+  ds_rp_min:   0.05
+  ds_rp_max:   20.0
+  ng_obs:      4.9e-3   # computed from iHOD model with published best-fit params (Table 2)
+  ng_frac_err: 0.20

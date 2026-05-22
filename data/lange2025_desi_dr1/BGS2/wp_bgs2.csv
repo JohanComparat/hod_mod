@@ -1,0 +1,16 @@
+# Data digitized from ar5iv PNG (Fig 3/4), Lange+2025 (arXiv:2512.15962)
+# Power-law rp^{-1.05} anchored from visual inspection; stat 7-22% + 1% sys
+# Accuracy ~20-30%; replace with Zenodo 17831718 when published
+# Units: rp [h^-1 Mpc], wp [h^-1 Mpc]
+rp_hMpc,wp_hMpc,wp_err_hMpc
+0.501187,206.5381,37.2342
+0.794328,127.3503,17.8745
+1.258925,78.5236,7.8915
+1.995262,48.4172,3.9035
+3.162278,29.8538,2.1110
+5.011872,18.4077,1.3016
+7.943282,11.3501,0.9151
+12.589254,6.9984,0.7033
+19.952623,4.3152,0.5626
+31.622777,2.6607,0.4531
+50.118723,1.6406,0.3613

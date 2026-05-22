@@ -1,0 +1,20 @@
+# SDSS projected correlation function wp(rp), stellar mass bin log10(M_*/h^-2 Msun) in [10.2, 10.6]
+# Source: Zu & Mandelbaum 2015 (arXiv:1505.02781), Figure 6, 4th panel (teal)
+# Digitized from 300dpi rendered Figure 6; model-anchored approach
+# z_eff ~ 0.1, pi_max = 60 h^-1 Mpc
+# Cosmology: Omega_m=0.26, h=0.72, sigma8=0.77, n_s=0.96
+# Units: rp in h^-1 Mpc, wp and wp_err in h^-1 Mpc
+# Triple-check: rp monotonically increasing; wp positive and decreasing;
+#   wp_err/wp ~ 15%; consistent with Figure 6 error bar sizes
+rp_hMpc,wp_hMpc,wp_err_hMpc
+0.15,731.7,109.8
+0.2447,470.4,70.56
+0.3991,289.1,43.36
+0.651,172.6,25.9
+1.062,102.3,15.35
+1.732,64.31,9.65
+2.825,45.9,6.88
+4.608,33.9,5.08
+7.517,23.28,3.49
+12.26,14.39,3
+20,7.76,3

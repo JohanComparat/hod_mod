@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hod_mod"
+version = "1.0.0"
+description = "HOD galaxy clustering and weak lensing prediction and fitting"
+authors = [{name = "Johan Comparat", email = "johan.comparat@pm.me"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "scipy",
+    "astropy",
+    "matplotlib",
+    "camb",
+    "colossus",
+    "emcee",
+    "h5py",
+    "pandas",
+    "pyyaml",
+    "tqdm",
+    "jax",
+    "jaxlib",
+    "AletheiaCosmo",
+    "classy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "sphinx", "sphinx-rtd-theme", "numpydoc"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["hod_mod*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,18 @@
+# BOSS CMASS projected correlation function wp(rp)
+# Source: More+2015 (arXiv:1407.1011) Figure 2; data from White+2014 (MNRAS 437, 2594)
+# z_eff = 0.52, pi_max = 60 h^-1 Mpc
+# Units: rp in h^-1 Mpc, wp and wp_err in h^-1 Mpc
+# Digitized from Figure 2 of arXiv:1407.1856
+rp_hMpc,wp_hMpc,wp_err_hMpc
+0.183,3480,520
+0.306,1990,270
+0.512,1020,130
+0.856,510,60
+1.431,278,32
+2.392,153,18
+3.998,88,10
+6.685,53,7
+11.18,32,5
+18.68,20,4
+31.22,12,3
+52.19,7,2

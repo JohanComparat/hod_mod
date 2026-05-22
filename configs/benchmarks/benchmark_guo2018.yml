@@ -1,0 +1,49 @@
+# Benchmark: Guo+2018 ICSMF fit, BOSS LOWZ+CMASS
+# Paper: Guo et al. 2018, ApJ 858, 30 (arXiv:1804.01993)
+# pi_max = 100 h^-1 Mpc (Guo+2018 section 3.2: r_pi,max = 100 h^-1 Mpc)
+# STATUS: data/guo2018_sdss/wp_mstar10_lowz.csv needs to be filled (NEEDS_DATA)
+
+data:
+  file:   data/guo2018_sdss/wp_mstar10_lowz.csv
+  format: csv
+  rp_min: 0.10
+  rp_max: 30.0
+
+cosmology:
+  Omega_m: 0.307
+  h:       0.677
+  sigma8:  0.829
+  n_s:     0.961
+  Omega_b: 0.0486
+
+model:
+  hod_model:   Guo18ICSMFModel
+  hmf_backend: tinker08
+  z:           0.1
+  pi_max:      100.0
+
+parameters:
+  # Free SHMR params — 6 free, ndof = 8 data points - 6 = 2
+  log10m_star0:      {free: true,  bounds: [10.0, 13.5], init: 11.5}
+  log10m1_shmr:      {free: true,  bounds: [12.0, 15.0], init: 13.0}
+  alpha_shmr:        {free: true,  bounds: [0.01, 2.0],  init: 0.3}
+  beta_shmr:         {free: true,  bounds: [0.5, 5.0],   init: 1.5}
+  log10m1_sat:       {free: true,  bounds: [12.0, 15.0], init: 13.5}
+  f_cen:             {free: true,  bounds: [0.5, 1.0],   init: 1.0}
+  # Fixed ICSMF parameters (Guo+2018 Table 2 fiducial for BOSS LOWZ)
+  sigma_logm_star:     {free: false, init: 0.15}
+  alpha_sat:           {free: false, init: 1.0}
+  log10m_star_min_cen: {free: false, init: 10.5}
+  sigma_c_cen:         {free: false, init: 0.1}
+  f_sat:               {free: false, init: 1.0}
+  log10m_star_min_sat: {free: false, init: 10.2}
+  sigma_c_sat:         {free: false, init: 0.2}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/guo2018_sdss/

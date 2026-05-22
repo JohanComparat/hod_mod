@@ -1,0 +1,51 @@
+# Benchmark: van Uitert+2016 CSMF fit, GAMA+KiDS, stellar mass bin 2
+# Paper: van Uitert et al. 2016, MNRAS 459, 3251 (arXiv:1601.06791)
+# Data: Appendix B Table B2, 10.4 < log10(M_*/Msun) < 10.8
+# STATUS: data files need to be filled (NEEDS_DATA)
+
+data:
+  file:   data/vanutert2016_gama/wp_bin2_104_108.csv
+  format: csv
+  rp_min: 0.05
+  rp_max: 20.0
+
+cosmology:
+  Omega_m: 0.315
+  h:       0.673
+  sigma8:  0.829
+  n_s:     0.9603
+  Omega_b: 0.0487
+
+model:
+  hod_model:   VanUitert16CSMFModel
+  hmf_backend: tinker08
+  z:           0.18
+  pi_max:      60.0
+
+parameters:
+  log10m_h1:      {free: true,  bounds: [10.5, 14.0], init: 11.80}
+  log10m_star0:   {free: true,  bounds: [9.0, 12.0],  init: 10.50}
+  beta1:          {free: true,  bounds: [1.0, 15.0],  init: 5.0}
+  log10_beta2:    {free: true,  bounds: [-2.0, 1.0],  init: -0.5}
+  sigma_c:        {free: true,  bounds: [0.05, 0.8],  init: 0.15}
+  alpha_s:        {free: true,  bounds: [-2.5, -0.1], init: -1.1}
+  b0:             {free: true,  bounds: [-3.0, 3.0],  init: 0.0}
+  b1:             {free: true,  bounds: [0.1, 5.0],   init: 1.5}
+  log10m_star_lo: {free: false, init: 10.4}
+  log10m_star_hi: {free: false, init: 10.8}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/vanutert2016_gama/
+
+joint:
+  ds_file:     data/vanutert2016_gama/ds_bin2_104_108.csv
+  ds_rp_min:   0.05
+  ds_rp_max:   2.0
+  ng_obs:      1.1e-3   # estimated: 24459 lenses / ~75 deg^2 survey, z=0.05-0.35
+  ng_frac_err: 0.30

@@ -1,0 +1,53 @@
+{
+  "paper": "van Uitert et al. 2016",
+  "arxiv": "1601.06791",
+  "doi": "10.1093/mnras/stw747",
+  "survey": "GAMA + KiDS",
+  "sample": "Stellar mass bin 2: 10.4 < log10(M_*/Msun) < 10.8",
+  "z_eff": 0.18,
+  "pi_max_hMpc": 60.0,
+  "cosmology": {
+    "Omega_m": 0.315,
+    "h": 0.673,
+    "sigma8": 0.829,
+    "n_s": 0.9603,
+    "Omega_b": 0.0487
+  },
+  "observable": "wp+ds",
+  "columns_wp": {
+    "rp_hMpc": "projected separation r_p in h^-1 Mpc",
+    "wp_hMpc": "projected correlation function w_p in h^-1 Mpc",
+    "wp_err_hMpc": "1-sigma uncertainty in h^-1 Mpc"
+  },
+  "columns_ds": {
+    "R_hMpc": "projected radius R in h^-1 Mpc",
+    "ds_Msun_h_pc2": "DeltaSigma in M_sun h pc^-2",
+    "ds_err_Msun_h_pc2": "1-sigma uncertainty in M_sun h pc^-2"
+  },
+  "data_source": "van Uitert+2016 Appendix B, Table B2",
+  "extraction_method": "transcribe from published table",
+  "triple_check": [
+    "R and rp values match Table B2 column headers",
+    "DeltaSigma units stated in table caption (check for h factors)",
+    "wp units: h^-1 Mpc",
+    "cross-check 2-3 values against Figure 3, stellar mass bin 2",
+    "verify number of bins matches their stated analysis"
+  ],
+  "status": "DIGITIZED_FROM_FIGURE",
+  "warning_no_table_b2": "The paper has NO Table B2. DeltaSigma data was digitized from Figure 2 PostScript source. wp(rp) is NOT measured in this paper.",
+  "warning_bin_mismatch": "Paper bins are in log10(M*/h^-2 Msun). With h=0.673, paper M3 maps to 10.58-10.93 Msun. User bin (10.4-10.8 Msun) straddles paper bins M2 (10.23-10.58 Msun) and M3 (10.58-10.93 Msun).",
+  "paper_bin_M3": "10.24 < log10(M*/h^-2 Msun) < 10.59, Nlens=24459, z_eff=0.25",
+  "paper_bin_M2": "9.89 < log10(M*/h^-2 Msun) < 10.24, Nlens=19175, z_eff=0.21",
+  "published_params": {
+    "log10m_h1": 11.8,
+    "log10m_star0": 10.5,
+    "beta1": 5.0,
+    "log10_beta2": -0.5,
+    "sigma_c": 0.15,
+    "alpha_s": -1.1,
+    "b0": 0.0,
+    "b1": 1.5
+  },
+  "published_param_errors": {},
+  "notes": "Planck 2013 cosmology (Table 1 of Planck 2013 results XIII). Published best-fit from Table 3 bin 2 of van Uitert+2016."
+}

@@ -1,0 +1,99 @@
+# HOD fit to galaxy auto-correlation wp(rp) for the G1075 sample
+# Comparat & Macias-Perez+2025, A&A 700 A271
+#
+# Sample: LS10 VLIM galaxies with log10(M_star/M_sun) > 10.75
+#         z in [0.05, 0.31],  N = 2,802,710
+# Effective redshift: z_eff ~ 0.26
+# pi_max = 100 Mpc/h (files labelled pimax100)
+#
+# HOD model: Zu & Mandelbaum 2015 (iHOD), stellar mass threshold sample
+# Free parameters: lg_m1h, lg_m0star, sigma_lnmstar, fc, bsat, alpha_sat
+# Fixed: beta, delta, gamma, eta, bcut, beta_cut, beta_sat from ZM15 Table 2
+#        log10m_star_thresh = 10.75  (survey selection threshold)
+
+fits:
+  jk_dir:    data/comparat_macias2025/_ANY_10.75_Mstar_12.0_0.05_z_0.31_N_2802710_JK_wprp100
+  jk_pattern: NSIDE_04
+  h:          0.6736
+
+data:
+  rp_min:  0.2      # Mpc/h
+  rp_max:  30.0     # Mpc/h
+
+model:
+  hod_model:   ZuMandelbaum15HODModel
+  hmf_backend: tinker08
+  z:           0.26
+  pi_max:      100.0
+
+fitting:
+  method:   map
+  n_walkers: 40
+  n_steps:   3000
+  n_burnin:  800
+
+output:
+  dir: results/G1075_ZM15/
+
+parameters:
+  log10m_star_thresh:
+    init: 10.75
+    free: false
+
+  beta:
+    init:  0.33
+    free:  false
+
+  delta:
+    init:  0.42
+    free:  false
+
+  gamma:
+    init:  1.21
+    free:  false
+
+  eta:
+    init: -0.04
+    free:  false
+
+  bcut:
+    init:  0.86
+    free:  false
+
+  beta_cut:
+    init:  0.41
+    free:  false
+
+  beta_sat:
+    init:  0.90
+    free:  false
+
+  lg_m1h:
+    init:  12.30
+    free:  true
+    bounds: [11.0, 14.0]
+
+  lg_m0star:
+    init:  10.75
+    free:  true
+    bounds: [9.5, 12.0]
+
+  sigma_lnmstar:
+    init:  0.45
+    free:  true
+    bounds: [0.05, 1.5]
+
+  fc:
+    init:  0.90
+    free:  true
+    bounds: [0.3, 1.0]
+
+  bsat:
+    init:  10.0
+    free:  true
+    bounds: [1.0, 50.0]
+
+  alpha_sat:
+    init:  1.00
+    free:  true
+    bounds: [0.5, 2.0]

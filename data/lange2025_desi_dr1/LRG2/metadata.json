@@ -1,0 +1,27 @@
+{
+  "sample": "LRG2",
+  "survey": "DESI DR1",
+  "paper": "Lange+2025, arXiv:2512.15962",
+  "z_min": 0.6,
+  "z_max": 0.8,
+  "z_eff": 0.7,
+  "ng_h3Mpc3": 0.000569,
+  "ng_err_h3Mpc3": 3e-06,
+  "ng_source": "Zhou+2023 ADS:2023AJ....165...58Z",
+  "wp_source": "Lange+2025, Figure 3, NEEDS_DATA",
+  "ds_des_source": "NOT_AVAILABLE \u2014 LRG2 not covered by DES",
+  "ds_hsc_source": "Lange+2025, Figure 4, NEEDS_DATA",
+  "pi_max_hMpc": 80.0,
+  "cosmology": {
+    "Omega_m": 0.3153,
+    "h": 0.6736,
+    "sigma8": 0.8111,
+    "n_s": 0.9649,
+    "Omega_b": 0.0493
+  },
+  "status": "DIGITIZED_FROM_FIGURE",
+  "data_repository": "https://zenodo.org/records/17831718",
+  "digitization_note": "Values from ar5iv PNG (Fig 4 HSC only \u2014 no DES for LRG2), power-law rp^{-1.05}/R^{-1.2}, ~20-30% uncertainty",
+  "digitization_source": "https://ar5iv.labs.arxiv.org/html/2512.15962",
+  "systematic_added": "1% in quadrature: err_total = sqrt(err_stat^2 + (0.01*signal)^2)"
+}

@@ -1,0 +1,9 @@
+# GAMA projected correlation function wp(rp), stellar mass bin 2
+# Source: van Uitert et al. 2016 (arXiv:1601.06791)
+# STATUS: NOT AVAILABLE - this paper does NOT measure wp(rp).
+# van Uitert+2016 fits only the galaxy-galaxy lensing signal (DeltaSigma)
+# and the stellar mass function. No clustering/wp measurements are included.
+# For wp(rp) of GAMA galaxies in similar mass bins, consider:
+#   - Farrow et al. 2015 (MNRAS 454, 2120, arXiv:1508.05468) -- GAMA wp
+#   - Christodoulou et al. 2012 (arXiv:1205.5042) -- GAMA clustering
+# rp_hMpc,wp_hMpc,wp_err_hMpc

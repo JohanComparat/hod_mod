@@ -1,0 +1,42 @@
+# Benchmark: Kravtsov+2004 HOD fit to BOSS CMASS wp(rp)
+# Paper: Kravtsov et al. 2004, ApJ 609, 35 (arXiv:astro-ph/0308519)
+# Data: BOSS CMASS from White+2014 (same data as More+2015 benchmark)
+# Cosmology: WMAP7 (same as More+2015)
+# Note: Kravtsov+2004 is a theoretical HOD form; no single published dataset.
+#       We fit the same BOSS CMASS data as benchmark_more2015 for direct comparison.
+# Reference for implementation: tests/test_aum_comparison.py (surhudm/aum code)
+
+data:
+  file:   data/more2015_boss_cmass/wp_cmass_z052.csv
+  format: csv
+  rp_min: 0.50
+  rp_max: 50.0
+
+cosmology:
+  Omega_m: 0.272
+  h:       0.704
+  sigma8:  0.810
+  n_s:     0.966
+  Omega_b: 0.044
+
+model:
+  hod_model:   Kravtsov04HODModel
+  hmf_backend: tinker08
+  z:           0.52
+  pi_max:      60.0
+
+parameters:
+  log10mmin:  {free: true,  bounds: [12.0, 14.5], init: 13.00}
+  sigma_logm: {free: true,  bounds: [0.05, 1.50], init: 0.38}
+  log10m0:    {free: true,  bounds: [11.0, 15.0], init: 13.50}
+  log10m1:    {free: true,  bounds: [13.0, 15.5], init: 14.00}
+  alpha:      {free: true,  bounds: [0.50, 2.50], init: 1.00}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/kravtsov2004_cmass/

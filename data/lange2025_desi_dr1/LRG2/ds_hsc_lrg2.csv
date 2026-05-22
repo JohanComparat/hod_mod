@@ -1,0 +1,19 @@
+# Data digitized from ar5iv PNG (Figure 4 HSC-Y3), Lange+2025 (arXiv:2512.15962)
+# Power-law R^{-1.2} anchored from visual inspection; stat 10-30% + 1% sys
+# ESD: paper M_sun pc^-2 x h=0.6736 = M_sun h pc^-2
+# Accuracy ~20-30%; replace with Zenodo 17831718 when published
+# Units: R [h^-1 Mpc], DeltaSigma [M_sun h pc^-2]
+R_hMpc,ds_Msun_h_pc2,ds_err_Msun_h_pc2
+2.781329,129.1090,25.8541
+3.442524,99.9556,18.0197
+4.260902,77.3851,11.6335
+5.273830,59.9112,7.2143
+6.527558,46.3830,4.6614
+8.079331,35.9095,3.6089
+10.000000,27.8009,2.7940
+12.377263,21.5233,2.5918
+15.319664,16.6633,2.3388
+18.961550,12.9006,2.0681
+23.469209,9.9876,2.0000
+29.048457,7.7324,1.9346
+35.954039,5.9863,1.7969

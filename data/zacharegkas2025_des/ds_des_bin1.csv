@@ -1,0 +1,6 @@
+# DES Y3 excess surface mass density DeltaSigma(R), stellar mass bin 1, z_eff ~ 0.36
+# Source: Zacharegkas et al. 2025 (arXiv:2506.22367)
+# Cosmology: DES Y3 3x2pt (Omega_m=0.339, h=0.677, sigma8=0.760, n_s=0.968)
+# Units: R in h^-1 Mpc, DeltaSigma and err in M_sun h pc^-2
+# STATUS: NEEDS_DATA — see README_data.md
+R_hMpc,ds_Msun_h_pc2,ds_err_Msun_h_pc2

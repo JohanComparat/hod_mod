@@ -1,0 +1,46 @@
+{
+  "paper": "Zheng et al. 2007",
+  "arxiv": "astro-ph/0703457",
+  "doi": "10.1086/520094",
+  "survey": "SDSS DR3",
+  "z_eff": 0.1,
+  "pi_max_hMpc": 40.0,
+  "cosmology": {
+    "Omega_m": 0.238,
+    "h": 0.732,
+    "sigma8": 0.740,
+    "n_s": 0.958,
+    "Omega_b": 0.041
+  },
+  "observable": "wp",
+  "columns": {
+    "rp_hMpc": "projected separation r_p in h^-1 Mpc",
+    "wp_hMpc": "projected correlation function w_p in h^-1 Mpc",
+    "wp_err_hMpc": "1-sigma uncertainty in h^-1 Mpc"
+  },
+  "data_source": "Zehavi et al. 2005 Table 1 (arXiv:astro-ph/0408564), M_r < -21 threshold sample",
+  "extraction_method": "transcribe from published table",
+  "triple_check": [
+    "rp values match Table 1 column headers of Zehavi+2005",
+    "wp values match the M_r < -21 column of Table 1",
+    "wp_err values are the 1-sigma jackknife errors in the same table",
+    "units: both rp and wp in h^-1 Mpc (Zehavi+2005 uses h^-1 Mpc throughout)",
+    "check n_bins matches figure 7 of Zheng+2007"
+  ],
+  "status": "NEEDS_DATA",
+  "published_params": {
+    "log10mmin": 12.78,
+    "sigma_logm": 0.68,
+    "log10m0": 11.92,
+    "log10m1": 13.88,
+    "alpha": 1.39
+  },
+  "published_param_errors": {
+    "log10mmin": 0.10,
+    "sigma_logm": 0.15,
+    "log10m0": 0.30,
+    "log10m1": 0.08,
+    "alpha": 0.15
+  },
+  "notes": "WMAP3 cosmology from Table 2 of Zheng+2007. Published HOD params from Table 3, M_r < -21 row."
+}

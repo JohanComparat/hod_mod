@@ -1,0 +1,46 @@
+# Joint HOD fit to BOSS CMASS: wp(rp) + ΔΣ(R) + n_g
+# Reference: More et al. 2015, ApJ 806, 2 (arXiv:1407.1856)
+#
+# chi²_total = chi²_wp + chi²_ΔΣ + chi²_ng
+# n_g constraint: 20% fractional uncertainty (More+2015 §3.1)
+#
+# Usage:
+#   python scripts/fit_hod_wp.py configs/hod_fit_more2015_cmass_joint.yml --plot
+
+data:
+  file: data/more2015_boss_cmass/wp_cmass_z052.csv
+  rp_min: 0.3
+  rp_max: 50.0
+
+model:
+  hod_model:   MoreHODModel
+  hmf_backend: tinker08
+  z:           0.52
+  pi_max:      60.0
+
+joint:
+  ds_file:     data/more2015_boss_cmass/ds_cmass_z052.csv
+  ds_rp_min:   0.1
+  ds_rp_max:   20.0
+  ng_obs:      3.0e-4    # [h^3/Mpc^3], More+2015 §3.1
+  ng_frac_err: 0.20      # 20% fractional uncertainty
+
+# All seven More+2015 parameters are free in the joint fit
+# Init values from Table 1 subsample A MAP
+parameters:
+  log10mmin:  {free: true,  bounds: [12.0, 14.0], init: 13.13}
+  sigma_logm: {free: true,  bounds: [0.05, 1.5],  init: 0.469}
+  log10m1:    {free: true,  bounds: [13.5, 15.0], init: 14.21}
+  alpha:      {free: true,  bounds: [0.5,  2.5],  init: 1.13}
+  kappa:      {free: true,  bounds: [0.1,  5.0],  init: 1.25}
+  alpha_inc:  {free: true,  bounds: [0.0,  2.0],  init: 0.44}
+  log10m_inc: {free: true,  bounds: [12.5, 14.5], init: 13.57}
+
+fitting:
+  method:   both
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/more2015_cmass_joint/

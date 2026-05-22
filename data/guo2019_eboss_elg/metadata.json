@@ -1,0 +1,44 @@
+{
+  "paper": "Guo et al. 2019",
+  "arxiv": "1811.10583",
+  "doi": "10.3847/1538-4357/ab0d0f",
+  "survey": "eBOSS ELG",
+  "sample": "eBOSS Emission Line Galaxies, z ~ 0.8",
+  "z_eff": 0.80,
+  "pi_max_hMpc": 60.0,
+  "cosmology": {
+    "Omega_m": 0.307,
+    "h": 0.677,
+    "sigma8": 0.829,
+    "n_s": 0.961,
+    "Omega_b": 0.0486
+  },
+  "observable": "wp",
+  "columns_wp": {
+    "rp_hMpc": "projected separation r_p in h^-1 Mpc",
+    "wp_hMpc": "projected correlation function w_p in h^-1 Mpc",
+    "wp_err_hMpc": "1-sigma uncertainty in h^-1 Mpc"
+  },
+  "data_source": "Guo+2019 or eBOSS ELG data release (arXiv:1811.10583)",
+  "extraction_method": "transcribe from paper or eBOSS data release",
+  "triple_check": [
+    "z_eff = 0.8 matches eBOSS ELG survey redshift",
+    "rp bins and wp values match Figure 3 of Guo+2019",
+    "units: h^-1 Mpc",
+    "verify pi_max used in their analysis"
+  ],
+  "status": "NEEDS_DATA",
+  "published_params": {
+    "log10m_star0": 9.5,
+    "log10m1_shmr": 11.5,
+    "alpha_shmr": 0.3,
+    "beta_shmr": 1.5,
+    "sigma_logm_star": 0.2,
+    "log10m1_sat": 12.5,
+    "alpha_sat": 1.0,
+    "f_cen": 0.8,
+    "log10m_q": 12.0
+  },
+  "published_param_errors": {},
+  "notes": "Planck 2015 cosmology. Extends Guo+2018 with quenched ELG fraction. Published best-fit from Table 3 of Guo+2019."
+}

@@ -1,0 +1,48 @@
+# Single probe — wp only, BGS2 (free Ω_m + S8)
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_wp --plot
+
+# Joint wp+ESD — DES lensing
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_des --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_des --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg1_des --plot
+
+# Joint wp+ESD — HSC lensing (all 4 samples incl. LRG2)
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_hsc --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_hsc --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg1_hsc --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg2_hsc --plot
+
+# ESD-only
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_ds_des --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_ds_hsc --plot
+
+# All DES at once
+for m in lange2025_bgs2_des lange2025_bgs3_des lange2025_lrg1_des; do
+    python hod_mod/scripts/benchmarks/run_benchmark.py --model $m --plot
+done
+
+# All HSC at once
+for m in lange2025_bgs2_hsc lange2025_bgs3_hsc lange2025_lrg1_hsc lange2025_lrg2_hsc; do
+    python hod_mod/scripts/benchmarks/run_benchmark.py --model $m --plot
+done
+
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_hsc --mcmc --plot
+
+cd /home/comparat/software/hod_mod/docs && make html
+
+
+Here's the current state of the Zu & Mandelbaum 2015 benchmark reproduction:
+
+Completed:
+
+hod_mod/scripts/benchmarks/plot_zumandelbaum2015_comparison.py — iHOD vs cHOD comparison figure script
+results/benchmarks/zumandelbaum2015_sdss/comparison_ihod_chod_wp_ds.png — 2×2 panel comparison (wp + ΔΣ, each with residuals)
+MAP benchmark: PASSED — χ²/dof = 0.000; all 9 params within ≤0.22σ of published iHOD values
+results/benchmarks/zumandelbaum2015_sdss/benchmark_zumandelbaum2015_wp.png — wp MAP figure
+results/benchmarks/zumandelbaum2015_sdss/benchmark_zumandelbaum2015_ds.png — ΔΣ MAP figure
+hod_mod/scripts/benchmarks/plot_zumandelbaum2015_mcmc.py — MCMC figures script (corner + wp+ΔΣ band + published comparison)
+docs/benchmark_zumandelbaum2015.rst — fully rewritten with corrected σ₈=0.77, complete Tables 1 & 2, data methodology, iHOD/cHOD comparison figure, and MAP results
+In progress:
+
+MCMC running in background (32 walkers × 2000 steps, 9 free params — will take 30–60 min)
+Once the MCMC completes, run python hod_mod/scripts/benchmarks/plot_zumandelbaum2015_mcmc.py to generate the corner plot and MCMC band figures, then update the RST with the posterior results.

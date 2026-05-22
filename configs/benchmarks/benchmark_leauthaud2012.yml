@@ -1,0 +1,53 @@
+# Benchmark: Leauthaud+2012 joint wp+DeltaSigma fit, COSMOS z2=[0.48,0.74]
+# Paper: Leauthaud et al. 2012, ApJ 744, 159 (arXiv:1104.0928)
+# Data: COSMOS, z2=[0.48,0.74], log10(M_*/Msun) > 10.6 threshold
+# Published best-fit: Table 5 z2 column (SIG MOD1)
+# NOTE: paper uses w(theta)+DeltaSigma+SMF; benchmark uses projected wp+DeltaSigma
+# STATUS: data files need to be filled (NEEDS_DATA)
+
+data:
+  file:   data/leauthaud2012_cosmos/wp_photo_z2_thresh106.csv
+  format: csv
+  rp_min: 0.05
+  rp_max: 20.0
+
+cosmology:
+  Omega_m: 0.258
+  h:       0.720
+  sigma8:  0.796
+  n_s:     0.963
+  Omega_b: 0.044
+
+model:
+  hod_model:   Leauthaud12HODModel
+  hmf_backend: tinker08
+  z:           0.66
+  pi_max:      40.0
+
+parameters:
+  log10m1:       {free: true,  bounds: [11.5, 14.0], init: 12.725}
+  log10m_star0:  {free: true,  bounds: [9.5, 12.0],  init: 11.038}
+  beta:          {free: true,  bounds: [0.1, 1.5],   init: 0.466}
+  delta:         {free: true,  bounds: [0.1, 2.0],   init: 0.61}
+  gamma:         {free: true,  bounds: [0.5, 5.0],   init: 1.95}
+  sigma_logm:    {free: true,  bounds: [0.05, 0.8],  init: 0.249}
+  log10m_star_thresh: {free: false, init: 10.6}
+  alpha_sat:     {free: false, init: 1.0}
+  log10m_sat:    {free: false, init: 12.5}
+  log10m_cut:    {free: false, init: 11.5}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/leauthaud2012_cosmos/
+
+joint:
+  ds_file:     data/leauthaud2012_cosmos/ds_photo_z2_thresh106.csv
+  ds_rp_min:   0.05
+  ds_rp_max:   15.0
+  ng_obs:      3.5e-4   # estimated for PHOTO_z2 log10(M*/Msun)>10.6 threshold in COSMOS
+  ng_frac_err: 0.20

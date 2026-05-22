@@ -1,0 +1,51 @@
+# Benchmark: van Uitert+2016 DeltaSigma-only fit, GAMA+KiDS mass bin M3
+# Paper: van Uitert et al. 2016, MNRAS 459, 3251 (arXiv:1601.06791)
+# Data: GAMA+KiDS, bin M3: 10.24 < log10(M_*/h^-2 Msun) < 10.59 (z_eff=0.25)
+#       Equivalent to 10.58 < log10(M_*/Msun) < 10.93 with h=0.673.
+#       Paper has NO Table B2; data digitized from Figure 2 panel M3.
+#       Paper does NOT measure wp(rp); only DeltaSigma-only benchmark is possible.
+# STATUS: data digitized from Figure 2 (precision ~3%)
+
+ds:
+  file:    data/vanutert2016_gama/ds_bin2_104_108.csv
+  rp_min:  0.08    # exclude R<80 kpc/h (inner-halo contamination in KiDS GGL)
+  rp_max:  2.0
+  ng_obs:     1.1e-3
+  ng_frac_err: 0.30
+
+cosmology:
+  Omega_m: 0.315
+  h:       0.673
+  sigma8:  0.829
+  n_s:     0.9603
+  Omega_b: 0.0487
+
+model:
+  hod_model:   VanUitert16CSMFModel
+  hmf_backend: tinker08
+  z:           0.25
+  pi_max:      60.0
+
+parameters:
+  log10m_h1:    {free: true,  bounds: [10.5, 14.0], init: 11.8}
+  log10m_star0: {free: true,  bounds: [9.0, 12.5],  init: 10.5}
+  beta1:        {free: true,  bounds: [0.5, 10.0],  init: 5.0}
+  log10_beta2:  {free: true,  bounds: [-2.0, 0.5],  init: -0.5}
+  sigma_c:      {free: true,  bounds: [0.05, 0.8],  init: 0.15}
+  alpha_s:         {free: false, init: -1.1}
+  b0:              {free: false, init: 0.0}
+  b1:              {free: false, init: 1.5}
+  # Stellar mass bin M3: 10.24<log(M*/h^-2 Msun)<10.59
+  # Model uses M_sun/h units: add log10(1/h)=+0.172 to convert from h^-2 Msun
+  # → 10.24+0.172=10.41 < log10(M*/[M_sun/h]) < 10.59+0.172=10.76
+  log10m_star_lo:  {free: false, init: 10.41}
+  log10m_star_hi:  {free: false, init: 10.76}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/vanutert2016_ds/

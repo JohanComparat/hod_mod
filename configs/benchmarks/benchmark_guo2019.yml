@@ -1,0 +1,50 @@
+# Benchmark: Guo+2019 ICSMF+quenching fit, eBOSS ELG
+# Paper: Guo et al. 2019, ApJ 871, 147 (arXiv:1810.05318)
+# pi_max = 20 h^-1 Mpc (Guo+2019 section 3.4: r_pi,max = 20 h^-1 Mpc)
+# STATUS: data/guo2019_eboss_elg/wp_elg_z08.csv needs to be filled (NEEDS_DATA)
+
+data:
+  file:   data/guo2019_eboss_elg/wp_elg_z08.csv
+  format: csv
+  rp_min: 0.10
+  rp_max: 30.0
+
+cosmology:
+  Omega_m: 0.307
+  h:       0.677
+  sigma8:  0.829
+  n_s:     0.961
+  Omega_b: 0.0486
+
+model:
+  hod_model:   Guo19ICSMFModel
+  hmf_backend: tinker08
+  z:           0.80
+  pi_max:      20.0
+
+parameters:
+  # Free SHMR + quenching params — 5 free, ndof = 8 data points - 5 = 3
+  log10m_star0:      {free: true,  bounds: [9.0, 12.0],  init: 10.0}
+  log10m1_shmr:      {free: true,  bounds: [10.0, 13.0], init: 11.5}
+  log10m1_sat:       {free: true,  bounds: [11.0, 15.0], init: 12.5}
+  f_cen:             {free: true,  bounds: [0.1, 1.0],   init: 0.5}
+  log10m_q:          {free: true,  bounds: [11.0, 14.0], init: 13.1}
+  # Fixed ICSMF parameters (standard Yang+2012 SHMR for ELG)
+  alpha_shmr:          {free: false, init: 0.3}
+  beta_shmr:           {free: false, init: 1.5}
+  sigma_logm_star:     {free: false, init: 0.2}
+  alpha_sat:           {free: false, init: 1.0}
+  log10m_star_min_cen: {free: false, init: 9.8}
+  sigma_c_cen:         {free: false, init: 0.1}
+  f_sat:               {free: false, init: 0.3}
+  log10m_star_min_sat: {free: false, init: 9.5}
+  sigma_c_sat:         {free: false, init: 0.2}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/guo2019_eboss_elg/

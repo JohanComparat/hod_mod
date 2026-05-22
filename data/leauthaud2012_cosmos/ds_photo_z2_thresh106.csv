@@ -1,0 +1,19 @@
+# COSMOS excess surface mass density DeltaSigma(R), PHOTO_z2 bin, log10(M_*/Msun) > 10.6
+# Source: Leauthaud et al. 2012 (arXiv:1104.0928), Figure 6, panel j (10.65<log M*<10.88)
+# z_eff = 0.66 (PHOTO_z2: z in [0.48, 0.74])
+# Cosmology: WMAP5 (Omega_m=0.258, h=0.72, sigma8=0.796, n_s=0.963)
+# Units: R in comoving h^-1 Mpc, DeltaSigma and err in h M_sun pc^-2
+# Digitized from Figure 6, panel j; paper values are in physical Mpc and M_sun/pc^2.
+# Unit conversion: R_hMpc = R_phys * h * (1+z) = R_phys * 1.1952
+#                  DS_h   = DS_phys / (h * (1+z)^2) = DS_phys / 1.9840
+# Precision: ~20% from figure digitization
+R_hMpc,ds_Msun_h_pc2,ds_err_Msun_h_pc2
+0.02988,22.68,9.07
+0.04781,13.61,4.54
+0.07530,8.568,2.772
+0.11952,5.292,1.512
+0.18885,3.629,1.008
+0.29993,2.520,0.756
+0.47569,1.764,0.554
+0.75416,1.260,0.403
+1.19520,0.9073,0.3024
