@@ -45,8 +45,13 @@ Installation
 ------------
 
 Requires Python ≥ 3.11, JAX ≥ 0.4, and CAMB.
+The package is available on `PyPI <https://pypi.org/project/hod-mod/>`_:
 
-Create and activate the conda/mamba environment, then install the package in editable mode:
+.. code-block:: bash
+
+    pip install hod-mod
+
+For development, create and activate the conda/mamba environment, then install in editable mode:
 
 .. code-block:: bash
 

@@ -6,7 +6,7 @@ JAX-accelerated HOD galaxy clustering and weak lensing predictions and fitting.
 [![Coverage](https://img.shields.io/codecov/c/github/JohanComparat/hod_mod?label=coverage)](https://codecov.io/gh/JohanComparat/hod_mod)
 [![Docs](https://img.shields.io/readthedocs/hod-mod?label=docs)](https://hod-mod.readthedocs.io)
 [![PyPI version](https://img.shields.io/pypi/v/hod-mod)](https://pypi.org/project/hod-mod/)
-[![Python](https://img.shields.io/pypi/pyversions/hod-mod)](https://pypi.org/project/hod-mod/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://pypi.org/project/hod-mod/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ## Overview
@@ -18,7 +18,13 @@ automatic differentiation and JIT compilation for efficient MCMC inference.
 
 ## Install
 
-Create and activate the conda environment, then install the package in editable mode:
+Available on [PyPI](https://pypi.org/project/hod-mod/):
+
+```bash
+pip install hod-mod
+```
+
+For development, create and activate the conda environment then install in editable mode:
 
 ```bash
 mamba env create -f environment.yml

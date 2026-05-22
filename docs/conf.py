@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(".."))
 project = 'hod_mod'
 author = "Johan Comparat"
 copyright = "2025, Johan Comparat"
-release = '1.0.0'
+release = '0.0.1'
 
 extensions = [
     "sphinx.ext.autodoc",
