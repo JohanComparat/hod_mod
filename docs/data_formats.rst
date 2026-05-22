@@ -1,18 +1,22 @@
 Data Formats
 ============
 
-``hod_mod`` consumes two types of input data files, both produced by the companion
-`sum_stat <https://github.com/JohanComparat/sum_stat>`_ package:
+.. contents:: Contents
+   :local:
+   :depth: 2
 
-* **HDF5** — primary format for galaxy surveys (BGS/LS10, mocks); stores the full
-  covariance matrix and cosmological metadata.
-* **FITS** — legacy format used for GAMA and COSMOS photometric survey products;
-  single-table binary with per-bin error columns.
+``hod_mod`` consumes two types of input data:
 
-All spatial quantities in ``sum_stat`` are stored in **Mpc** (physical, not comoving,
-h-free).  ``SumStatReader`` converts to **Mpc/h** automatically using the ``H0``
-attribute embedded in each file, so all arrays returned by the reader are already in
-the h-unit system required by ``hod_mod``.
+* **HDF5** — primary format for galaxy surveys (BGS/LS10, mocks) produced by the
+  companion `sum_stat <https://github.com/JohanComparat/sum_stat>`_ package; stores
+  the full covariance matrix and cosmological metadata.
+* **CSV + JSON** — paper benchmark datasets bundled in ``data/{paper_name}/``; plain
+  CSV files with a ``metadata.json`` sidecar describing cosmology and column meanings.
+
+All spatial quantities in ``sum_stat`` are stored in **Mpc** (h-free).
+``SumStatReader`` converts to **Mpc/h** automatically using the ``H0`` attribute
+embedded in each file, so all arrays returned by the reader are already in the
+h-unit system required by ``hod_mod``.
 
 ---
 
@@ -149,29 +153,71 @@ and applies the following conversions before returning arrays:
 
 ---
 
-FITS Format (GAMA / COSMOS)
-----------------------------
+Paper Benchmark Data (CSV + JSON)
+----------------------------------
 
-GAMA and COSMOS stellar mass functions are provided as FITS binary tables with these
-columns:
+All published benchmark datasets are stored under ``data/{paper_name}/`` as plain CSV
+files with an accompanying ``metadata.json``.
+
+Directory layout
+~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
-    log10mstar     — log₁₀(M*/M⊙) bin centre
-    phi            — Φ(M*) [Mpc⁻³ dex⁻¹]
-    phi_err        — 1σ uncertainty
-    log10mstar_lo  — lower bin edge
-    log10mstar_hi  — upper bin edge
+    data/
+      guo2018_sdss/
+        metadata.json
+        wp_mstar10_lowz.csv
+        ...
+      leauthaud2012_cosmos/
+        metadata.json
+        ds_photo_z2_thresh106.csv
+        wp_photo_z2_thresh106.csv
+        ...
 
-FITS files carry no embedded cosmology.  Pass ``h`` explicitly to the reader to
-obtain h-unit values:
+wp CSV (projected correlation function)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: python
+.. code-block:: text
 
-    from hod_mod.data_io.sum_stat_reader import SumStatReader
+    rp_hMpc           — projected separation r_p  [h⁻¹ Mpc]
+    wp_hMpc           — w_p(r_p)                  [h⁻¹ Mpc]
+    wp_err_hMpc       — 1σ uncertainty             [h⁻¹ Mpc]
 
-    reader = SumStatReader.from_fits("gama_smf_z0.002_0.060.fits")
-    data   = reader.smf(h=0.6736)   # phi in (Mpc/h)⁻³ dex⁻¹
+Lines beginning with ``#`` are comments (header / provenance notes) and are ignored by
+the reader.
+
+ΔΣ CSV (excess surface density)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: text
+
+    R_hMpc            — projected radius R         [h⁻¹ Mpc]
+    ds_Msun_h_pc2     — ΔΣ(R)                      [M⊙ h pc⁻²]
+    ds_err_Msun_h_pc2 — 1σ uncertainty             [M⊙ h pc⁻²]
+
+metadata.json
+~~~~~~~~~~~~~
+
+One JSON sidecar per dataset. Fields:
+
+.. code-block:: text
+
+    paper             — citation string (e.g. "Guo et al. 2018")
+    arxiv             — arXiv identifier
+    survey            — survey name (e.g. "SDSS BOSS LOWZ")
+    sample            — description of the galaxy sample
+    z_eff             — effective redshift
+    pi_max_hMpc       — line-of-sight integration limit [h⁻¹ Mpc]  (wp only)
+    cosmology         — dict: Omega_m, h, sigma8, n_s, Omega_b
+    observable        — "wp" | "wp+ds" | …
+    columns_wp        — dict mapping column names to descriptions
+    columns_ds        — dict mapping column names to descriptions
+    status            — "ready" | "NEEDS_DATA" |
+                        "NOT_APPLICABLE_FOR_PROJECTED_BENCHMARKS"
+    published_params  — dict of best-fit HOD parameters from the paper (optional)
+    published_param_errors — uncertainties on published_params (optional)
+    notes             — free-text remarks
 
 ---
 
@@ -199,24 +245,15 @@ Reading Data in Python
     # j["cov"]            shape (N_tot, N_tot)
     # j["n_bins_smf"], j["n_bins_wp"], j["n_bins_ds"]
 
-    # ── FITS file (GAMA / COSMOS) ─────────────────────────────────────────────
-    fits_reader = SumStatReader.from_fits("gama_smf_z0.10_0.20.fits")
-    smf_data = fits_reader.smf(h=0.6736)
+    # ── Paper benchmark CSV + metadata.json ───────────────────────────────────
+    import json
+    import pandas as pd
+
+    meta = json.load(open("data/guo2018_sdss/metadata.json"))
+    df   = pd.read_csv("data/guo2018_sdss/wp_mstar10_lowz.csv", comment="#")
+    # df.columns: rp_hMpc, wp_hMpc, wp_err_hMpc
+    h = meta["cosmology"]["h"]
 
 .. automodule:: hod_mod.data_io.sum_stat_reader
-   :members:
-   :undoc-members:
-
-
----
-
-FITS and CSV Wp/ΔΣ loader
---------------------------
-
-(`hod_mod.data_io.wprp_fits`)
-
-Lightweight readers for the tabular data bundled in ``data/``:
-
-.. automodule:: hod_mod.data_io.wprp_fits
    :members:
    :undoc-members:
