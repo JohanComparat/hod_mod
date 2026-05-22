@@ -61,7 +61,7 @@ Models
      - Free params
      - Notes
    * - ``more2015``
-     - More et al. 2015 (`arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_)
+     - More et al. 2015 (`arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_)
      - 5 HOD
      - BOSS CMASS HOD; explicit completeness
    * - ``zheng2007``
@@ -394,7 +394,7 @@ The figure script is at
 References
 ----------
 
-* More et al. 2015 — `arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_
+* More et al. 2015 — `arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_
 * Zheng et al. 2007 — `arXiv:astro-ph/0703457 <https://arxiv.org/abs/astro-ph/0703457>`_
 * Kravtsov et al. 2004 — `ApJ 609, 35 <https://doi.org/10.1086/420959>`_
 * Zu & Mandelbaum 2015 — `arXiv:1505.02781 <https://arxiv.org/abs/1505.02781>`_
@@ -403,4 +403,4 @@ References
 * Johnston et al. 2007 — `arXiv:0709.4193 <https://arxiv.org/abs/0709.4193>`_
 * Bridle & King 2007 — `arXiv:0705.0166 <https://arxiv.org/abs/0705.0166>`_
 * FLAMINGO — `arXiv:2510.25419 <https://arxiv.org/abs/2510.25419>`_
-* DESI BGS — Hahn et al. 2023 `arXiv:2306.06316 <https://arxiv.org/abs/2306.06316>`_
+* DESI BGS — Hahn et al. 2023 `arXiv:2208.08512 <https://arxiv.org/abs/2208.08512>`_

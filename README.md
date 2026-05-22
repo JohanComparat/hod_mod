@@ -49,10 +49,10 @@ The test suite covers cosmology, HOD models, clustering predictions, data I/O, a
 | Class | Reference |
 |---|---|
 | `HODModel` | [Zheng et al. 2007](https://arxiv.org/abs/astro-ph/0703457) |
-| `MoreHODModel` | [More et al. 2015](https://arxiv.org/abs/1407.1011) (BOSS CMASS) |
+| `MoreHODModel` | [More et al. 2015](https://arxiv.org/abs/1407.1856) (BOSS CMASS) |
 | `Kravtsov04HODModel` | [Kravtsov et al. 2004](https://doi.org/10.1086/420959) |
-| `Guo18ICSMFModel` | [Guo et al. 2018](https://arxiv.org/abs/1707.01922) |
-| `Guo19ICSMFModel` | [Guo et al. 2019](https://arxiv.org/abs/1811.10583) (eBOSS ELGs) |
+| `Guo18ICSMFModel` | [Guo et al. 2018](https://arxiv.org/abs/1804.01993) |
+| `Guo19ICSMFModel` | [Guo et al. 2019](https://arxiv.org/abs/1810.05318) (eBOSS ELGs) |
 | `Zacharegkas25HODModel` | [Zacharegkas et al. 2025](https://arxiv.org/abs/2506.22367) |
 | `VanUitert16CSMFModel` | [van Uitert et al. 2016](https://arxiv.org/abs/1601.06791) |
 | `ZuMandelbaum15HODModel` | [Zu & Mandelbaum 2015](https://arxiv.org/abs/1505.02781) (iHOD) |

@@ -4,7 +4,7 @@ Cosmological Sensitivity of :math:`w_p` via Finite Differences
 This page shows how a 1% change in each cosmological parameter propagates into
 the projected correlation function :math:`w_p(r_p)` across the full scale range
 :math:`r_p \in [0.01,\,60]\,h^{-1}{\rm Mpc}`, using the **full 1-halo + 2-halo
-halo model** (More+2015, `arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_)
+halo model** (More+2015, `arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_)
 with an NFW profile and Diemer+19 concentration–mass relation.
 
 Sensitivities are computed as centred finite differences (step size

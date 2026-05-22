@@ -18,7 +18,7 @@ https://zenodo.org/records/17831718
 | LRG1   | 0.4–0.6  | 0.51  | 5.70±0.03 × 10⁻⁴  | Fig 3     | Fig 3          | Fig 4          |
 | LRG2   | 0.6–0.8  | 0.70  | 5.69±0.03 × 10⁻⁴  | Fig 3     | none           | Fig 4          |
 
-BGS n_g from: Hahn+2023, AJ 165, 253 (arXiv:2306.06316)
+BGS n_g from: Hahn+2023, AJ 165, 253 (arXiv:2208.08512)
 LRG n_g from: Zhou+2023, AJ 165, 58 (arXiv:2208.08515)
 
 ## Observables

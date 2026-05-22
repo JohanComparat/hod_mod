@@ -47,7 +47,7 @@ Free parameters: :math:`\log_{10}M_{\rm min}`, :math:`\sigma_{\log M}`,
 More+2015 (BOSS CMASS)
 ~~~~~~~~~~~~~~~~~~~~~~
 
-`More et al. 2015 <https://arxiv.org/abs/1407.1011>`_ [More2015]_ extended Zheng+2007 with a linear
+`More et al. 2015 <https://arxiv.org/abs/1407.1856>`_ [More2015]_ extended Zheng+2007 with a linear
 incompleteness function to model the colour-selected BOSS CMASS sample:
 
 .. math::

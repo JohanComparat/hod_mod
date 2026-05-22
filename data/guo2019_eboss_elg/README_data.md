@@ -1,7 +1,7 @@
 # Data Extraction Instructions: Guo+2019
 
 ## Source paper
-Guo et al. 2019, ApJ 871, 147 — arXiv:1811.10583
+Guo et al. 2019, ApJ 871, 147 — arXiv:1810.05318
 
 ## What to extract
 wp(rp) for the eBOSS ELG sample at z ~ 0.8.

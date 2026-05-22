@@ -272,7 +272,7 @@ optimisation do not re-run CAMB.
 References
 ----------
 
-- More+2015: :math:`w_p` HOD parametrisation — `arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_
+- More+2015: :math:`w_p` HOD parametrisation — `arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_
 - Leauthaud+2012: SHMR-based HOD — `arXiv:1104.0928 <https://arxiv.org/abs/1104.0928>`_
 - Mead+2020: HMcode non-linear power spectrum — `arXiv:2009.01858 <https://arxiv.org/abs/2009.01858>`_
 - Tinker+2008: Halo mass function — `arXiv:0803.2706 <https://arxiv.org/abs/0803.2706>`_

@@ -9,7 +9,7 @@ Benchmark: Guo+2019 — eBOSS ELG
    * - **Model class**
      - ``Guo19ICSMFModel``
    * - **Paper**
-     - Guo et al. 2019, ApJ 871, 147 (`arXiv:1811.10583 <https://arxiv.org/abs/1811.10583>`_)
+     - Guo et al. 2019, ApJ 871, 147 (`arXiv:1810.05318 <https://arxiv.org/abs/1810.05318>`_)
    * - **Survey**
      - eBOSS ELG (Emission Line Galaxies), z\ :sub:`eff` ≈ 0.80
    * - **Observable**

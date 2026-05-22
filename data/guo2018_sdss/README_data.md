@@ -1,7 +1,7 @@
 # Data Extraction Instructions: Guo+2018
 
 ## Source paper
-Guo et al. 2018, ApJ 858, 30 — arXiv:1707.01922
+Guo et al. 2018, ApJ 858, 30 — arXiv:1804.01993
 
 ## What to extract
 **Figure 3** of Guo+2018: projected correlation function wp(rp) for their

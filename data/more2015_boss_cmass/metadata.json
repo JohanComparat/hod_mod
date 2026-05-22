@@ -1,6 +1,6 @@
 {
   "paper": "More et al. 2015",
-  "arxiv": "1407.1011",
+  "arxiv": "1407.1856",
   "doi": "10.1088/0004-637X/806/1/2",
   "survey": "BOSS CMASS",
   "z_eff": 0.52,
@@ -21,7 +21,7 @@
   "n_bins": 12,
   "rp_range_hMpc": [0.183, 52.19],
   "data_source": "White+2014 Table 2 (MNRAS 437, 2594; arXiv:1404.5414)",
-  "extraction_method": "digitized from Figure 2 of More+2015 (arXiv:1407.1011)",
+  "extraction_method": "digitized from Figure 2 of More+2015 (arXiv:1407.1856)",
   "triple_check": [
     "12 rp values are monotonically increasing from 0.183 to 52.19 h^-1 Mpc",
     "wp values are positive and broadly decreasing with rp",

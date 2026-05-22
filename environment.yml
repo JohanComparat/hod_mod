@@ -32,7 +32,7 @@ dependencies:
   - numpydoc
   - pip
   - pip:
-    # Linear power spectrum (Lewis & Bridle 2002)
+    # Linear power spectrum (Lewis, Challinor & Lasenby 2000)
     - camb
     # Halo profiles, concentration–mass relations (Diemer 2018, ApJS..239...35D)
     - colossus

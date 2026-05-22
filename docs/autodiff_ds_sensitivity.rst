@@ -5,7 +5,7 @@ This page shows how a 1% change in each cosmological parameter propagates into
 the galaxy–galaxy lensing signal :math:`\Delta\Sigma(R)` across the scale range
 :math:`R \in [0.01,\,30]\,h^{-1}{\rm Mpc}`, using the **full 1-halo + 2-halo
 halo model** (:class:`~hod_mod.galaxies.clustering.FullHaloModelPrediction`,
-More+2015, `arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_) with an NFW
+More+2015, `arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_) with an NFW
 profile and Diemer+19 concentration–mass relation.
 
 .. math::

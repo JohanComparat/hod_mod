@@ -9,7 +9,7 @@ Benchmark: More+2015 — BOSS CMASS
    * - **Model class**
      - ``MoreHODModel``
    * - **Paper**
-     - More et al. 2015, ApJ 806, 2 (`arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_)
+     - More et al. 2015, ApJ 806, 2 (`arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_)
    * - **Survey**
      - BOSS CMASS, z\ :sub:`eff` = 0.52
    * - **Observable**

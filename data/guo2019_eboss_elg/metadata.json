@@ -1,6 +1,6 @@
 {
   "paper": "Guo et al. 2019",
-  "arxiv": "1811.10583",
+  "arxiv": "1810.05318",
   "doi": "10.3847/1538-4357/ab0d0f",
   "survey": "eBOSS ELG",
   "sample": "eBOSS Emission Line Galaxies, z ~ 0.8",
@@ -19,7 +19,7 @@
     "wp_hMpc": "projected correlation function w_p in h^-1 Mpc",
     "wp_err_hMpc": "1-sigma uncertainty in h^-1 Mpc"
   },
-  "data_source": "Guo+2019 or eBOSS ELG data release (arXiv:1811.10583)",
+  "data_source": "Guo+2019 or eBOSS ELG data release (arXiv:1810.05318)",
   "extraction_method": "transcribe from paper or eBOSS data release",
   "triple_check": [
     "z_eff = 0.8 matches eBOSS ELG survey redshift",

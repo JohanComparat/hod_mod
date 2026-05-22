@@ -1,4 +1,4 @@
-"""Linear matter power spectrum via CAMB (Lewis & Bridle 2002)."""
+"""Linear matter power spectrum via CAMB (Lewis, Challinor & Lasenby 2000)."""
 
 import numpy as np
 import jax

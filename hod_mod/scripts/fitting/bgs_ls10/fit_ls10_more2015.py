@@ -37,7 +37,7 @@ All bins (see run_ls10_batch.sh)::
 References
 ----------
 More et al. 2015, ApJ 806, 2 (arXiv:1407.1856)
-DESI BGS: Hahn et al. 2023 (arXiv:2306.06316)
+DESI BGS: Hahn et al. 2023 (arXiv:2208.08512)
 """
 
 import argparse

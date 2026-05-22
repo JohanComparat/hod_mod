@@ -9,7 +9,7 @@ Benchmark: Guo+2018 — SDSS LOWZ
    * - **Model class**
      - ``Guo18ICSMFModel``
    * - **Paper**
-     - Guo et al. 2018, ApJ 858, 30 (`arXiv:1707.01922 <https://arxiv.org/abs/1707.01922>`_)
+     - Guo et al. 2018, ApJ 858, 30 (`arXiv:1804.01993 <https://arxiv.org/abs/1804.01993>`_)
    * - **Survey**
      - SDSS BOSS LOWZ, :math:`\log_{10}(M_*/M_\odot) > 10.0`, z\ :sub:`eff` ≈ 0.1
    * - **Observable**

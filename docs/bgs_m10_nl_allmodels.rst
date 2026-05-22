@@ -103,7 +103,7 @@ Model Registry
        :math:`\log M_0`,  :math:`\log M_1`,  :math:`\alpha`
    * - ``MoreHODModel``
      - More+2015
-       `arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_
+       `arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_
      - 5 / 2
      - :math:`\log M_{\rm min}`,  :math:`\sigma_{\log m}`,
        :math:`\log M_1`,  :math:`\alpha`,  :math:`\kappa`; |br|
@@ -119,7 +119,7 @@ Model Registry
        :math:`\log M_{*,\rm thresh}=10`
    * - ``Guo18ICSMFModel``
      - Guo+2018
-       `arXiv:1707.01922 <https://arxiv.org/abs/1707.01922>`_
+       `arXiv:1804.01993 <https://arxiv.org/abs/1804.01993>`_
      - 6 / 7
      - :math:`\log M_{*,0}^{\rm shmr}`,  :math:`\log M_1^{\rm shmr}`,
        :math:`\alpha_{\rm shmr}`,  :math:`\beta_{\rm shmr}`,
@@ -128,7 +128,7 @@ Model Registry
        :math:`f_{\rm cen}=f_{\rm sat}=1`
    * - ``Guo19ICSMFModel``
      - Guo+2019
-       `arXiv:1811.10583 <https://arxiv.org/abs/1811.10583>`_
+       `arXiv:1810.05318 <https://arxiv.org/abs/1810.05318>`_
      - 7 / 7
      - same as Guo18 + :math:`\log M_q` (quenching mass)
    * - ``Zacharegkas25HODModel``
@@ -648,10 +648,10 @@ References
 ----------
 
 * Zheng+2007 — `arXiv:astro-ph/0703457 <https://arxiv.org/abs/astro-ph/0703457>`_
-* More+2015 — `arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_
+* More+2015 — `arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_
 * Leauthaud+2012 — `arXiv:1104.0928 <https://arxiv.org/abs/1104.0928>`_
-* Guo+2018 — `arXiv:1707.01922 <https://arxiv.org/abs/1707.01922>`_
-* Guo+2019 — `arXiv:1811.10583 <https://arxiv.org/abs/1811.10583>`_
+* Guo+2018 — `arXiv:1804.01993 <https://arxiv.org/abs/1804.01993>`_
+* Guo+2019 — `arXiv:1810.05318 <https://arxiv.org/abs/1810.05318>`_
 * Zacharegkas+2025 — `arXiv:2506.22367 <https://arxiv.org/abs/2506.22367>`_
 * van Uitert+2016 — `arXiv:1601.06791 <https://arxiv.org/abs/1601.06791>`_
 * Zu & Mandelbaum 2015 — `arXiv:1505.02781 <https://arxiv.org/abs/1505.02781>`_

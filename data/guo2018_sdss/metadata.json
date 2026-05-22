@@ -1,6 +1,6 @@
 {
   "paper": "Guo et al. 2018",
-  "arxiv": "1707.01922",
+  "arxiv": "1804.01993",
   "doi": "10.3847/1538-4357/aabb0e",
   "survey": "SDSS BOSS LOWZ",
   "sample": "stellar mass threshold log10(M_*/Msun) > 10.0, z ~ 0.1",

@@ -4,7 +4,7 @@ Forward Model Showcase
 This page illustrates the full HOD forward-model pipeline for a fiducial
 Planck 2018 cosmology (`arXiv:1807.06209 <https://arxiv.org/abs/1807.06209>`_)
 using the Tinker+2008 HMF (`arXiv:0803.2706 <https://arxiv.org/abs/0803.2706>`_),
-the More+2015 HOD (`arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_),
+the More+2015 HOD (`arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_),
 and the NLA intrinsic-alignment model
 (`arXiv:0705.0166 <https://arxiv.org/abs/0705.0166>`_).
 
@@ -214,12 +214,12 @@ since :math:`P_{\rm lin} \propto A_s \propto \sigma_8^2` at fixed shape.
     P_{\rm lin}(k, z) \propto k^{n_s} T^2(k)\, D^2(z)
     \quad [(h^{-1}\,{\rm Mpc})^3]
 
-where :math:`T(k)` is the matter transfer function (Lewis & Bridle 2002)
+where :math:`T(k)` is the matter transfer function (Lewis, Challinor & Lasenby 2000)
 and :math:`D(z)` the linear growth factor.  The fiducial parameters are the
 Planck 2018 best-fit: :math:`h=0.6736`, :math:`\Omega_m=0.3100`,
 :math:`n_s=0.9649`, :math:`\ln(10^{10}A_s)=3.044`.
 
-**References:** Lewis & Bridle 2002 (`arXiv:astro-ph/9911177
+**References:** Lewis, Challinor & Lasenby 2000 (`arXiv:astro-ph/9911177
 <https://arxiv.org/abs/astro-ph/9911177>`_); Planck 2018
 (`arXiv:1807.06209 <https://arxiv.org/abs/1807.06209>`_).
 
@@ -458,8 +458,8 @@ Equations for each of the nine models follow.
 
 Same parameter names as ``HODModel``; validated against the ``surhudm/aum`` code.
 
-**More+2015** (``MoreHODModel``, `arXiv:1407.1011
-<https://arxiv.org/abs/1407.1011>`_) — fiducial model for this showcase:
+**More+2015** (``MoreHODModel``, `arXiv:1407.1856
+<https://arxiv.org/abs/1407.1856>`_) — fiducial model for this showcase:
 
 .. math::
 
@@ -540,8 +540,8 @@ Satellites: :math:`\langle N_s \rangle = \langle N_c \rangle\,(M/M_{\rm sat})^{\
 *Free params:* log10m1_shmr, log10eps, α_shmr, γ_shmr, δ_shmr, σ_logm_star,
 α_sat, f_cen.
 
-**Guo+2018 ICSMF** (``Guo18ICSMFModel``, `arXiv:1707.01922
-<https://arxiv.org/abs/1707.01922>`_):
+**Guo+2018 ICSMF** (``Guo18ICSMFModel``, `arXiv:1804.01993
+<https://arxiv.org/abs/1804.01993>`_):
 
 Integrated conditional stellar mass function (ICSMF) — both centrals and
 satellites are derived from the CSMF :math:`\Phi(M_*|M_h)`, which combines
@@ -551,8 +551,8 @@ incompleteness correction :math:`f_{\rm inc}(M)` models survey selection.
 *Free params (14):* 4 broken-PL SHMR + Gaussian width, 4 Schechter satellite
 + 2 incompleteness + 3 amplitude normalisation.
 
-**Guo+2019 ICSMF + quenching** (``Guo19ICSMFModel``, `arXiv:1811.10583
-<https://arxiv.org/abs/1811.10583>`_):
+**Guo+2019 ICSMF + quenching** (``Guo19ICSMFModel``, `arXiv:1810.05318
+<https://arxiv.org/abs/1810.05318>`_):
 
 Extends Guo+2018 with a quenched fraction for eBOSS ELGs: a critical mass
 :math:`\log_{10}M_q` above which galaxies are quenched and therefore **absent**
@@ -600,7 +600,7 @@ is >95% complete above the stellar mass threshold, `arXiv:2512.15960
      - Baseline erfc :math:`N_c`, power-law :math:`N_s`;
        params: log10mmin, σ_logm, log10m0, log10m1, α
    * - ``MoreHODModel``
-     - More+2015 (`arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_)
+     - More+2015 (`arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_)
      - 7
      - Halo mass
      - Adds incompleteness α_inc and cut-off scale κ to Zheng+2007
@@ -611,12 +611,12 @@ is >95% complete above the stellar mass threshold, `arXiv:2512.15960
      - :math:`N_{\rm sat} = N_{\rm cen}(M/M_1)^\alpha \exp(-M_0/M)`;
        same param names as ``HODModel``; validated against ``surhudm/aum`` code
    * - ``Guo18ICSMFModel``
-     - Guo+2018 (`arXiv:1707.01922 <https://arxiv.org/abs/1707.01922>`_)
+     - Guo+2018 (`arXiv:1804.01993 <https://arxiv.org/abs/1804.01993>`_)
      - 14
      - Stellar mass
      - Broken power-law SHMR + mass-dependent completeness correction
    * - ``Guo19ICSMFModel``
-     - Guo+2019 (`arXiv:1811.10583 <https://arxiv.org/abs/1811.10583>`_)
+     - Guo+2019 (`arXiv:1810.05318 <https://arxiv.org/abs/1810.05318>`_)
      - 15
      - Stellar mass
      - Extends Guo+2018 with quenched fraction log10m_q for eBOSS ELGs
@@ -645,13 +645,13 @@ is >95% complete above the stellar mass threshold, `arXiv:2512.15960
      - Kravtsov SHMR with threshold scatter; :math:`N_c` via error function
        of the SHMR-inverted threshold
 
-**References:** More et al. 2015 (`arXiv:1407.1011
-<https://arxiv.org/abs/1407.1011>`_); Zheng et al. 2007
+**References:** More et al. 2015 (`arXiv:1407.1856
+<https://arxiv.org/abs/1407.1856>`_); Zheng et al. 2007
 (`arXiv:astro-ph/0703457 <https://arxiv.org/abs/astro-ph/0703457>`_);
 Zu & Mandelbaum 2015 (`arXiv:1505.02781 <https://arxiv.org/abs/1505.02781>`_);
 van Uitert et al. 2016 (`arXiv:1601.06791 <https://arxiv.org/abs/1601.06791>`_);
-Guo et al. 2018/19 (`arXiv:1707.01922 <https://arxiv.org/abs/1707.01922>`_,
-`arXiv:1811.10583 <https://arxiv.org/abs/1811.10583>`_).
+Guo et al. 2018/19 (`arXiv:1804.01993 <https://arxiv.org/abs/1804.01993>`_,
+`arXiv:1810.05318 <https://arxiv.org/abs/1810.05318>`_).
 
 .. note::
    Figure (HOD occupation functions, all 9 models 3×3 panel) — generated by ``hod_mod/scripts/sensitivity/demo_showcase.py`` (not yet available).
@@ -676,7 +676,7 @@ projected offset drawn from a Rayleigh distribution with scale
 produces an isotropic damping factor for the central-galaxy contribution to the
 1-halo power spectra (Johnston+2007 `arXiv:0709.4193
 <https://arxiv.org/abs/0709.4193>`_ Eq. A2; More+2015
-`arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_ §3.3):
+`arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_ §3.3):
 
 .. math::
 
@@ -711,8 +711,8 @@ Enable with ``--use-offcentering``; free parameters ``f_off`` ∈ [0, 1] and
 ``sigma_off`` ∈ [0.01, 2.0] Mpc/:math:`h` are added to the fit automatically.
 
 **References:** Johnston et al. 2007 (`arXiv:0709.4193
-<https://arxiv.org/abs/0709.4193>`_); More et al. 2015 (`arXiv:1407.1011
-<https://arxiv.org/abs/1407.1011>`_) §3.3 + App. A; Leauthaud et al. 2012
+<https://arxiv.org/abs/0709.4193>`_); More et al. 2015 (`arXiv:1407.1856
+<https://arxiv.org/abs/1407.1856>`_) §3.3 + App. A; Leauthaud et al. 2012
 (`arXiv:1104.0928 <https://arxiv.org/abs/1104.0928>`_);
 Siegel et al. 2025 (`arXiv:2209.07392 <https://arxiv.org/abs/2209.07392>`_).
 
@@ -747,8 +747,8 @@ The k-grid spans :math:`[10^{-4}, 200]\,h/{\rm Mpc}` (1024 points, log-spaced)
 to ensure accuracy of the Hankel transform down to
 :math:`r_p \approx 0.02\,h^{-1}{\rm Mpc}`.
 
-**References:** More et al. 2015 (`arXiv:1407.1011
-<https://arxiv.org/abs/1407.1011>`_) Eqs. 9–10; Ogata 2005 Hankel transform.
+**References:** More et al. 2015 (`arXiv:1407.1856
+<https://arxiv.org/abs/1407.1856>`_) Eqs. 9–10; Ogata 2005 Hankel transform.
 
 .. note::
    Figure (w_p 1-halo/2-halo decomposition) — generated by ``hod_mod/scripts/sensitivity/demo_showcase.py`` (not yet available).
@@ -776,7 +776,7 @@ The weak-lensing excess surface mass density is:
 
 The galaxy–matter cross-correlation :math:`\xi_{gm}(r)` is the Hankel
 transform of :math:`P_{gm}(k)`.  The 1-halo term (More et al. 2015
-`arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_ Eq. 13) reads:
+`arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_ Eq. 13) reads:
 
 .. math::
 
@@ -793,8 +793,8 @@ The line-of-sight :math:`\chi`-integral uses a log-linear hybrid grid (dense
 logarithmically at small :math:`\chi`, uniform at large :math:`\chi`) for
 accurate convergence at both small and large :math:`R`.
 
-**References:** More et al. 2015 (`arXiv:1407.1011
-<https://arxiv.org/abs/1407.1011>`_) Eq. 13; Bartelmann & Schneider 2001
+**References:** More et al. 2015 (`arXiv:1407.1856
+<https://arxiv.org/abs/1407.1856>`_) Eq. 13; Bartelmann & Schneider 2001
 (`arXiv:astro-ph/9912508 <https://arxiv.org/abs/astro-ph/9912508>`_).
 
 .. note::
@@ -877,16 +877,16 @@ See :doc:`references` for the full consolidated bibliography.
 Key references for this showcase:
 
 * Planck 2018 (`arXiv:1807.06209 <https://arxiv.org/abs/1807.06209>`_) — fiducial cosmology
-* Lewis & Bridle 2002 (`arXiv:astro-ph/9911177 <https://arxiv.org/abs/astro-ph/9911177>`_) — CAMB
+* Lewis, Challinor & Lasenby 2000 (`arXiv:astro-ph/9911177 <https://arxiv.org/abs/astro-ph/9911177>`_) — CAMB
 * Aletheia 2025 (`arXiv:2511.13826 <https://arxiv.org/abs/2511.13826>`_) — non-linear P(k)
 * Tinker et al. 2008 (`arXiv:0803.2706 <https://arxiv.org/abs/0803.2706>`_) — HMF
 * Tinker et al. 2010 (`arXiv:1001.3162 <https://arxiv.org/abs/1001.3162>`_) — halo bias
 * Navarro, Frenk & White 1997 (`arXiv:astro-ph/9611107 <https://arxiv.org/abs/astro-ph/9611107>`_) — NFW profile
 * Diemer & Joyce 2019 (`arXiv:1809.07326 <https://arxiv.org/abs/1809.07326>`_) — c–M relation
 * Cooray & Sheth 2002 (`arXiv:astro-ph/0206508 <https://arxiv.org/abs/astro-ph/0206508>`_) — NFW Fourier transform
-* More et al. 2015 (`arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_) — HOD, P_gm, w_p, ΔΣ
+* More et al. 2015 (`arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_) — HOD, P_gm, w_p, ΔΣ
 * Zheng et al. 2007 (`arXiv:astro-ph/0703457 <https://arxiv.org/abs/astro-ph/0703457>`_) — HOD
-* Guo et al. 2018 (`arXiv:1707.01922 <https://arxiv.org/abs/1707.01922>`_) — ICSMF HOD
+* Guo et al. 2018 (`arXiv:1804.01993 <https://arxiv.org/abs/1804.01993>`_) — ICSMF HOD
 * Zu & Mandelbaum 2015 (`arXiv:1505.02781 <https://arxiv.org/abs/1505.02781>`_) — iHOD
 * Bartelmann & Schneider 2001 (`arXiv:astro-ph/9912508 <https://arxiv.org/abs/astro-ph/9912508>`_) — weak lensing
 * Bridle & King 2007 (`arXiv:0705.0166 <https://arxiv.org/abs/0705.0166>`_) — NLA IA

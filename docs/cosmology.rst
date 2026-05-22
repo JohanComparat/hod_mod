@@ -50,7 +50,7 @@ For :math:`\Delta^2 \ll 1` the density field is in the linear regime.
 
 **CAMB backend** (default)
 
-The full Boltzmann code CAMB (`Lewis & Bridle 2002
+The full Boltzmann code CAMB (`Lewis, Challinor & Lasenby 2000
 <https://arxiv.org/abs/astro-ph/0205436>`_) [Lewis2002]_ is invoked via
 ``LinearPowerSpectrum.pk_linear(k, z, theta)``.  A single CAMB run takes ~30 s; for
 MCMC use the ``CachedPkLinear`` wrapper that interpolates on a pre-computed

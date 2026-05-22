@@ -21,7 +21,7 @@ computation, and non-linear emulators used in ``hod_mod``.
    Fitting formulae for the linear matter power spectrum without CDM (transfer function).
    `arXiv:astro-ph/9709066 <https://arxiv.org/abs/astro-ph/9709066>`_
 
-.. [Lewis2002] Lewis A. & Bridle S. 2002, Phys. Rev. D 66, 103511.
+.. [Lewis2002] Lewis A., Challinor A. & Lasenby A. 2000, ApJ 538, 473.
    CAMB: Code for Anisotropies in the Microwave Background; ``hod_mod`` uses CAMB for
    linear :math:`P(k)` via ``LinearPowerSpectrum``.
    `arXiv:astro-ph/9911177 <https://arxiv.org/abs/astro-ph/9911177>`_
@@ -153,7 +153,7 @@ in ``hod_mod/galaxies/hod.py``.
    HOD analysis of BOSS CMASS using :math:`w_p + \Delta\Sigma`; introduced the
    incompleteness correction and :math:`\kappa` satellite cut.
    Reference model for ``MoreHODModel`` in ``hod_mod``.
-   `arXiv:1407.1011 <https://arxiv.org/abs/1407.1011>`_
+   `arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_
 
 .. [vanUitert2016] van Uitert E. et al. 2016, MNRAS 459, 3251.
    HOD fits using a Gaussian conditional stellar mass function;
@@ -174,12 +174,12 @@ in ``hod_mod/galaxies/hod.py``.
 .. [Guo2018] Guo H. et al. 2018, ApJ 858, 30.
    Incompleteness-corrected SHMR (ICSMF) with broken power-law for SDSS main;
    reference for ``Guo18ICSMFModel`` in ``hod_mod``.
-   `arXiv:1707.01922 <https://arxiv.org/abs/1707.01922>`_
+   `arXiv:1804.01993 <https://arxiv.org/abs/1804.01993>`_
 
 .. [Guo2019] Guo H. et al. 2019, ApJ 871, 147.
    15-parameter ICSMF for eBOSS ELGs including quenched fraction;
    reference for ``Guo19ICSMFModel`` in ``hod_mod``.
-   `arXiv:1811.10583 <https://arxiv.org/abs/1811.10583>`_
+   `arXiv:1810.05318 <https://arxiv.org/abs/1810.05318>`_
 
 .. [Zacharegkas2025] Zacharegkas G. et al. 2025.
    Kravtsov SHMR with threshold scatter; reference for
@@ -425,7 +425,7 @@ weak-lensing source catalogues used in ``hod_mod`` analyses.
 
 .. [DESI_BGS_Hahn2023] Hahn C. et al. 2023, AJ 165, 253.
    DESI Bright Galaxy Survey: target selection, completeness, and validation.
-   `arXiv:2306.06316 <https://arxiv.org/abs/2306.06316>`_
+   `arXiv:2208.08512 <https://arxiv.org/abs/2208.08512>`_
 
 .. [Comparat2023] Comparat J. et al. 2023, A&A 673, A122.
    eFEDS X-ray AGN HOD analysis: joint X-ray/optical galaxy–halo connection.
