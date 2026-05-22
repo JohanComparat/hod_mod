@@ -105,7 +105,7 @@ class ClusterGalaxyCrossCorrelation:
             log10 of the minimum cluster halo mass [M_sun/h].
         """
         # Fill cache via the galaxy auto predictor
-        _, _, _ = self._full._pk_tables_full(z, theta_cosmo, hod_params)
+        self._full._pk_tables_full(z, theta_cosmo, hod_params)
 
         cosmo_key = (float(z), tuple(sorted(theta_cosmo.items())))
         sc = self._full._static_cache[cosmo_key]

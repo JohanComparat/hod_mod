@@ -889,13 +889,13 @@ class TestDistanceFunctions:
 
     def test_age_of_universe_planck18(self):
         """Age should be ~13.8 Gyr for Planck18 (within 10%)."""
-        t0 = float(age_of_universe(self._H, self._OM))
+        t0 = float(age_of_universe(self._H, self._OM)[0])
         assert 12.0 < t0 < 15.5
 
     def test_age_increases_with_lower_h(self):
         """Lower H0 → older Universe."""
-        t_high_h = float(age_of_universe(0.72, self._OM))
-        t_low_h  = float(age_of_universe(0.60, self._OM))
+        t_high_h = float(age_of_universe(0.72, self._OM)[0])
+        t_low_h  = float(age_of_universe(0.60, self._OM)[0])
         assert t_low_h > t_high_h
 
     def test_age_finite(self):

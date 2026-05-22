@@ -600,6 +600,7 @@ class TestLogProbWp:
 
     def test_log_prob_wp_out_of_bounds_returns_neginf(self, predictor_and_data):
         from hod_mod.fitting.hod_wp import log_prob_wp
+        from hod_mod.galaxies.hod import MoreHODModel
         pred, rp, wp_obs, icov, theta = predictor_and_data
         default = MoreHODModel.default_params()
         free = ["log10mmin"]
@@ -614,6 +615,7 @@ class TestLogProbWp:
     def test_log_prob_wp_at_true_params_higher_than_random(self, predictor_and_data):
         """True parameters should give a higher log-posterior than a random draw."""
         from hod_mod.fitting.hod_wp import log_prob_wp
+        from hod_mod.galaxies.hod import MoreHODModel
         pred, rp, wp_obs, icov, theta = predictor_and_data
         default = MoreHODModel.default_params()
         free = ["log10mmin"]
