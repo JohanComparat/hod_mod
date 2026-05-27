@@ -2031,7 +2031,7 @@ def n_sat_leauthaud12(
 
 
 class Leauthaud12HODModel(HODBase):
-    """Leauthaud+2012 HOD for stellar-mass selected COSMOS galaxies.
+    r"""Leauthaud+2012 HOD for stellar-mass selected COSMOS galaxies.
 
     Galaxy selection is by stellar mass threshold :math:`M_* > M_{*,\\rm thresh}`.
     The central occupation derives from integrating the log-normal
