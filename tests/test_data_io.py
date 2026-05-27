@@ -336,3 +336,173 @@ class TestSumStatReaderFITS:
         from hod_mod.data_io.sum_stat_reader import SumStatReader
         with pytest.raises(FileNotFoundError):
             SumStatReader.from_fits("/nonexistent/file.fits")
+
+
+# ---------------------------------------------------------------------------
+# Tests: esd() accessor
+# ---------------------------------------------------------------------------
+
+class TestSumStatReaderESD:
+    """esd() method — reads ΔΣ(R) from a joint HDF5 file."""
+
+    def test_esd_read_shape(self):
+        """esd()['rp'] has the expected number of bins."""
+        from hod_mod.data_io.sum_stat_reader import SumStatReader
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+            path = f.name
+        try:
+            make_joint_hdf5(path, h=0.6736, n_smf=8, n_wp=8, n_ds=8)
+            reader = SumStatReader.from_hdf5(path)
+            d = reader.esd()
+            assert "rp" in d and "delta_sigma" in d and "cov" in d
+            assert d["rp"].shape == (8,)
+            assert d["delta_sigma"].shape == (8,)
+            assert d["cov"].shape == (8, 8)
+        finally:
+            os.unlink(path)
+
+    def test_esd_h_conversion(self):
+        """ESD rp values are in Mpc/h (rp_Mpc * h)."""
+        from hod_mod.data_io.sum_stat_reader import SumStatReader
+        import h5py
+        h = 0.6736
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+            path = f.name
+        try:
+            make_joint_hdf5(path, h=h, n_smf=5, n_wp=5, n_ds=5)
+            reader = SumStatReader.from_hdf5(path)
+            d = reader.esd()
+            with h5py.File(path, "r") as hf:
+                rp_Mpc = np.array(hf["esd/esd_test_HSC/rp_centres"])
+            np.testing.assert_allclose(d["rp"], rp_Mpc * h, rtol=1e-6)
+        finally:
+            os.unlink(path)
+
+    def test_esd_raises_when_missing(self):
+        """esd() raises KeyError on a wp-only file."""
+        from hod_mod.data_io.sum_stat_reader import SumStatReader
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+            path = f.name
+        try:
+            make_wp_hdf5(path)
+            reader = SumStatReader.from_hdf5(path)
+            with pytest.raises(KeyError):
+                reader.esd()
+        finally:
+            os.unlink(path)
+
+    def test_esd_in_list_groups(self):
+        """list_groups() includes 'esd' for joint files."""
+        from hod_mod.data_io.sum_stat_reader import SumStatReader
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+            path = f.name
+        try:
+            make_joint_hdf5(path)
+            reader = SumStatReader.from_hdf5(path)
+            assert "esd" in reader.list_groups()
+        finally:
+            os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# Tests: joint() extended + h() + attrs()
+# ---------------------------------------------------------------------------
+
+class TestSumStatReaderJointExtended:
+    """Extended coverage of joint() and file-level accessor methods."""
+
+    def test_joint_nbins_sum(self):
+        """n_bins_smf + n_bins_wp + n_bins_ds == len(data_vector)."""
+        from hod_mod.data_io.sum_stat_reader import SumStatReader
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+            path = f.name
+        try:
+            make_joint_hdf5(path, n_smf=6, n_wp=8, n_ds=7)
+            reader = SumStatReader.from_hdf5(path)
+            j = reader.joint()
+            total = j["n_bins_smf"] + j["n_bins_wp"] + j["n_bins_ds"]
+            assert total == len(j["data_vector"])
+        finally:
+            os.unlink(path)
+
+    def test_joint_raises_when_missing(self):
+        """joint() raises KeyError on a wp-only file."""
+        from hod_mod.data_io.sum_stat_reader import SumStatReader
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+            path = f.name
+        try:
+            make_wp_hdf5(path)
+            reader = SumStatReader.from_hdf5(path)
+            with pytest.raises(KeyError):
+                reader.joint()
+        finally:
+            os.unlink(path)
+
+    def test_h_method(self):
+        """h() returns the embedded Hubble constant."""
+        from hod_mod.data_io.sum_stat_reader import SumStatReader
+        h = 0.6736
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+            path = f.name
+        try:
+            make_wp_hdf5(path, h=h)
+            reader = SumStatReader.from_hdf5(path)
+            assert reader.h() == pytest.approx(h, rel=1e-4)
+        finally:
+            os.unlink(path)
+
+    def test_attrs_method(self):
+        """attrs() returns a dict (may be empty, must not raise)."""
+        from hod_mod.data_io.sum_stat_reader import SumStatReader
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+            path = f.name
+        try:
+            make_wp_hdf5(path)
+            reader = SumStatReader.from_hdf5(path)
+            a = reader.attrs()
+            assert isinstance(a, dict)
+        finally:
+            os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# Tests: _h5_h helper edge cases
+# ---------------------------------------------------------------------------
+
+class TestSumStatH5Helper:
+    """_h5_h private helper — two-level-deep cosmology and missing cosmology."""
+
+    def test_h5_h_two_level_deep(self):
+        """_h5_h finds H0 when cosmology is nested two levels deep."""
+        import h5py
+        from hod_mod.data_io.sum_stat_reader import _h5_h
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+            path = f.name
+        try:
+            h_val = 0.7
+            with h5py.File(path, "w") as hf:
+                outer = hf.create_group("esd")
+                inner = outer.create_group("sample_A")
+                cosmo = inner.create_group("cosmology")
+                cosmo.create_dataset("H0", data=h_val * 100.0)
+            with h5py.File(path, "r") as hf:
+                result = _h5_h(hf)
+            assert result == pytest.approx(h_val, rel=1e-6)
+        finally:
+            os.unlink(path)
+
+    def test_h5_h_raises_on_missing(self):
+        """_h5_h raises KeyError when no cosmology/H0 exists in the file."""
+        import h5py
+        from hod_mod.data_io.sum_stat_reader import _h5_h
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+            path = f.name
+        try:
+            with h5py.File(path, "w") as hf:
+                hf.create_group("data")
+                hf["data"].create_dataset("x", data=np.array([1.0, 2.0]))
+            with h5py.File(path, "r") as hf:
+                with pytest.raises(KeyError):
+                    _h5_h(hf)
+        finally:
+            os.unlink(path)

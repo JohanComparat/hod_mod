@@ -52,3 +52,10 @@ In progress:
 
 MCMC running in background (32 walkers × 2000 steps, 9 free params — will take 30–60 min)
 Once the MCMC completes, run python hod_mod/scripts/benchmarks/plot_zumandelbaum2015_mcmc.py to generate the corner plot and MCMC band figures, then update the RST with the posterior results.
+
+
+contact viola.allevato@inaf.fr to possibly lead a key project on the 
+galaxy-halo connection
+contact eric.jullo@lam.fr
+
+

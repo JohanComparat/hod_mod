@@ -376,7 +376,16 @@ def _override_output(config, output_dir):
     return replace(config, output_dir=output_dir)
 
 
+def _normalize_published(published: dict) -> dict:
+    """Ensure every entry is a (value, error) tuple; plain floats get error=0."""
+    return {
+        k: v if isinstance(v, tuple) else (v, 0.0)
+        for k, v in published.items()
+    }
+
+
 def _deviations(params: dict, published: dict) -> dict:
+    published = _normalize_published(published)
     devs = {}
     for pname, (pub_val, pub_err) in published.items():
         bfit = params.get(pname, float("nan"))
@@ -385,6 +394,7 @@ def _deviations(params: dict, published: dict) -> dict:
 
 
 def _print_comparison(params, published, chi2_ndof, pub_chi2):
+    published = _normalize_published(published)
     print(f"\nchi2/ndof = {chi2_ndof:.3f}", end="")
     if pub_chi2 is not None:
         print(f"  (published: {pub_chi2:.2f})")
@@ -397,7 +407,8 @@ def _print_comparison(params, published, chi2_ndof, pub_chi2):
         for pname, (pub_val, pub_err) in published.items():
             bfit = params.get(pname, float("nan"))
             diff = (bfit - pub_val) / pub_err if pub_err > 0 else float("nan")
-            print(f"{pname:{w}s}  {bfit:10.4f}  {pub_val:10.4f}  {diff:8.2f}σ")
+            diff_str = f"{diff:8.2f}σ" if not (diff != diff) else "      n/a"
+            print(f"{pname:{w}s}  {bfit:10.4f}  {pub_val:10.4f}  {diff_str}")
 
 
 def _make_plots(fitter, params, chi2_ndof, model_key, output_dir, joint, ds_only=False):

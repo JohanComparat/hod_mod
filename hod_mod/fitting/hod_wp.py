@@ -636,27 +636,44 @@ class WpFitter:
     # MAP estimation
 
     def map_fit(self) -> dict:
-        """Maximum a-posteriori fit via Nelder-Mead.
+        """Maximum a-posteriori fit via Powell / Nelder-Mead.
 
         Returns
         -------
         dict
             Keys: ``theta``, ``params``, ``chi2``, ``ndof``, ``success``, ``message``.
+            ``chi2`` is the pure data chi-squared (prior penalty excluded).
         """
         from scipy.optimize import minimize
+        n_free = len(self.config.free_params)
+        # Powell converges faster than Nelder-Mead in higher dimensions (≥5 params).
+        method = "Powell" if n_free >= 5 else "Nelder-Mead"
         result = minimize(
             lambda x: -self._log_prob(x),
             self._x0,
-            method="Nelder-Mead",
-            options={"maxiter": 10000, "xatol": 1e-4, "fatol": 1e-4, "disp": False},
+            method=method,
+            options={"maxiter": 50000, "xatol": 1e-5, "fatol": 1e-5,
+                     "xtol": 1e-5, "ftol": 1e-5, "disp": False},
         )
         best_theta  = result.x
         best_params = _assemble_hod_params(best_theta, self.config.free_params, self._fixed_params)
+        # Compute data chi2 only (excludes Gaussian prior penalty terms).
+        theta_cosmo = self._theta_cosmo_call(best_params)
+        try:
+            wp_pred = np.asarray(
+                self.predictor.wp(
+                    jnp.array(self.rp_arr), self.config.pi_max,
+                    self.config.z, theta_cosmo, best_params,
+                )
+            )
+            chi2_data = float((wp_pred - self.wp_obs) @ self.icov_wp @ (wp_pred - self.wp_obs))
+        except Exception:
+            chi2_data = float("nan")
         return {
             "theta":   best_theta,
             "params":  best_params,
-            "chi2":    float(-2.0 * self._log_prob(best_theta)),
-            "ndof":    len(self.rp_arr) - len(self.config.free_params),
+            "chi2":    chi2_data,
+            "ndof":    len(self.rp_arr) - n_free,
             "success": result.success,
             "message": result.message,
         }
@@ -786,6 +803,55 @@ class JointFitter(WpFitter):
         )
         return log_pi - 0.5 * (chi2_wp + chi2_ds + chi2_ng)
 
+    def map_fit(self) -> dict:
+        """Maximum a-posteriori fit for the joint wp+ΔΣ+n_g likelihood.
+
+        Returns
+        -------
+        dict
+            Keys: ``theta``, ``params``, ``chi2``, ``ndof``, ``success``, ``message``.
+            ``chi2`` is the pure data chi-squared (prior penalty excluded).
+            ``ndof`` = n_wp + n_ds + 1 (ng) − n_free_params.
+        """
+        from scipy.optimize import minimize
+        n_free = len(self.config.free_params)
+        method = "Powell" if n_free >= 5 else "Nelder-Mead"
+        result = minimize(
+            lambda x: -self._log_prob(x),
+            self._x0,
+            method=method,
+            options={"maxiter": 50000, "xatol": 1e-5, "fatol": 1e-5,
+                     "xtol": 1e-5, "ftol": 1e-5, "disp": False},
+        )
+        best_theta  = result.x
+        best_params = _assemble_hod_params(best_theta, self.config.free_params, self._fixed_params)
+        theta_cosmo = self._theta_cosmo_call(best_params)
+        try:
+            wp_pred = np.asarray(self.predictor.wp(
+                jnp.array(self.rp_arr), self.config.pi_max,
+                self.config.z, theta_cosmo, best_params))
+            ds_pred = np.asarray(self.predictor.delta_sigma(
+                jnp.array(self.R_arr), self.config.z, theta_cosmo, best_params))
+            ng_pred = self.predictor.n_gal(self.config.z, theta_cosmo, best_params)
+            chi2_wp = float((wp_pred - self.wp_obs) @ self.icov_wp @ (wp_pred - self.wp_obs))
+            chi2_ds = float((ds_pred - self.ds_obs) @ self.icov_ds @ (ds_pred - self.ds_obs))
+            chi2_ng = float(
+                ((ng_pred - self.config.ng_obs) / (self.config.ng_frac_err * self.config.ng_obs)) ** 2
+            )
+            chi2_data = chi2_wp + chi2_ds + chi2_ng
+            n_data    = len(self.rp_arr) + len(self.R_arr) + 1
+        except Exception:
+            chi2_data = float("nan")
+            n_data    = len(self.rp_arr) + len(self.R_arr) + 1
+        return {
+            "theta":   best_theta,
+            "params":  best_params,
+            "chi2":    chi2_data,
+            "ndof":    n_data - n_free,
+            "success": result.success,
+            "message": result.message,
+        }
+
     def predict_ds(self, params: dict) -> np.ndarray:
         """Predicted ΔΣ(R) [M_sun h pc⁻²]."""
         return np.asarray(
@@ -867,27 +933,43 @@ class DeltaSigmaFitter(WpFitter):
         return log_pi - 0.5 * (chi2_ds + chi2_ng)
 
     def map_fit(self) -> dict:
-        """Maximum a-posteriori fit via Nelder-Mead (ΔΣ-only).
+        """Maximum a-posteriori fit for the ΔΣ-only likelihood.
 
         Returns
         -------
         dict
             Keys: ``theta``, ``params``, ``chi2``, ``ndof``, ``success``, ``message``.
+            ``chi2`` is the pure data chi-squared (prior penalty excluded).
         """
         from scipy.optimize import minimize
+        n_free = len(self.config.free_params)
+        method = "Powell" if n_free >= 5 else "Nelder-Mead"
         result = minimize(
             lambda x: -self._log_prob(x),
             self._x0,
-            method="Nelder-Mead",
-            options={"maxiter": 10000, "xatol": 1e-4, "fatol": 1e-4, "disp": False},
+            method=method,
+            options={"maxiter": 50000, "xatol": 1e-5, "fatol": 1e-5,
+                     "xtol": 1e-5, "ftol": 1e-5, "disp": False},
         )
         best_theta  = result.x
         best_params = _assemble_hod_params(best_theta, self.config.free_params, self._fixed_params)
+        theta_cosmo = self._theta_cosmo_call(best_params)
+        try:
+            ds_pred = np.asarray(self.predictor.delta_sigma(
+                jnp.array(self.R_arr), self.config.z, theta_cosmo, best_params))
+            ng_pred = self.predictor.n_gal(self.config.z, theta_cosmo, best_params)
+            chi2_ds = float((ds_pred - self.ds_obs) @ self.icov_ds @ (ds_pred - self.ds_obs))
+            chi2_ng = float(
+                ((ng_pred - self.config.ng_obs) / (self.config.ng_frac_err * self.config.ng_obs)) ** 2
+            )
+            chi2_data = chi2_ds + chi2_ng
+        except Exception:
+            chi2_data = float("nan")
         return {
             "theta":   best_theta,
             "params":  best_params,
-            "chi2":    float(-2.0 * self._log_prob(best_theta)),
-            "ndof":    len(self.R_arr) - len(self.config.free_params),
+            "chi2":    chi2_data,
+            "ndof":    len(self.R_arr) + 1 - n_free,
             "success": result.success,
             "message": result.message,
         }

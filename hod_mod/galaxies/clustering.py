@@ -611,8 +611,26 @@ class FullHaloModelPrediction:
         self._pk_nl = pk_nl
         self._nl_2halo = nl_2halo and (pk_nl is not None)
         # Cache for HOD-parameter-independent quantities (pk_lin, uk, dndm, c).
-        # Keyed by (z, cosmo_key) so re-evaluated only when cosmology changes.
+        # Keyed by _cosmo_cache_key() so re-evaluated only when cosmology changes.
+        # Rounded keys prevent per-step cache misses during free-cosmo MAP fitting.
         self._static_cache: dict = {}
+
+    @staticmethod
+    def _cosmo_cache_key(z: float, theta_cosmo: dict) -> tuple:
+        """Rounded cache key for theta_cosmo.
+
+        Rounding prevents per-step cache misses when free-cosmo MAP fitting
+        explores cosmologies that differ only in the last floating-point digits.
+        Precision is ~10× finer than typical Nelder-Mead / Powell step sizes.
+        """
+        return (
+            round(float(z), 4),
+            round(float(theta_cosmo.get("Omega_m",      0.3153)), 4),
+            round(float(theta_cosmo.get("ln10^{10}A_s", 3.044)),  3),
+            round(float(theta_cosmo.get("h",             0.6736)), 4),
+            round(float(theta_cosmo.get("n_s",           0.9649)), 4),
+            round(float(theta_cosmo.get("Omega_b",       0.0493)), 5),
+        )
 
     # ------------------------------------------------------------------
     # Internal: tabulate P_gg and P_gm with full 1h+2h decomposition
@@ -705,7 +723,7 @@ class FullHaloModelPrediction:
         * ``b_eff``        — HOD-weighted effective bias
         """
         # ---- HOD-parameter-independent tables (cached by z + cosmology) ----
-        cosmo_key = (float(z), tuple(sorted(theta_cosmo.items())))
+        cosmo_key = self._cosmo_cache_key(z, theta_cosmo)
         if cosmo_key not in self._static_cache:
             m_grid = self._hod._m_grid
             with jax.disable_jit():
@@ -1251,7 +1269,7 @@ class FullHaloModelPrediction:
 
         More+2015 Eq. 12.
         """
-        cosmo_key = (float(z), tuple(sorted(theta_cosmo.items())))
+        cosmo_key = self._cosmo_cache_key(z, theta_cosmo)
         if cosmo_key not in self._static_cache:
             self._pk_tables_full(z, theta_cosmo, hod_params)
         sc = self._static_cache[cosmo_key]

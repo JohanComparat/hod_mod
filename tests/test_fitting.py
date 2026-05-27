@@ -581,6 +581,7 @@ class TestLogProbWp:
 
     def test_log_prob_wp_finite_at_true_params(self, predictor_and_data):
         from hod_mod.fitting.hod_wp import log_prob_wp
+        from hod_mod.galaxies.hod import MoreHODModel
         pred, rp, wp_obs, icov, theta = predictor_and_data
         default = MoreHODModel.default_params()
         free = ["log10mmin", "sigma_logm", "log10m1", "alpha"]
@@ -627,3 +628,313 @@ class TestLogProbWp:
         lp_off  = log_prob_wp(np.array([12.5]), free, fixed,
                               bounds, pred, rp, wp_obs, icov, 0.16, theta, 60.0)
         assert lp_true > lp_off
+
+
+# ---------------------------------------------------------------------------
+# Shared fixture: synthetic ΔΣ CSV
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def synthetic_ds_csv(tmp_path):
+    """Write a tiny 3-column ΔΣ CSV."""
+    R   = np.logspace(-1, 1.5, 12)
+    ds  = 200.0 * R ** (-0.8)
+    err = ds * 0.15
+    path = str(tmp_path / "ds_test.csv")
+    np.savetxt(path, np.column_stack([R, ds, err]),
+               header="R_hMpc,ds_Msun_h_pc2,ds_err_Msun_h_pc2", delimiter=",", comments="")
+    return path, R, ds, err
+
+
+# ---------------------------------------------------------------------------
+# Shared predictor factory (reused by several classes below)
+# ---------------------------------------------------------------------------
+
+def _make_predictor():
+    """Build a FullHaloModelPrediction with MoreHODModel."""
+    import jax.numpy as jnp
+    from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+    from hod_mod.cosmology.halo_mass_function import make_hmf
+    from hod_mod.cosmology.halo_profiles import HaloProfile
+    from hod_mod.galaxies.hod import MoreHODModel
+    from hod_mod.galaxies.clustering import FullHaloModelPrediction
+
+    pk_lin = LinearPowerSpectrum()
+    theta  = pk_lin.default_cosmology()
+    hmf    = make_hmf("tinker08", pk_func=pk_lin.pk_linear)
+    colossus = {
+        "flat": True, "H0": theta["h"] * 100.0,
+        "Om0": theta["Omega_m"], "Ob0": theta["Omega_b"],
+        "sigma8": 0.811, "ns": theta["n_s"],
+    }
+    hp   = HaloProfile(colossus, cm_relation="diemer19")
+    hod  = MoreHODModel(hmf, hmf.bias)
+    pred = FullHaloModelPrediction(pk_lin, hod, hp)
+    return pred, theta
+
+
+_BASE_FIT_CFG = dict(
+    rp_min=0.1, rp_max=30.0,
+    hod_model="MoreHODModel", hmf_backend="tinker08",
+    z=0.1, pi_max=60.0,
+    free_params=["log10mmin"],
+    param_bounds={"log10mmin": (11.0, 13.5)},
+    param_init={"log10mmin": 12.0, "sigma_logm": 0.38,
+                "log10m1": 13.5, "alpha": 1.0, "kappa": 1.0,
+                "alpha_inc": 1.0, "log10m_inc": 12.0},
+    output_dir="/tmp/",
+)
+
+
+# ---------------------------------------------------------------------------
+# Test: DeltaSigmaFitter
+# ---------------------------------------------------------------------------
+
+class TestDeltaSigmaFitter:
+    """Tests for DeltaSigmaFitter — DS-only fitting without any wp data."""
+
+    @pytest.fixture(scope="class")
+    def ds_fitter(self, tmp_path_factory):
+        from hod_mod.fitting.hod_wp import FitConfig, DeltaSigmaFitter
+        tmp = tmp_path_factory.mktemp("ds_fit")
+        R   = np.logspace(-1, 1.2, 10)
+        ds  = 150.0 * R ** (-0.7)
+        err = ds * 0.15
+        ds_path = str(tmp / "ds.csv")
+        np.savetxt(ds_path, np.column_stack([R, ds, err]),
+                   header="R_hMpc,ds_Msun_h_pc2,ds_err_Msun_h_pc2",
+                   delimiter=",", comments="")
+        cfg = FitConfig(
+            data_file="",
+            **_BASE_FIT_CFG,
+            ds_file=ds_path,
+            ds_rp_min=0.1,
+            ds_rp_max=20.0,
+            ng_obs=1e-3,
+            ng_frac_err=0.20,
+        )
+        return DeltaSigmaFitter(cfg)
+
+    def test_init(self, ds_fitter):
+        assert ds_fitter.R_arr.shape[0] > 0
+        assert ds_fitter.ds_obs.shape == ds_fitter.R_arr.shape
+
+    def test_log_prob_finite(self, ds_fitter):
+        lp = ds_fitter._log_prob(np.array([12.0]))
+        assert np.isfinite(lp)
+
+    def test_log_prob_out_of_bounds(self, ds_fitter):
+        lp = ds_fitter._log_prob(np.array([9.0]))
+        assert lp == -np.inf
+
+    def test_predict_ds_shape(self, ds_fitter):
+        from hod_mod.galaxies.hod import MoreHODModel
+        params = MoreHODModel.default_params()
+        ds_pred = ds_fitter.predict_ds(params)
+        assert ds_pred.shape == ds_fitter.R_arr.shape
+
+    def test_chi2_nonneg(self, ds_fitter):
+        from hod_mod.galaxies.hod import MoreHODModel
+        params = MoreHODModel.default_params()
+        assert ds_fitter.chi2(params) >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# Test: JointFitter prediction methods
+# ---------------------------------------------------------------------------
+
+class TestJointFitterMethods:
+    """predict_ds, predict_ng, chi2_joint on JointFitter."""
+
+    @pytest.fixture(scope="class")
+    def joint_fitter(self, tmp_path_factory):
+        from hod_mod.fitting.hod_wp import FitConfig, JointFitter
+        tmp = tmp_path_factory.mktemp("jt_fit")
+
+        rp  = np.logspace(-1, 1.5, 12)
+        wp  = 50.0 * rp ** (-0.8)
+        wp_path = str(tmp / "wp.csv")
+        np.savetxt(wp_path, np.column_stack([rp, wp, wp * 0.15]),
+                   header="rp_hMpc,wp_hMpc,wp_err_hMpc", delimiter=",", comments="")
+
+        R   = np.logspace(-1, 1.2, 8)
+        ds  = 150.0 * R ** (-0.7)
+        ds_path = str(tmp / "ds.csv")
+        np.savetxt(ds_path, np.column_stack([R, ds, ds * 0.15]),
+                   header="R_hMpc,ds_Msun_h_pc2,ds_err_Msun_h_pc2",
+                   delimiter=",", comments="")
+
+        cfg = FitConfig(
+            data_file=wp_path,
+            **_BASE_FIT_CFG,
+            ds_file=ds_path,
+            ds_rp_min=0.1,
+            ds_rp_max=15.0,
+            ng_obs=1e-3,
+            ng_frac_err=0.20,
+        )
+        return JointFitter(cfg)
+
+    def test_predict_ds_shape(self, joint_fitter):
+        from hod_mod.galaxies.hod import MoreHODModel
+        params = MoreHODModel.default_params()
+        ds = joint_fitter.predict_ds(params)
+        assert ds.shape == joint_fitter.R_arr.shape
+
+    def test_predict_ng_positive(self, joint_fitter):
+        from hod_mod.galaxies.hod import MoreHODModel
+        params = MoreHODModel.default_params()
+        ng = joint_fitter.predict_ng(params)
+        assert float(ng) > 0.0
+
+    def test_chi2_joint_keys(self, joint_fitter):
+        from hod_mod.galaxies.hod import MoreHODModel
+        params = MoreHODModel.default_params()
+        result = joint_fitter.chi2_joint(params)
+        for key in ("chi2_wp", "chi2_ds", "chi2_ng", "chi2_total"):
+            assert key in result
+
+    def test_chi2_joint_nonneg(self, joint_fitter):
+        from hod_mod.galaxies.hod import MoreHODModel
+        params = MoreHODModel.default_params()
+        result = joint_fitter.chi2_joint(params)
+        assert result["chi2_wp"] >= 0.0
+        assert result["chi2_ds"] >= 0.0
+        assert result["chi2_ng"] >= 0.0
+        assert result["chi2_total"] >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# Test: WpFitter prediction / chi2 methods
+# ---------------------------------------------------------------------------
+
+class TestWpFitterMethods:
+    """predict_wp, chi2, _log_prob on WpFitter."""
+
+    @pytest.fixture(scope="class")
+    def wp_fitter(self, tmp_path_factory):
+        from hod_mod.fitting.hod_wp import FitConfig, WpFitter
+        tmp = tmp_path_factory.mktemp("wp_fit_m")
+        rp  = np.logspace(-1, 1.5, 12)
+        wp  = 50.0 * rp ** (-0.8)
+        path = str(tmp / "wp.csv")
+        np.savetxt(path, np.column_stack([rp, wp, wp * 0.15]),
+                   header="rp_hMpc,wp_hMpc,wp_err_hMpc", delimiter=",", comments="")
+        cfg = FitConfig(data_file=path, **_BASE_FIT_CFG)
+        return WpFitter(cfg)
+
+    def test_predict_wp_shape(self, wp_fitter):
+        from hod_mod.galaxies.hod import MoreHODModel
+        params = MoreHODModel.default_params()
+        wp_pred = wp_fitter.predict_wp(params)
+        assert wp_pred.shape == wp_fitter.rp_arr.shape
+
+    def test_chi2_nonneg(self, wp_fitter):
+        from hod_mod.galaxies.hod import MoreHODModel
+        params = MoreHODModel.default_params()
+        assert wp_fitter.chi2(params) >= 0.0
+
+    def test_log_prob_finite(self, wp_fitter):
+        lp = wp_fitter._log_prob(np.array([12.0]))
+        assert np.isfinite(lp)
+
+
+# ---------------------------------------------------------------------------
+# Test: _CachedPkLinear
+# ---------------------------------------------------------------------------
+
+class TestCachedPkLinear:
+    """_CachedPkLinear: cache warm-up, hit, and accuracy."""
+
+    @pytest.fixture(scope="class")
+    def cache_obj(self):
+        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+        from hod_mod.fitting.hod_wp import _CachedPkLinear
+        return _CachedPkLinear(LinearPowerSpectrum())
+
+    def test_cache_warmup_and_hit(self, cache_obj):
+        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+        theta = LinearPowerSpectrum().default_cosmology()
+        k = np.logspace(-2, 1, 20)
+        r1 = np.asarray(cache_obj.pk_linear(k, 0.1, theta))
+        assert len(cache_obj._cache) == 1
+        r2 = np.asarray(cache_obj.pk_linear(k, 0.1, theta))
+        assert len(cache_obj._cache) == 1
+        np.testing.assert_array_equal(r1, r2)
+
+    def test_interpolation_close_to_camb(self, cache_obj):
+        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+        pk_lin = LinearPowerSpectrum()
+        theta  = pk_lin.default_cosmology()
+        k = np.logspace(-1, 0.5, 15)
+        pk_direct = np.asarray(pk_lin.pk_linear(k, 0.2, theta))
+        pk_cached = np.asarray(cache_obj.pk_linear(k, 0.2, theta))
+        np.testing.assert_allclose(pk_cached, pk_direct, rtol=1e-2)
+
+
+# ---------------------------------------------------------------------------
+# Test: log_prob_joint standalone function
+# ---------------------------------------------------------------------------
+
+class TestLogProbJoint:
+    """log_prob_joint standalone function."""
+
+    @pytest.fixture(scope="class")
+    def joint_data(self):
+        import jax.numpy as jnp
+        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+        from hod_mod.cosmology.halo_mass_function import make_hmf
+        from hod_mod.cosmology.halo_profiles import HaloProfile
+        from hod_mod.galaxies.hod import MoreHODModel
+        from hod_mod.galaxies.clustering import FullHaloModelPrediction
+
+        theta = LinearPowerSpectrum.default_cosmology()
+        pk_lin = LinearPowerSpectrum()
+        hmf    = make_hmf("tinker08", pk_func=pk_lin.pk_linear)
+        colossus = {
+            "flat": True, "H0": theta["h"] * 100.0,
+            "Om0": theta["Omega_m"], "Ob0": theta["Omega_b"],
+            "sigma8": 0.811, "ns": theta["n_s"],
+        }
+        hp   = HaloProfile(colossus, cm_relation="diemer19")
+        hod  = MoreHODModel(hmf, hmf.bias)
+        pred = FullHaloModelPrediction(pk_lin, hod, hp)
+
+        rp     = np.logspace(-1, 1.5, 10)
+        default = MoreHODModel.default_params()
+        wp_obs = np.asarray(pred.wp(jnp.array(rp), 60.0, 0.16, theta, default))
+        icov_wp = np.diag(1.0 / (0.15 * wp_obs) ** 2)
+
+        R      = np.logspace(-1, 1.0, 8)
+        ds_obs = np.asarray(pred.delta_sigma(jnp.array(R), 0.16, theta, default))
+        icov_ds = np.diag(1.0 / (0.20 * ds_obs) ** 2)
+
+        return pred, rp, wp_obs, icov_wp, R, ds_obs, icov_ds, theta, default
+
+    def test_finite_at_valid_params(self, joint_data):
+        from hod_mod.fitting.hod_wp import log_prob_joint
+        pred, rp, wp_obs, icov_wp, R, ds_obs, icov_ds, theta, default = joint_data
+        free   = ["log10mmin"]
+        bounds = {"log10mmin": (10.5, 13.5)}
+        fixed  = {k: v for k, v in default.items() if k not in free}
+        lp = log_prob_joint(
+            np.array([default["log10mmin"]]), free, fixed, bounds,
+            pred, rp, wp_obs, icov_wp, R, ds_obs, icov_ds,
+            ng_obs=1e-3, ng_frac_err=0.20,
+            z=0.16, theta_cosmo=theta, pi_max=60.0,
+        )
+        assert np.isfinite(lp)
+
+    def test_out_of_bounds_returns_neginf(self, joint_data):
+        from hod_mod.fitting.hod_wp import log_prob_joint
+        pred, rp, wp_obs, icov_wp, R, ds_obs, icov_ds, theta, default = joint_data
+        free   = ["log10mmin"]
+        bounds = {"log10mmin": (10.5, 13.5)}
+        fixed  = {k: v for k, v in default.items() if k not in free}
+        lp = log_prob_joint(
+            np.array([9.0]), free, fixed, bounds,
+            pred, rp, wp_obs, icov_wp, R, ds_obs, icov_ds,
+            ng_obs=1e-3, ng_frac_err=0.20,
+            z=0.16, theta_cosmo=theta, pi_max=60.0,
+        )
+        assert lp == -np.inf

@@ -9,7 +9,9 @@ from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum, eisenstein_hu_
 from hod_mod.cosmology.nonlinear import NonLinearPowerSpectrum
 from hod_mod.cosmology.halo_profiles import (
     nfw_rho, nfw_mass, nfw_sigma, nfw_delta_sigma, nfw_mean_sigma,
-    nfw_uk, einasto_rho, HaloProfile,
+    nfw_uk, nfw_uk_jax, einasto_rho, einasto_uk, satellite_nfw_uk,
+    HaloProfile, concentration_dutton14_jax,
+    _si_jax, _ci_jax,
 )
 from hod_mod.cosmology.halo_model import HaloModelPowerSpectrum
 from hod_mod.cosmology.halo_mass_function import (
@@ -901,3 +903,258 @@ class TestDistanceFunctions:
     def test_age_finite(self):
         t0 = age_of_universe(self._H, self._OM)
         assert jnp.all(jnp.isfinite(t0))
+
+
+# ---------------------------------------------------------------------------
+# HaloProfile class — concentration, rho_s_and_rs, delta_sigma, _mdef_delta_rho
+# ---------------------------------------------------------------------------
+
+_COLOSSUS_COSMO = {
+    "flat": True, "H0": 67.36, "Om0": 0.3100,
+    "Ob0": 0.0493, "sigma8": 0.8111, "ns": 0.9649,
+}
+_THETA_COSMO = {"Omega_m": 0.3100, "Omega_b": 0.0493}
+_MASS_ARR = jnp.array([1e12, 1e13, 1e14])
+_R_ARR    = jnp.logspace(-1, 1, 10)
+
+
+class TestHaloProfileClass:
+    """HaloProfile concentration–mass and lensing methods."""
+
+    @pytest.fixture(scope="class")
+    def hp_colossus(self):
+        return HaloProfile(_COLOSSUS_COSMO, cm_relation="diemer19", mdef="200m")
+
+    @pytest.fixture(scope="class")
+    def hp_dutton(self):
+        return HaloProfile(_COLOSSUS_COSMO, cm_relation="dutton14", mdef="200c")
+
+    # --- concentration ---
+
+    def test_concentration_colossus_shape(self, hp_colossus):
+        c = hp_colossus.concentration(_MASS_ARR, z=0.1)
+        assert c.shape == (3,)
+
+    def test_concentration_colossus_positive(self, hp_colossus):
+        c = hp_colossus.concentration(_MASS_ARR, z=0.1)
+        assert jnp.all(c > 0)
+
+    def test_concentration_dutton14_shape(self, hp_dutton):
+        c = hp_dutton.concentration(_MASS_ARR, z=0.0)
+        assert c.shape == (3,)
+
+    def test_concentration_dutton14_positive(self, hp_dutton):
+        c = hp_dutton.concentration(_MASS_ARR, z=0.0)
+        assert jnp.all(c > 0)
+
+    def test_dutton14_wrong_mdef_raises(self):
+        with pytest.raises(ValueError, match="200c"):
+            HaloProfile(_COLOSSUS_COSMO, cm_relation="dutton14", mdef="200m")
+
+    # --- rho_s_and_rs ---
+
+    def test_rho_s_and_rs_positive_200m(self, hp_colossus):
+        rho_s, r_s = hp_colossus.rho_s_and_rs(_MASS_ARR, z=0.1, theta_cosmo=_THETA_COSMO)
+        assert jnp.all(rho_s > 0)
+        assert jnp.all(r_s > 0)
+
+    def test_rho_s_and_rs_positive_200c(self):
+        hp = HaloProfile(_COLOSSUS_COSMO, cm_relation="diemer19", mdef="200c")
+        rho_s, r_s = hp.rho_s_and_rs(_MASS_ARR, z=0.3, theta_cosmo=_THETA_COSMO)
+        assert jnp.all(rho_s > 0)
+        assert jnp.all(r_s > 0)
+
+    def test_rho_s_and_rs_positive_vir(self):
+        hp = HaloProfile(_COLOSSUS_COSMO, cm_relation="diemer19", mdef="vir")
+        rho_s, r_s = hp.rho_s_and_rs(_MASS_ARR, z=0.1, theta_cosmo=_THETA_COSMO)
+        assert jnp.all(rho_s > 0)
+        assert jnp.all(r_s > 0)
+
+    def test_rho_s_and_rs_r_s_from_c(self, hp_colossus):
+        """r_delta = c * r_s must hold: check r_s = r_delta / c."""
+        from hod_mod.cosmology.halo_profiles import _RHO_CRIT0
+        rho_s, r_s = hp_colossus.rho_s_and_rs(_MASS_ARR, z=0.0, theta_cosmo=_THETA_COSMO)
+        c = hp_colossus.concentration(_MASS_ARR, z=0.0)
+        delta, rho_ref = hp_colossus._mdef_delta_rho(0.0, _THETA_COSMO)
+        r_delta = (3.0 * _MASS_ARR / (4.0 * jnp.pi * delta * rho_ref)) ** (1.0 / 3.0)
+        np.testing.assert_allclose(np.asarray(r_s), np.asarray(r_delta / c), rtol=1e-5)
+
+    # --- delta_sigma ---
+
+    def test_delta_sigma_shape(self, hp_colossus):
+        m_h = jnp.array(1e13)
+        ds = hp_colossus.delta_sigma(_R_ARR, m_h, z=0.1, theta_cosmo=_THETA_COSMO)
+        assert ds.shape == _R_ARR.shape
+
+    def test_delta_sigma_positive(self, hp_colossus):
+        m_h = jnp.array(1e13)
+        ds = hp_colossus.delta_sigma(_R_ARR, m_h, z=0.1, theta_cosmo=_THETA_COSMO)
+        assert jnp.all(ds > 0)
+
+    # --- _mdef_delta_rho branches ---
+
+    def test_mdef_200m(self, hp_colossus):
+        delta, rho_ref = hp_colossus._mdef_delta_rho(0.5, _THETA_COSMO)
+        assert delta == pytest.approx(200.0)
+        assert rho_ref > 0
+
+    def test_mdef_200c(self):
+        hp = HaloProfile(_COLOSSUS_COSMO, cm_relation="diemer19", mdef="200c")
+        delta, rho_ref = hp._mdef_delta_rho(0.0, _THETA_COSMO)
+        assert delta == pytest.approx(200.0)
+        assert rho_ref > 0
+
+    def test_mdef_vir(self):
+        hp = HaloProfile(_COLOSSUS_COSMO, cm_relation="diemer19", mdef="vir")
+        delta, rho_ref = hp._mdef_delta_rho(0.0, _THETA_COSMO)
+        assert 100 < delta < 400  # Bryan & Norman 1998: ~178 at z=0 for flat ΛCDM
+        assert rho_ref > 0
+
+    def test_mdef_invalid_raises(self):
+        hp = HaloProfile(_COLOSSUS_COSMO, cm_relation="diemer19", mdef="999x")
+        with pytest.raises(ValueError, match="999x"):
+            hp._mdef_delta_rho(0.0, _THETA_COSMO)
+
+
+# ---------------------------------------------------------------------------
+# concentration_dutton14_jax — standalone JAX-native c(M,z) relation
+# ---------------------------------------------------------------------------
+
+class TestConcentrationDutton14Jax:
+    """Standalone concentration_dutton14_jax function."""
+
+    def test_shape(self):
+        c = concentration_dutton14_jax(_MASS_ARR, z=0.0)
+        assert c.shape == (3,)
+
+    def test_positive(self):
+        c = concentration_dutton14_jax(_MASS_ARR, z=0.5)
+        assert jnp.all(c > 0)
+
+    def test_decreasing_with_mass(self):
+        """Higher mass → lower concentration (Dutton & Macciò 2014)."""
+        c = concentration_dutton14_jax(_MASS_ARR, z=0.0)
+        assert float(c[0]) > float(c[-1])
+
+    def test_z_dependence(self):
+        """At fixed mass, higher z → lower concentration."""
+        m = jnp.array([1e13])
+        c_z0 = float(concentration_dutton14_jax(m, z=0.0)[0])
+        c_z1 = float(concentration_dutton14_jax(m, z=1.0)[0])
+        assert c_z0 > c_z1
+
+    def test_finite(self):
+        c = concentration_dutton14_jax(_MASS_ARR, z=2.0)
+        assert jnp.all(jnp.isfinite(c))
+
+
+# ---------------------------------------------------------------------------
+# nfw_uk_jax, _si_jax, _ci_jax
+# ---------------------------------------------------------------------------
+
+_K_ARR  = np.logspace(-2, 1.5, 12)
+_RS_ARR = np.array([0.2, 0.5, 1.0])
+_C_ARR  = np.array([7.0, 8.0, 10.0])
+
+
+class TestNfwUkJax:
+    """nfw_uk_jax and its JAX Si/Ci helpers."""
+
+    def test_shape(self):
+        uk = nfw_uk_jax(jnp.asarray(_K_ARR), jnp.asarray(_RS_ARR), jnp.asarray(_C_ARR))
+        assert uk.shape == (len(_K_ARR), len(_RS_ARR))
+
+    def test_range(self):
+        uk = nfw_uk_jax(jnp.asarray(_K_ARR), jnp.asarray(_RS_ARR), jnp.asarray(_C_ARR))
+        assert jnp.all(uk > 0)
+        assert jnp.all(uk <= 1.0 + 1e-6)
+
+    def test_k0_limit(self):
+        """Near k=0, û_m → 1."""
+        k_small = jnp.array([1e-5, 1e-4])
+        uk = nfw_uk_jax(k_small, jnp.asarray(_RS_ARR), jnp.asarray(_C_ARR))
+        np.testing.assert_allclose(np.asarray(uk), 1.0, atol=1e-3)
+
+    def test_agrees_with_nfw_uk(self):
+        """JAX and scipy implementations agree to < 0.2% for K in [0.01, 10]."""
+        uk_scipy = np.asarray(nfw_uk(_K_ARR, _RS_ARR, _C_ARR))
+        uk_jax   = np.asarray(nfw_uk_jax(jnp.asarray(_K_ARR), jnp.asarray(_RS_ARR),
+                                          jnp.asarray(_C_ARR)))
+        np.testing.assert_allclose(uk_jax, uk_scipy, rtol=2e-3)
+
+    def test_si_known_values(self):
+        """_si_jax agrees with scipy.special.sici to < 1e-4 relative error."""
+        from scipy.special import sici
+        x = jnp.array([0.5, 1.0, 3.0, 7.0, 15.0])
+        si_ref = np.array([sici(float(xi))[0] for xi in x])
+        si_jax = np.asarray(_si_jax(x))
+        np.testing.assert_allclose(si_jax, si_ref, rtol=1e-4)
+
+    def test_ci_known_values(self):
+        """_ci_jax agrees with scipy.special.sici to < 1e-4 relative error."""
+        from scipy.special import sici
+        x = jnp.array([0.5, 1.0, 3.0, 7.0, 15.0])
+        ci_ref = np.array([sici(float(xi))[1] for xi in x])
+        ci_jax = np.asarray(_ci_jax(x))
+        np.testing.assert_allclose(ci_jax, ci_ref, rtol=1e-4)
+
+    def test_si_odd_function(self):
+        """Si is an odd function: Si(-x) = -Si(x)."""
+        x = jnp.array([1.0, 3.0, 10.0])
+        np.testing.assert_allclose(np.asarray(_si_jax(-x)), -np.asarray(_si_jax(x)), rtol=1e-6)
+
+    def test_jit_differentiable(self):
+        """jax.grad of nfw_uk_jax w.r.t. r_s runs without error."""
+        def uk_sum(r_s):
+            return jnp.sum(
+                nfw_uk_jax(jnp.asarray(_K_ARR[:3]), r_s, jnp.asarray(_C_ARR[:3]))
+            )
+        grad_fn = jax.grad(uk_sum)
+        g = grad_fn(jnp.asarray(_RS_ARR))
+        assert jnp.all(jnp.isfinite(g))
+
+
+# ---------------------------------------------------------------------------
+# einasto_uk and satellite_nfw_uk
+# ---------------------------------------------------------------------------
+
+_RVIR_ARR = _C_ARR * _RS_ARR   # r_vir = c * r_s
+
+
+class TestEinastoAndSatelliteUk:
+    """einasto_uk and satellite_nfw_uk Fourier transforms."""
+
+    def test_einasto_uk_shape(self):
+        uk = einasto_uk(_K_ARR, _RS_ARR, _C_ARR)
+        assert uk.shape == (len(_K_ARR), len(_RS_ARR))
+
+    def test_einasto_uk_positive(self):
+        uk = einasto_uk(_K_ARR, _RS_ARR, _C_ARR)
+        assert jnp.all(uk > 0)
+
+    def test_einasto_uk_k0_limit(self):
+        """At very small k, û_Ein → 1."""
+        k_small = np.array([1e-5, 1e-4])
+        uk = einasto_uk(k_small, _RS_ARR, _C_ARR)
+        np.testing.assert_allclose(np.asarray(uk), 1.0, atol=5e-3)
+
+    def test_einasto_uk_finite(self):
+        uk = einasto_uk(_K_ARR, _RS_ARR, _C_ARR)
+        assert jnp.all(jnp.isfinite(uk))
+
+    def test_satellite_nfw_uk_shape(self):
+        uk = satellite_nfw_uk(_K_ARR, _RS_ARR, _C_ARR, _RVIR_ARR)
+        assert uk.shape == (len(_K_ARR), len(_RS_ARR))
+
+    def test_satellite_nfw_uk_finite(self):
+        uk = satellite_nfw_uk(_K_ARR, _RS_ARR, _C_ARR, _RVIR_ARR)
+        assert jnp.all(jnp.isfinite(uk))
+
+    def test_satellite_nfw_uk_default_matches_nfw_uk(self):
+        """With b_sat_conc=1, f_cut=0, gamma=0, satellite_nfw_uk == nfw_uk."""
+        uk_sat = np.asarray(
+            satellite_nfw_uk(_K_ARR, _RS_ARR, _C_ARR, _RVIR_ARR,
+                             b_sat_conc=1.0, f_cut=0.0, gamma=0.0)
+        )
+        uk_ref = np.asarray(nfw_uk(_K_ARR, _RS_ARR, _C_ARR))
+        np.testing.assert_allclose(uk_sat, uk_ref, rtol=1e-2)
