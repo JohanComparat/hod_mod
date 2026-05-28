@@ -107,7 +107,7 @@ class ClusterGalaxyCrossCorrelation:
         # Fill cache via the galaxy auto predictor
         self._full._pk_tables_full(z, theta_cosmo, hod_params)
 
-        cosmo_key = (float(z), tuple(sorted(theta_cosmo.items())))
+        cosmo_key = self._full._cosmo_cache_key(z, theta_cosmo)
         sc = self._full._static_cache[cosmo_key]
 
         m_np    = sc["m_np"]

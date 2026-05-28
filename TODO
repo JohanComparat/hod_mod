@@ -6,6 +6,7 @@ RUNS :
 
 # Single probe — wp only, BGS2 (free Ω_m + S8)
 python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_wp --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_wp --plot
 
 # Joint wp+ESD — DES lensing
 python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_des --plot
@@ -21,6 +22,8 @@ python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg2_hsc --
 # ESD-only
 python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_ds_des --plot
 python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_ds_hsc --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_ds_des --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_ds_hsc --plot
 
 # All DES at once
 for m in lange2025_bgs2_des lange2025_bgs3_des lange2025_lrg1_des; do

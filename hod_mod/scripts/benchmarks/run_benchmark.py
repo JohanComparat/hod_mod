@@ -355,7 +355,7 @@ def run_benchmark(model_key: str, mcmc: bool = False, plot: bool = False,
         "chi2_ndof": float(chi2_ndof),
         "published_chi2_ndof": pub_chi2,
         "params": {k: float(v) for k, v in params.items()},
-        "published_params": {k: list(v) for k, v in published.items()},
+        "published_params": {k: list(v) for k, v in _normalize_published(published).items()},
         "param_deviations_sigma": _deviations(params, published),
     }
 
@@ -459,8 +459,8 @@ def _make_plots(fitter, params, chi2_ndof, model_key, output_dir, joint, ds_only
     wp_pub = None
     if published:
         pub_params = dict(params)
-        for pname, (pub_val, _) in published.items():
-            pub_params[pname] = pub_val
+        for pname, entry_val in _normalize_published(published).items():
+            pub_params[pname] = entry_val[0]
         try:
             wp_pub = np.array(fitter.predict_wp(pub_params))
         except Exception:

@@ -8,9 +8,9 @@
   "ng_h3Mpc3": 0.00057,
   "ng_err_h3Mpc3": 3e-06,
   "ng_source": "Zhou+2023 ADS:2023AJ....165...58Z",
-  "wp_source": "Lange+2025, Figure 3, NEEDS_DATA",
-  "ds_des_source": "Lange+2025, Figure 3, NEEDS_DATA",
-  "ds_hsc_source": "Lange+2025, Figure 4, NEEDS_DATA",
+  "wp_source": "Lange+2025, Figure 3 top-right panel",
+  "ds_des_source": "Lange+2025, Figure 3 bottom-right panel (DES Y3 + KiDS-1000)",
+  "ds_hsc_source": "Lange+2025, Figure 4 bottom-third panel (HSC-Y3)",
   "pi_max_hMpc": 80.0,
   "cosmology": {
     "Omega_m": 0.3153,
@@ -21,7 +21,6 @@
   },
   "status": "DIGITIZED_FROM_FIGURE",
   "data_repository": "https://zenodo.org/records/17831718",
-  "digitization_note": "Values from ar5iv PNG (Fig 3 DES + Fig 4 HSC), power-law rp^{-1.05}/R^{-1.2}, ~20-30% uncertainty",
-  "digitization_source": "https://ar5iv.labs.arxiv.org/html/2512.15962",
-  "systematic_added": "1% in quadrature: err_total = sqrt(err_stat^2 + (0.01*signal)^2)"
+  "digitization_note": "Color-based extraction from downloaded PNG (orange markers, RGB 240/160/0). Axis: log-x linear-y; y-axis shows rp*wp [h^-2 Mpc^2] and R*DeltaSigma [10^6 M_sun/pc]. Error bars from extent of colored pixels per bin. Script: data/lange2025_desi_dr1/digitize_figures.py. Accuracy ~5-10% (limited by pixel resolution ~0.5-1 data unit per pixel).",
+  "digitization_source": "data/lange2025_desi_dr1/raw_figures/fig3.png (fig3), raw_figures/fig4.png (fig4)"
 }

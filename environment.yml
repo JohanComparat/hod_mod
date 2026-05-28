@@ -42,3 +42,4 @@ dependencies:
     - AletheiaCosmo
     # Boltzmann solver — CLASS (Lesgourgues 2011)
     - classy
+    - plotdigitizer
