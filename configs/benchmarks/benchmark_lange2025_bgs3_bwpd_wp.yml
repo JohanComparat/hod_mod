@@ -1,0 +1,57 @@
+# DESI DR1 BGS3 wp-only benchmark — manually digitized bwpd data (Lange+2025, arXiv:2512.15962)
+# Sample: BGS3, z=0.3-0.4, z_eff=0.35, n_g=1.38e-3 h^3 Mpc^-3
+# Data: wp_bgs3_bwpd.csv — WebPlotDigitizer, Fig 3 top-center panel
+# Init params from paper (galaxy_hod_parameters in metadata.json; alpha_s -> alpha)
+
+data:
+  file:   data/lange2025_desi_dr1/BGS3/wp_bgs3_bwpd.csv
+  format: bwpd
+  rp_min: 0.4
+  rp_max: 63.0
+
+cosmology:
+  Omega_m: 0.3153
+  h:       0.6736
+  sigma8:  0.8111
+  n_s:     0.9649
+  Omega_b: 0.0493
+
+model:
+  hod_model:   Lange25HODModel
+  hmf_backend: tinker08
+  z:           0.35
+  pi_max:      80.0
+
+parameters:
+  log10mmin:  {free: true,  bounds: [11.0, 15.0], init: 12.5}
+  sigma_logm: {free: true,  bounds: [0.01, 1.0],  init: 0.1}
+  log10m0:    {free: true,  bounds: [11.0, 15.0], init: 12.6}
+  log10m1:    {free: true,  bounds: [11.0, 15.0], init: 13.8}
+  alpha:      {free: true,  bounds: [0.5,  2.0],  init: 0.9}
+  f_Gamma:    {free: true,  bounds: [0.5,  1.0],  init: 1.0}
+  A_cen:      {free: true,  bounds: [-1.0, 1.0],  init: 1.0}
+  A_sat:      {free: true,  bounds: [-1.0, 1.0],  init: -0.8}
+  Omega_m:
+    free:        true
+    bounds:      [0.279, 0.352]
+    init:        0.3153
+    prior_type:  gaussian
+    prior_mean:  0.3153
+    prior_sigma: 0.0073
+  S8:
+    free:        true
+    bounds:      [0.775, 0.889]
+    init:        0.832
+    prior_type:  gaussian
+    prior_mean:  0.832
+    prior_sigma: 0.0114
+
+fitting:
+  method:         map
+  n_walkers:      64
+  n_steps:        4000
+  n_burnin:       1000
+  use_free_cosmo: true
+
+output:
+  dir: results/benchmarks/lange2025/bgs3_bwpd_wp/

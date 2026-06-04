@@ -141,6 +141,7 @@ class FitConfig:
     ds_rp_max:          float       = 20.0
     ng_obs:             float       = 3.0e-4
     ng_frac_err:        float       = 0.20
+    ds_format:          str         = "csv"   # "csv" or "bwpd"
     # FITS JK fields (None = no FITS loading)
     jk_dir:             str | None  = None
     jk_pattern:         str         = "NSIDE_04"
@@ -266,6 +267,7 @@ def load_config(path: str) -> FitConfig:
         ds_rp_max   = float(joint_cfg.get("ds_rp_max", 20.0))
         ng_obs      = float(joint_cfg.get("ng_obs", 3.0e-4))
         ng_frac_err = float(joint_cfg.get("ng_frac_err", 0.20))
+        ds_fmt      = joint_cfg.get("ds_format", "csv")
     elif ds_only_cfg:
         ds_file_rel = ds_only_cfg.get("file", "")
         ds_file = os.path.join(repo_root, ds_file_rel) if ds_file_rel else None
@@ -273,11 +275,13 @@ def load_config(path: str) -> FitConfig:
         ds_rp_max   = float(ds_only_cfg.get("rp_max", 20.0))
         ng_obs      = float(ds_only_cfg.get("ng_obs", 3.0e-4))
         ng_frac_err = float(ds_only_cfg.get("ng_frac_err", 0.20))
+        ds_fmt      = ds_only_cfg.get("ds_format", "csv")
     else:
         ds_rp_min   = 0.1
         ds_rp_max   = 20.0
         ng_obs      = 3.0e-4
         ng_frac_err = 0.20
+        ds_fmt      = "csv"
 
     return FitConfig(
         data_file          = data_file,
@@ -305,6 +309,7 @@ def load_config(path: str) -> FitConfig:
         ds_rp_max          = ds_rp_max,
         ng_obs             = ng_obs,
         ng_frac_err        = ng_frac_err,
+        ds_format          = ds_fmt,
         jk_dir             = data_file if fits_cfg else None,
         jk_pattern         = fits_cfg.get("jk_pattern", "NSIDE_04"),
         h_hubble           = float(fits_cfg.get("h", 0.6736)),
@@ -316,6 +321,101 @@ def load_config(path: str) -> FitConfig:
 # Backward-compatibility aliases
 load_joint_config = load_config
 load_fits_config  = load_config
+
+
+# ---------------------------------------------------------------------------
+# Figure-unit readers — return data as plotted on paper figures
+# ---------------------------------------------------------------------------
+
+def read_wp_bwpd_fig3(path: str, rp_min: float = 0.0, rp_max: float = 1e9):
+    """Read a 3-column BWPD wp file and return quantities in figure-plot units.
+
+    Expected column order (comma/whitespace-delimited, spaces allowed):
+        rp_hMpc   rpwp_h2Mpc2   rpwp_upper_h2Mpc2
+
+    Parameters
+    ----------
+    path : str
+        Path to the CSV file.
+    rp_min, rp_max : float
+        Optional scale cuts in h^-1 Mpc (applied to rp_hMpc column).
+
+    Returns
+    -------
+    rp : np.ndarray
+        Projected separation r_p in h^-1 Mpc.
+    rp_wp : np.ndarray
+        r_p × w_p(r_p) in (h^-1 Mpc)^2  — the y-axis quantity in the figure.
+    err : np.ndarray
+        1-sigma uncertainty on r_p × w_p; computed as upper_bound − central.
+    """
+    import re
+    rows = []
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            fields = [x for x in re.split(r"[,\s]+", line) if x]
+            try:
+                rows.append([float(x) for x in fields[:3]])
+            except ValueError:
+                continue
+    d = np.array(rows)
+    rp        = d[:, 0]
+    rp_wp     = d[:, 1]
+    rp_wp_up  = d[:, 2]
+    mask = (rp >= rp_min) & (rp <= rp_max)
+    return rp[mask], rp_wp[mask], (rp_wp_up - rp_wp)[mask]
+
+
+def read_esd_bwpd_4col_fig3(path: str, R_min: float = 0.0, R_max: float = 1e9):
+    """Read a 4-column BWPD ESD file and return ΔΣ in figure-plot units.
+
+    Expected column order (comma/whitespace-delimited, spaces allowed):
+        rp_hMpc   DS_hMsunpc2   DS_upper_hMsunpc2   DS_lower_hMsunpc2
+
+    The ``DS_hMsunpc2`` column stores **ΔΣ** directly in h M_sun/pc^2,
+    which is the y-axis quantity in More+2015 Figure 3 (right panels).
+    Error bounds are asymmetric.
+
+    Parameters
+    ----------
+    path : str
+        Path to the CSV file.
+    R_min, R_max : float
+        Optional scale cuts in h^-1 Mpc.
+
+    Returns
+    -------
+    R : np.ndarray
+        Projected radius R in h^-1 Mpc.
+    DS : np.ndarray
+        ΔΣ(R) in h M_sun/pc^2.
+    err_hi : np.ndarray
+        Upper 1-sigma error on ΔΣ  (upper_bound − central).
+    err_lo : np.ndarray
+        Lower 1-sigma error on ΔΣ  (central − lower_bound).
+    """
+    import re
+    rows = []
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            fields = [x for x in re.split(r"[,\s]+", line) if x]
+            try:
+                rows.append([float(x) for x in fields[:4]])
+            except ValueError:
+                continue
+    d = np.array(rows)
+    R      = d[:, 0]
+    DS     = d[:, 1]
+    DS_up  = d[:, 2]
+    DS_lo  = d[:, 3]
+    mask = (R >= R_min) & (R <= R_max)
+    return R[mask], DS[mask], (DS_up - DS)[mask], (DS - DS_lo)[mask]
 
 
 # ---------------------------------------------------------------------------
@@ -528,6 +628,8 @@ class WpFitter:
             self._load_data_hdf5()
         elif fmt == "fits":
             self._load_data_fits()
+        elif fmt == "bwpd":
+            self._load_data_bwpd()
         else:
             self._load_data_csv()
 
@@ -567,6 +669,128 @@ class WpFitter:
         self.wp_obs  = wp_h
         self.wp_err  = np.sqrt(np.diag(cov_h))
         self._cov_wp = cov_h
+
+    @staticmethod
+    def _read_bwpd_file(path: str) -> np.ndarray:
+        """Parse a manually-digitized BWPD file with mixed comma/space delimiters.
+
+        Splits each non-comment line on any run of commas and/or whitespace,
+        making the reader robust to inconsistent spacing around commas. Returns
+        a (N, 3) float array with the three data columns.
+        """
+        import re
+        rows = []
+        with open(path) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                fields = [x for x in re.split(r"[,\s]+", line) if x]
+                try:
+                    rows.append([float(x) for x in fields[:3]])
+                except ValueError:
+                    continue  # skip header rows that contain non-numeric text
+        return np.array(rows)
+
+    def _load_data_bwpd(self):
+        """Load wp from a manually-digitized BWPD file.
+
+        Expected columns (comma/whitespace-delimited, spaces allowed):
+            rp_hMpc   rpwp_h2Mpc2   rpwp_upper_h2Mpc2
+
+        - ``rp_hMpc``           : r_p in h^-1 Mpc
+        - ``rpwp_h2Mpc2``       : r_p × w_p(r_p) in (h^-1 Mpc)^2
+        - ``rpwp_upper_h2Mpc2`` : upper bound of r_p × w_p; uncertainty = upper − value
+
+        Converts to code units::
+
+            wp [h^-1 Mpc] = rpwp / rp
+            wp_err        = (rpwp_upper − rpwp) / rp
+        """
+        d          = self._read_bwpd_file(self.config.data_file)
+        rp         = d[:, 0]
+        rpwp       = d[:, 1]
+        rpwp_upper = d[:, 2]
+        mask = (rp >= self.config.rp_min) & (rp <= self.config.rp_max)
+        self.rp_arr  = rp[mask]
+        self.wp_obs  = rpwp[mask] / rp[mask]
+        self.wp_err  = (rpwp_upper[mask] - rpwp[mask]) / rp[mask]
+        self._cov_wp = None
+
+    def _load_ds_data_bwpd(self):
+        """Load ΔΣ from a manually-digitized BWPD file.
+
+        Expected columns (comma/whitespace-delimited, spaces allowed):
+            rp_hMpc   rpDS_1e6Msunpc   rpDS_upper_1e6Msunpc
+
+        - ``rp_hMpc``              : R in h^-1 Mpc
+        - ``rpDS_1e6Msunpc``       : R × ΔΣ in 10^6 M_sun pc^-1
+        - ``rpDS_upper_1e6Msunpc`` : upper bound; uncertainty = upper − value
+
+        Unit conversion to code units (M_sun h pc^-2):
+            Since 1 Mpc = 10^6 pc the h factors cancel:
+            ΔΣ [M_sun h/pc^2] = (R×ΔΣ [10^6 M_sun/pc]) / (R [10^6 pc/h]) = rpDS / R
+        """
+        d          = self._read_bwpd_file(self.config.ds_file)
+        R          = d[:, 0]
+        rpDS       = d[:, 1]
+        rpDS_upper = d[:, 2]
+        mask = (R >= self.config.ds_rp_min) & (R <= self.config.ds_rp_max)
+        self.R_arr  = R[mask]
+        self.ds_obs = rpDS[mask] / R[mask]
+        self.ds_err = (rpDS_upper[mask] - rpDS[mask]) / R[mask]
+
+    @staticmethod
+    def _read_bwpd_4col_file(path: str) -> np.ndarray:
+        """Parse a 4-column BWPD file with asymmetric (upper + lower) bounds.
+
+        Expected columns (comma/whitespace-delimited, spaces allowed):
+            rp_hMpc   DS_central   DS_upper   DS_lower
+
+        The DS columns store the observable (e.g. R×ΔΣ) as plotted on the
+        figure y-axis, with separate upper and lower confidence bounds.
+        Returns a (N, 4) float array.
+        """
+        import re
+        rows = []
+        with open(path) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                fields = [x for x in re.split(r"[,\s]+", line) if x]
+                try:
+                    rows.append([float(x) for x in fields[:4]])
+                except ValueError:
+                    continue  # skip header rows
+        return np.array(rows)
+
+    def _load_ds_data_bwpd_4col(self):
+        """Load ΔΣ from a 4-column BWPD file with asymmetric error bounds.
+
+        Expected columns (comma/whitespace-delimited, spaces allowed):
+            rp_hMpc   DS_hMsunpc2   DS_upper_hMsunpc2   DS_lower_hMsunpc2
+
+        - ``rp_hMpc``             : R in h^-1 Mpc
+        - ``DS_hMsunpc2``         : ΔΣ in h M_sun/pc^2 — directly the y-axis value
+                                    as plotted in the paper figure
+        - ``DS_upper_hMsunpc2``   : upper confidence bound on ΔΣ (same units)
+        - ``DS_lower_hMsunpc2``   : lower confidence bound on ΔΣ (same units)
+
+        No unit conversion needed: h M_sun/pc^2 matches the predictor output
+        (``clustering.py`` returns ΔΣ in Msun h pc⁻²).
+
+        The asymmetric errors are symmetrised as err = (upper − lower) / 2.
+        """
+        d        = self._read_bwpd_4col_file(self.config.ds_file)
+        R        = d[:, 0]
+        DS       = d[:, 1]
+        DS_upper = d[:, 2]
+        DS_lower = d[:, 3]
+        mask = (R >= self.config.ds_rp_min) & (R <= self.config.ds_rp_max)
+        self.R_arr  = R[mask]
+        self.ds_obs = DS[mask]
+        self.ds_err = (DS_upper[mask] - DS_lower[mask]) / 2.0
 
     def _build_predictor(self):
         hmf     = make_hmf(self.config.hmf_backend, pk_func=self._pk_lin.pk_linear)
@@ -737,6 +961,14 @@ class WpFitter:
     # DS data loading (shared with JointFitter and DeltaSigmaFitter)
 
     def _load_ds_data(self):
+        if self.config.ds_format == "bwpd":
+            self._load_ds_data_bwpd()
+        elif self.config.ds_format == "bwpd_4col":
+            self._load_ds_data_bwpd_4col()
+        else:
+            self._load_ds_data_csv()
+
+    def _load_ds_data_csv(self):
         import pandas as pd
         data = pd.read_csv(self.config.ds_file, comment="#")
         mask = (

@@ -1,0 +1,99 @@
+{
+  "sample": "logM11p3_12",
+  "label": "BOSS CMASS subsample B — log M_*/h^-2 Msun in [11.30, 12.00]",
+  "survey": "BOSS CMASS DR11, SDSS-III",
+  "paper": "More et al. 2015",
+  "arxiv": "1407.1856",
+  "doi": "10.1088/0004-637X/806/1/2",
+  "title": "The Weak Lensing Signal and the Clustering of BOSS Galaxies II: Astrophysical and Cosmological Constraints",
+  "authors": "More, Miyatake, Mandelbaum, Takada, Spergel, Brownstein, Schneider",
+  "z_min": 0.47,
+  "z_max": 0.59,
+  "z_eff": 0.53,
+  "stellar_mass_range_log_h2Msun": [11.30, 12.00],
+  "n_galaxies": 196578,
+  "ng_h3Mpc3": 1.5e-4,
+  "ng_frac_err": 0.20,
+  "ng_source": "More+2015 Section 2 (includes fiber-collided and redshift-failure galaxies)",
+  "lensing_source": "CFHTLS (~105 deg^2 overlap with BOSS DR11, CFHTLenS catalog); 2549 CMASS galaxies in footprint",
+  "wp_source": "More+2015 Figure 3, top-center panel (blue markers), digitized via digitize_fig3.py",
+  "esd_source": "More+2015 Figure 3, right column center panel (blue markers), digitized via digitize_fig3.py",
+  "observable": "wp + DeltaSigma",
+  "pi_max_hMpc": 100.0,
+  "rp_min_wp_hMpc": 0.85,
+  "rp_max_wp_hMpc": 80.0,
+  "R_min_ds_hMpc": 0.1,
+  "R_max_ds_hMpc": 20.0,
+  "distance_cosmology": {
+    "Omega_m": 0.27,
+    "note": "Flat LCDM with Omega_m=0.27 assumed for converting redshifts to comoving distances (paper Section 2)"
+  },
+  "cosmology_priors": {
+    "note": "WMAP9+SPT+ACT priors on 100*Omega_b*h^2, n_s, h; Omega_m and sigma8 left free",
+    "100OmegabH2": {"mean": 2.228, "sigma": 0.040},
+    "n_s":         {"mean": 0.964, "sigma": 0.011},
+    "h":           {"mean": 0.703, "sigma": 0.018}
+  },
+  "published_cosmological_constraints": {
+    "Omega_m":       0.306,
+    "Omega_m_err_hi": 0.030,
+    "Omega_m_err_lo": 0.020,
+    "sigma8":        0.839,
+    "sigma8_err_hi":  0.061,
+    "sigma8_err_lo":  0.050,
+    "h":             0.700,
+    "h_err":          0.016,
+    "n_s":           0.963,
+    "n_s_err":        0.011,
+    "100OmegabH2":   2.226,
+    "100OmegabH2_err": 0.039,
+    "Omega_b":       0.0454
+  },
+  "published_hod_params": {
+    "logMmin":  {"value": 13.45, "err_hi": 0.15, "err_lo": 0.15},
+    "sigma2":   {"value": 0.45,  "err_hi": 0.25, "err_lo": 0.25,
+                 "note": "sigma^2 = variance of log M; sigma_logM = sqrt(0.45) = 0.671"},
+    "logM1":    {"value": 14.51, "err_hi": 0.17, "err_lo": 0.17},
+    "alpha":    {"value": 1.14,  "err_hi": 0.47, "err_lo": 0.51},
+    "kappa":    {"value": 0.85,  "err_hi": 0.85, "err_lo": 0.67,
+                 "note": "satellite cutoff M_0 = kappa * M_min; log10m0 = log10(kappa) + logMmin"},
+    "Mstar11":  {"value": 0.01, "note": "stellar mass parameter in 10^11 h^-2 Msun, upper limit"},
+    "Rc":       {"value": 1.01, "err_hi": 1.20, "err_lo": 0.20},
+    "psi":      {"value": 0.93, "err_hi": 0.14, "err_lo": 0.14},
+    "p_off":    {"value": 0.37, "err_hi": 0.21, "err_lo": 0.14},
+    "R_off":    {"value": 2.3},
+    "alpha_inc":{"value": 0.53, "err_hi": 0.25, "err_lo": 0.24},
+    "logMinc":  {"value": 13.88,"err_hi": 0.33, "err_lo": 0.30}
+  },
+  "code_param_mapping": {
+    "note": "Mapping to Kravtsov04 satellite HOD as implemented in hod_mod. N_sat = N_cen * ((M - kappa*Mmin)/M1)^alpha, so M0 = kappa*Mmin.",
+    "log10mmin": 13.45,
+    "sigma_logm": 0.671,
+    "log10m0":   13.379,
+    "log10m1":   14.51,
+    "alpha":      1.14
+  },
+  "published_chi2_ndof": 1.3,
+  "hod_model_description": "17-parameter HOD (12 HOD + 5 cosmo): Mmin, sigma^2, M1, alpha, kappa, Mstar11, Rc, psi, p_off, R_off, alpha_inc, Minc, plus Omega_m, sigma8, 100*Omega_b*h^2, n_s, h",
+  "data_files": {
+    "wp":  "data/more2015_boss_cmass/logM11p3_12/wp_logM11p3_12.csv",
+    "esd": "data/more2015_boss_cmass/logM11p3_12/ds_logM11p3_12.csv"
+  },
+  "columns_wp": {
+    "format": "bwpd",
+    "rp_hMpc":           "projected separation r_p in h^-1 Mpc",
+    "rpwp_h2Mpc2":       "r_p x w_p(r_p) in (h^-1 Mpc)^2",
+    "rpwp_upper_h2Mpc2": "upper bound of r_p x w_p; 1-sigma err = upper - central"
+  },
+  "columns_esd": {
+    "format": "bwpd_4col",
+    "rp_hMpc":             "projected radius R in h^-1 Mpc",
+    "DS_hMsunpc2":         "DeltaSigma in (h M_sun/pc^2) — the y-axis value in Figure 3 (right panels)",
+    "DS_upper_hMsunpc2":   "upper confidence bound on DeltaSigma",
+    "DS_lower_hMsunpc2":   "lower confidence bound on DeltaSigma",
+    "note": "Asymmetric error bars; err_hi = DS_upper - DS, err_lo = DS - DS_lower. For fitting (code units): DeltaSigma [M_sun h/pc^2] = DS_hMsunpc2 "
+  },
+  "extraction_note": "wp and ESD manually digitized from More+2015 Fig 3. wp: bwpd format (rp, rp*wp, upper bound), uncertainty = upper - central. ESD: bwpd_4col format (R, DS, upper, lower), asymmetric errors. ESD unit for fitting: DS_code = DS_hMsunpc2 ",
+  "status": "DIGITIZED_FROM_FIGURE",
+  "reading_function": {"wp": "bwpd", "esd": "bwpd_4col"}
+}

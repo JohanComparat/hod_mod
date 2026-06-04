@@ -102,38 +102,42 @@ Running the benchmarks
 
 .. code-block:: bash
 
-   # MAP fit: joint wp+ESD, BGS2 + DES/KiDS lensing
-   python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_des --plot
-
    # MAP fit: joint wp+ESD, BGS2 + HSC-Y3 lensing
-   python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_hsc --plot
+   python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_bwpd_hsc --plot
 
    # MAP fit: wp-only, BGS2 (with free cosmology)
-   python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_wp --plot
+   python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_bwpd_wp --plot
 
    # MAP fit: ESD-only, BGS2 + HSC
-   python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_ds_hsc --plot
+   python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_bwpd_esd --plot
 
    # Full MCMC (slow — free cosmology, 64 walkers × 4000 steps)
-   python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_hsc --mcmc --plot
+   python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_bwpd_hsc --mcmc --plot
 
-Available model keys: ``lange2025_bgs2_des``, ``lange2025_bgs3_des``, ``lange2025_lrg1_des``,
-``lange2025_bgs2_hsc``, ``lange2025_bgs3_hsc``, ``lange2025_lrg1_hsc``, ``lange2025_lrg2_hsc``,
-``lange2025_bgs2_wp``, ``lange2025_bgs2_ds_des``, ``lange2025_bgs2_ds_hsc``.
+Available model keys (bwpd series):
+
+* wp-only: ``lange2025_bgs2_bwpd_wp``, ``lange2025_bgs3_bwpd_wp``,
+  ``lange2025_lrg1_bwpd_wp``, ``lange2025_lrg2_bwpd_wp``
+* ESD-only (HSC-Y3): ``lange2025_bgs2_bwpd_esd``, ``lange2025_bgs3_bwpd_esd``,
+  ``lange2025_lrg1_bwpd_esd``, ``lange2025_lrg2_bwpd_esd``
+* Joint wp+ESD (HSC-Y3): ``lange2025_bgs2_bwpd_hsc``, ``lange2025_bgs3_bwpd_hsc``,
+  ``lange2025_lrg1_bwpd_hsc``, ``lange2025_lrg2_bwpd_hsc``
 
 Data status
 -----------
 
 .. note::
 
-   Data digitized from ar5iv PNG renderings of Figures 3–4 (Lange+2025).
-   Values extracted using power-law models anchored from visual inspection of the figures
-   (wp ∝ rp\ :sup:`−1.05`, ESD ∝ R\ :sup:`−1.2`); accuracy ~20–30% per data point.
-   A 1% systematic uncertainty is added in quadrature to all error bars.
+   Data manually digitized with WebPlotDigitizer from Figures 3–4 of Lange+2025
+   (arXiv:2512.15962).  Files are in **bwpd format** (rp, rp×wp upper-envelope; R, R×ΔΣ
+   upper-envelope) and stored in ``data/lange2025_desi_dr1/<SAMPLE>/``:
 
-   Replace ``data/lange2025_desi_dr1/*/`` with the published tables from
-   Zenodo record 17831718 when available (currently under review).  After replacing,
-   update the comments in each CSV header accordingly.
+   * ``wp_<sample>_bwpd.csv`` — projected clustering
+   * ``ds_hsc_<sample>_bwpd.csv`` — HSC-Y3 excess surface density
+
+   DES Y3/KiDS-1000 ESD is excluded from this release (data not yet transcribed).
+   Replace with the published tables from Zenodo record 17831718 when available
+   (currently under review) and update CSV headers accordingly.
 
 Published results (Table 3, combined all samples)
 -------------------------------------------------
@@ -586,4 +590,4 @@ All benchmarks currently fail (:math:`\chi^2/\text{dof} > 2`).  The primary limi
    because the digitized data cannot overcome the prior penalty.  Full Zenodo data with
    proper covariance matrices and a looser / no cosmological prior would be needed.
 
-See :ref:`benchmarks` for the full suite summary.
+See :ref:`benchmarks` for the benchmark suite summary.

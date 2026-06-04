@@ -12,22 +12,36 @@
     "n_s": 0.966,
     "Omega_b": 0.044
   },
-  "observable": "wp",
-  "columns": {
+  "observable": "wp+ds",
+  "data_files": {
+    "wp_cmass_z052.csv": "original wp for the full CMASS threshold sample (digitized from Fig 2)",
+    "logM11_12/wp_logM11_12.csv": "wp for logM*>11.1 (Fig 3 panel 0, crimson)",
+    "logM11_12/ds_logM11_12.csv": "DeltaSigma for logM*>11.1 (Fig 3 ESD panel 0)",
+    "logM11p3_12/wp_logM11p3_12.csv": "wp for logM*>11.3 (Fig 3 panel 1, blue)",
+    "logM11p3_12/ds_logM11p3_12.csv": "DeltaSigma for logM*>11.3 (Fig 3 ESD panel 1)",
+    "logM11p4_12/wp_logM11p4_12.csv": "wp for logM*>11.4 (Fig 3 panel 2, olive)",
+    "logM11p4_12/ds_logM11p4_12.csv": "DeltaSigma for logM*>11.4 (Fig 3 ESD panel 2)"
+  },
+  "columns_wp": {
     "rp_hMpc": "projected separation r_p in h^-1 Mpc",
     "wp_hMpc": "projected correlation function w_p in h^-1 Mpc",
     "wp_err_hMpc": "1-sigma uncertainty in h^-1 Mpc"
   },
+  "columns_ds": {
+    "R_hMpc": "projected radius R in h^-1 Mpc",
+    "ds_Msun_h_pc2": "DeltaSigma in M_sun h / pc^2 (paper M_sun/pc^2 divided by h=0.704)",
+    "ds_err_Msun_h_pc2": "1-sigma uncertainty in M_sun h / pc^2"
+  },
   "n_bins": 12,
   "rp_range_hMpc": [0.183, 52.19],
-  "data_source": "White+2014 Table 2 (MNRAS 437, 2594; arXiv:1404.5414)",
-  "extraction_method": "digitized from Figure 2 of More+2015 (arXiv:1407.1856)",
+  "data_source": "digitized from Figure 3 of More+2015 (arXiv:1407.1856); wp_cmass_z052.csv from White+2014 Table 2",
+  "extraction_method": "digitize_fig3.py — auto-detect colored markers, log-scale y-axis calibration",
+  "esd_unit_note": "Paper ESD is in M_sun/pc^2; divided by h=0.704 to get code unit M_sun h/pc^2",
   "triple_check": [
-    "12 rp values are monotonically increasing from 0.183 to 52.19 h^-1 Mpc",
-    "wp values are positive and broadly decreasing with rp",
-    "wp_err/wp ratios are ~15%, consistent with Figure 2 error bars",
-    "units: rp, wp, wp_err all in h^-1 Mpc (confirmed by axis labels in Figure 2)",
-    "cross-checked against AUM code comparison test (tests/test_aum_comparison.py)"
+    "wp values decrease monotonically from small to large rp (power-law + BAO regime)",
+    "ESD values decrease monotonically (1-halo + 2-halo shape)",
+    "unit check: ds_Msun_h_pc2 = paper_M_sun_per_pc2 / 0.704",
+    "overlay figure: raw_figures/fig3_overlay.png shows extracted points on original figure"
   ],
   "status": "ready",
   "published_params": {
@@ -45,5 +59,6 @@
     "kappa": 0.20
   },
   "published_chi2_ndof": 0.9,
-  "notes": "More+2015 used a 5-param fit (alpha_inc=1, log10m_inc fixed). WMAP7 cosmology from Table 1 of their paper."
+  "notes": "More+2015 used a 5-param fit (alpha_inc=1, log10m_inc fixed). WMAP7 cosmology from Table 1 of their paper.",
+  "reading_function": {"wp": "csv"}
 }

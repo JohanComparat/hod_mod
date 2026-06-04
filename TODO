@@ -1,43 +1,54 @@
-data: verify all the data in the data directory and its consistency. 
+data: verify all the data in the data directory and its consistency. All the benchmark !
 documentation: continue reading and proofing. (Overview and data formats page are final, next is the forward model showcase.)
 code coverage, and tests.
 
+
 RUNS :
 
-# Single probe — wp only, BGS2 (free Ω_m + S8)
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_wp --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_wp --plot
+# More 2015, individual runs and joint run, cosmo run
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12 --plot --mcmc
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p3_12 --plot --mcmc
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p4_12 --plot --mcmc
+JAX_PLATFORMS=cuda python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015 --mcmc --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --plot
+JAX_PLATFORMS=cuda  python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --mcmc --plot
 
-# Joint wp+ESD — DES lensing
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_des --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_des --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg1_des --plot
 
-# Joint wp+ESD — HSC lensing (all 4 samples incl. LRG2)
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_hsc --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_hsc --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg1_hsc --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg2_hsc --plot
 
-# ESD-only
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_ds_des --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_ds_hsc --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_ds_des --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_ds_hsc --plot
+#LANge 2025
+cd /home/comparat/software/hod_mod
 
-# All DES at once
-for m in lange2025_bgs2_des lange2025_bgs3_des lange2025_lrg1_des; do
-    python hod_mod/scripts/benchmarks/run_benchmark.py --model $m --plot
+for model in \
+  lange2025_bgs2_bwpd_wp  lange2025_bgs2_bwpd_esd  lange2025_bgs2_bwpd_hsc \
+  lange2025_bgs3_bwpd_wp  lange2025_bgs3_bwpd_esd  lange2025_bgs3_bwpd_hsc \
+  lange2025_lrg1_bwpd_wp  lange2025_lrg1_bwpd_esd  lange2025_lrg1_bwpd_hsc \
+  lange2025_lrg2_bwpd_wp  lange2025_lrg2_bwpd_esd  lange2025_lrg2_bwpd_hsc; do
+  JAX_PLATFORMS=cuda python hod_mod/scripts/benchmarks/run_benchmark.py --model $model --plot
 done
 
-# All HSC at once
-for m in lange2025_bgs2_hsc lange2025_bgs3_hsc lange2025_lrg1_hsc lange2025_lrg2_hsc; do
-    python hod_mod/scripts/benchmarks/run_benchmark.py --model $m --plot
+for model in \
+  lange2025_bgs2_bwpd_wp  lange2025_bgs2_bwpd_esd  lange2025_bgs2_bwpd_hsc \
+  lange2025_bgs3_bwpd_wp  lange2025_bgs3_bwpd_esd  lange2025_bgs3_bwpd_hsc \
+  lange2025_lrg1_bwpd_wp  lange2025_lrg1_bwpd_esd  lange2025_lrg1_bwpd_hsc \
+  lange2025_lrg2_bwpd_wp  lange2025_lrg2_bwpd_esd  lange2025_lrg2_bwpd_hsc; do
+  JAX_PLATFORMS=cuda python hod_mod/scripts/benchmarks/run_benchmark.py --model $model --mcmc --plot
 done
 
-python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs2_hsc --mcmc --plot
+# MAP only:
+JAX_PLATFORMS=cuda python hod_mod/scripts/benchmarks/run_benchmark_hsc_wp_lange25.py
+# MAP + MCMC:
+JAX_PLATFORMS=cuda python hod_mod/scripts/benchmarks/run_benchmark_hsc_wp_lange25.py --mcmc
+
+
+Zu and Mandelbaum 2015 is next :
+
+
+
 
 cd /home/comparat/software/hod_mod/docs && make html
+
+
+
 
 
 Here's the current state of the Zu & Mandelbaum 2015 benchmark reproduction:
@@ -57,5 +68,37 @@ MCMC running in background (32 walkers × 2000 steps, 9 free params — will tak
 Once the MCMC completes, run python hod_mod/scripts/benchmarks/plot_zumandelbaum2015_mcmc.py to generate the corner plot and MCMC band figures, then update the RST with the posterior results.
 
 
+1. Verify in the data/benchmark/ the ones that have the NEED_DATA flag. Use the script to extract data from figures to populate the benchmarks with the relevant data sets. Add figures showing the extracted data overlaid on top of the figure of interest.
+
+
+digitize benchmark by hand:
+~/software/hod_mod/data/lange2025_desi_dr1/BGS2$ vim wp_bgs2_bwpd.csv 
+
+then feed in the fitting ...
+
+
+
+
+PYTHON=/home/comparat/mamba/envs/hod_mod/bin/python3.11
+
+for m in lange2025_bgs3_bwpd_wp lange2025_bgs3_bwpd_hsc \
+          lange2025_lrg1_bwpd_wp lange2025_lrg1_bwpd_hsc \
+          lange2025_lrg2_bwpd_wp lange2025_lrg2_bwpd_hsc; do
+    python hod_mod/scripts/benchmarks/run_benchmark.py --model $m --plot
+done
+
+PYTHON=/home/comparat/mamba/envs/hod_mod/bin/python3.11
+
+# BGS3 — z=0.35
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_bwpd_wp  --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_bgs3_bwpd_hsc --plot
+
+# LRG1 — z=0.509  (f_Gamma free, init=0.8)
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg1_bwpd_wp  --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg1_bwpd_hsc --plot
+
+# LRG2 — z=0.705  (f_Gamma free, init=0.8)
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg2_bwpd_wp  --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg2_bwpd_hsc --plot
 
 

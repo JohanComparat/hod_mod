@@ -1,0 +1,54 @@
+# Benchmark: More+2015 BOSS CMASS subsample C — logM*>11.4 joint wp+ESD
+# Paper: More et al. 2015, arXiv:1407.1856
+# Sample: logM*∈[11.4,12.0] h^-2 Msun, N_gal=116682, ng=8.0e-5 h^3/Mpc^3, z_eff=0.53
+# wp format:  bwpd (rp, rp*wp, upper); err = upper - central
+# ESD format: bwpd_4col (R, DS [h Msun/pc^2], upper, lower); err = (upper - lower)/2
+# Cosmology fixed to published MAP (Table 3, sample C): Omega_m=0.304, sigma8=0.813
+# Off-centering fixed to published MAP values: p_off=0.34, R_off=2.2 (More+2015 Table 1)
+
+data:
+  file:   data/more2015_boss_cmass/logM11p4_12/wp_logM11p4_12.csv
+  format: bwpd
+  rp_min: 0.85
+  rp_max: 80.0
+
+joint:
+  ds_file:      data/more2015_boss_cmass/logM11p4_12/ds_logM11p4_12.csv
+  ds_format:    bwpd_4col
+  ds_rp_min:    0.1
+  ds_rp_max:    20.0
+  ng_obs:       8.0e-5
+  ng_frac_err:  0.20
+
+cosmology:
+  Omega_m: 0.304
+  h:       0.695
+  sigma8:  0.813
+  n_s:     0.961
+  Omega_b: 0.0459
+
+model:
+  hod_model:   MoreHODModel
+  hmf_backend: tinker08
+  z:           0.53
+  pi_max:      100.0
+
+parameters:
+  log10mmin:  {free: true,  bounds: [12.0, 15.0], init: 13.68}
+  sigma_logm: {free: true,  bounds: [0.05, 1.50], init: 0.889}
+  log10m1:    {free: true,  bounds: [13.0, 15.5], init: 14.56}
+  alpha:      {free: true,  bounds: [0.50, 2.50], init: 1.00}
+  kappa:      {free: true,  bounds: [0.01, 3.00], init: 1.19}
+  alpha_inc:  {free: false, init: 1.0}
+  log10m_inc: {free: false, init: 13.0}
+  p_off:      {free: false, init: 0.34}
+  R_off:      {free: false, init: 2.2}
+
+fitting:
+  method:    map
+  n_walkers: 32
+  n_steps:   2000
+  n_burnin:  500
+
+output:
+  dir: results/benchmarks/more2015_logM11p4_12/

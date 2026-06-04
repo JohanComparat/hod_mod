@@ -4,23 +4,57 @@
   "paper": "Lange+2025, arXiv:2512.15962",
   "z_min": 0.4,
   "z_max": 0.6,
-  "z_eff": 0.51,
+  "z_eff": 0.509,
   "ng_h3Mpc3": 0.00057,
   "ng_err_h3Mpc3": 3e-06,
-  "ng_source": "Zhou+2023 ADS:2023AJ....165...58Z",
-  "wp_source": "Lange+2025, Figure 3 top-right panel",
-  "ds_des_source": "Lange+2025, Figure 3 bottom-right panel (DES Y3 + KiDS-1000)",
-  "ds_hsc_source": "Lange+2025, Figure 4 bottom-third panel (HSC-Y3)",
+  "ng_source": "Lange+2025",
+  "wp_source": "Lange+2025, Figure 3 top-center panel",
+  "ds_des_source": "Lange+2025, Figure 3 bottom-center panel (DES Y3 + KiDS-1000)",
+  "ds_hsc_source": "Lange+2025, Figure 4 bottom-second panel (HSC-Y3)",
   "pi_max_hMpc": 80.0,
-  "cosmology": {
-    "Omega_m": 0.3153,
-    "h": 0.6736,
-    "sigma8": 0.8111,
-    "n_s": 0.9649,
-    "Omega_b": 0.0493
+ "cosmology_hscESD_wp": {
+    "Omega_m": 0.303,
+    "S_8": 0.793,
+    "Omega_m_err": 0.01,
+    "S_8_err": 0.017
+  },
+  "cosmology_hscESD_wp_zphotOffset": {
+    "Omega_m": 0.307,
+    "S_8": 0.842,
+    "Omega_m_err": 0.01,
+    "S_8_err": 0.018
+  },
+  "cosmology_desESD_wp": {
+    "Omega_m": 0.295,
+    "S_8": 0.794,
+    "Omega_m_err": 0.012,
+    "S_8_err": 0.023
+  },
+  "galaxy_hod_parameters": {"logMmin": 12.7, "sigmalogM": 0.1, "logM0":12.4, "logM1": 14.2, "alpha":1.0, "Acen":-1.0, "Asat":-1.0, "alpha_s":1.2, "logEta":0.4, "f_Gamma": 0.8},
+  "param_mapping_to_code": {
+    "logMmin":   "log10mmin",
+    "sigmalogM": "sigma_logm",
+    "logM0":     "log10m0",
+    "logM1":     "log10m1",
+    "alpha_s":   "alpha",
+    "Acen":      "A_cen",
+    "Asat":      "A_sat",
+    "f_Gamma":   "f_Gamma",
+    "alpha":     "NOT_FITTED — SHMR slope in paper; approximated by f_Gamma in code",
+    "logEta":    "NOT_FITTED — satellite concentration ratio log10(eta); affects 1-halo profile; not in Lange25HODModel"
+  },
+  "bwpd_data_files": {
+    "wp":     "data/lange2025_desi_dr1/LRG1/wp_lrg1_bwpd.csv",
+    "ds_hsc": "data/lange2025_desi_dr1/LRG1/ds_hsc_lrg1_bwpd.csv",
+    "format": "bwpd — col1: rp [Mpc/h], col2: rp×stat [paper units], col3: upper bound; err=col3-col2"
   },
   "status": "DIGITIZED_FROM_FIGURE",
   "data_repository": "https://zenodo.org/records/17831718",
-  "digitization_note": "Color-based extraction from downloaded PNG (orange markers, RGB 240/160/0). Axis: log-x linear-y; y-axis shows rp*wp [h^-2 Mpc^2] and R*DeltaSigma [10^6 M_sun/pc]. Error bars from extent of colored pixels per bin. Script: data/lange2025_desi_dr1/digitize_figures.py. Accuracy ~5-10% (limited by pixel resolution ~0.5-1 data unit per pixel).",
-  "digitization_source": "data/lange2025_desi_dr1/raw_figures/fig3.png (fig3), raw_figures/fig4.png (fig4)"
+  "digitization_note": "by hand using the webplotdigitizer app",
+  "digitization_source": "data/lange2025_desi_dr1/raw_figures/fig3.png (wp, DES ESD), raw_figures/fig4.png (HSC ESD)",
+  "rp_min_analysis_hMpc": 0.4,
+  "esd_min_analysis_hMpc": 2.5,
+  "rp_bins": [ 0.1       ,  0.15848932,  0.25118864,  0.39810717,  0.63095734, 1.0  ,  1.58489319,  2.51188643,  3.98107171,  6.30957344, 10.0        , 15.84893192, 25.11886432, 39.81071706, 63.09573445],
+  "esd_bins": [ 0.1       ,  0.15848932,  0.25118864,  0.39810717,  0.63095734, 1.0 ,  1.58489319,  2.51188643,  3.98107171,  6.30957344,10.0        , 15.84893192, 25.11886432, 39.81071706],
+  "reading_function": {"wp": "bwpd", "esd": "bwpd"}
 }

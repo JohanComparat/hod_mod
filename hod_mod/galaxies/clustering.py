@@ -819,17 +819,43 @@ class FullHaloModelPrediction:
         # n_gal and b_eff from cached dndm + bias, no CAMB call needed
         nt_np = nc_np + ns_np
         n_gal = float(np.trapezoid(dndm_np * nt_np, m_np))
-        b_eff = float(np.trapezoid(dndm_np * nt_np * bias_np, m_np) / n_gal)
 
-        # Off-centering: N_c_eff(k) = N_c × [(1 - f_off) + f_off × exp(-k² σ_off²/2)]
-        # Johnston+2007 arXiv:0709.4193; More+2015 arXiv:1211.6211 §3.3
-        f_off     = float(hod_params.get("f_off",     0.0))
-        sigma_off = float(hod_params.get("sigma_off", 0.0))
-        if f_off > 0.0 and sigma_off > 0.0:
-            W_off  = np.exp(-k_np**2 * sigma_off**2 / 2.0)          # (Nk,)
-            nc_eff = nc_np[None, :] * ((1.0 - f_off) + f_off * W_off[:, None])  # (Nk, NM)
+        # Assembly bias correction (Hearin+2016 decorated HOD kernel):
+        # A_cen/A_sat modify b_eff via (b-1)/b kernel matching Lange25HODModel._integrate().
+        # Without this fix, A_cen=0.5 → b_eff shift is silently ignored in 2h term.
+        A_cen_pk = float(hod_params.get("A_cen", 0.0))
+        A_sat_pk = float(hod_params.get("A_sat", 0.0))
+        if A_cen_pk != 0.0 or A_sat_pk != 0.0:
+            gamma_pk = (bias_np - 1.0) / np.where(bias_np > 0.5, bias_np, 0.5)
+            b_nc_pk  = bias_np * (1.0 + A_cen_pk * gamma_pk)
+            b_ns_pk  = bias_np * (1.0 + A_sat_pk * gamma_pk)
+            b_eff = float(
+                np.trapezoid(dndm_np * (nc_np * b_nc_pk + ns_np * b_ns_pk), m_np) / n_gal
+            )
         else:
-            nc_eff = nc_np[None, :]                                  # (1, NM) — no change
+            b_eff = float(np.trapezoid(dndm_np * nt_np * bias_np, m_np) / n_gal)
+
+        # Off-centering: H_c(k,M) = N_c × [(1-p_off) + p_off × exp(-k² σ_off²/2)]
+        # Two conventions supported:
+        #   R_off  (dimensionless): width = R_off × r_s(M)  — More+2015 Eq. 9, mass-dependent
+        #   sigma_off (Mpc/h):     width = sigma_off (fixed) — Johnston+2007, legacy
+        p_off     = float(hod_params.get("p_off", hod_params.get("f_off", 0.0)))
+        R_off     = float(hod_params.get("R_off",     0.0))   # dimensionless
+        sigma_off = float(hod_params.get("sigma_off", 0.0))   # fixed Mpc/h (legacy)
+
+        if p_off > 0.0 and R_off > 0.0:
+            # More+2015 Eq. 9: mass-dependent width R_off × r_s(M)
+            r_s_m = sc["r_delta"] / sc["c_np"]                      # (NM,)
+            W_off = np.exp(
+                -k_np[:, None]**2 * (R_off * r_s_m[None, :])**2 / 2.0
+            )                                                         # (Nk, NM)
+            nc_eff = nc_np[None, :] * ((1.0 - p_off) + p_off * W_off)  # (Nk, NM)
+        elif p_off > 0.0 and sigma_off > 0.0:
+            # Legacy fixed-width (Johnston+2007)
+            W_off  = np.exp(-k_np**2 * sigma_off**2 / 2.0)          # (Nk,)
+            nc_eff = nc_np[None, :] * ((1.0 - p_off) + p_off * W_off[:, None])  # (Nk, NM)
+        else:
+            nc_eff = nc_np[None, :]                                  # (1, NM) — no off-centering
 
         # 1-halo galaxy-galaxy (More+2015 arXiv:1211.6211 Eq. 9, Poisson satellites)
         # uk_sat: satellite spatial FT (may differ from DM profile via Extensions A/B/C)
