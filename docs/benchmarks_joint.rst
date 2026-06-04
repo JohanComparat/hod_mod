@@ -56,22 +56,22 @@ Summary table
      - z\ :sub:`eff`
      - Observables
      - Status
-   * - :doc:`Leauthaud12HODModel — Leauthaud+2012 <benchmark_leauthaud2012>`
+   * - Leauthaud12HODModel — Leauthaud+2012
      - COSMOS PHOTO_z2
      - 0.66
      - :math:`w_p` + :math:`\Delta\Sigma`
      - Needs data (Figure 6 digitization; no tabulated wp)
-   * - :doc:`VanUitert16CSMFModel — van Uitert+2016 <benchmark_vanutert2016>`
+   * - VanUitert16CSMFModel — van Uitert+2016
      - GAMA+KiDS
      - 0.25
      - :math:`\Delta\Sigma` only
      - wp not measured in this paper — DS-only benchmark available
-   * - :doc:`ZuMandelbaum15HODModel — Zu & Mandelbaum+2015 <benchmark_zumandelbaum2015>`
+   * - ZuMandelbaum15HODModel — Zu & Mandelbaum+2015
      - SDSS DR7
      - 0.07
      - :math:`w_p` + :math:`\Delta\Sigma`
      - Needs data (Figure 6 digitization)
-   * - :doc:`Zacharegkas25HODModel — Zacharegkas+2025 <benchmark_zacharegkas2025>`
+   * - Zacharegkas25HODModel — Zacharegkas+2025
      - DES Y3
      - 0.30
      - :math:`w_p` + :math:`\Delta\Sigma`

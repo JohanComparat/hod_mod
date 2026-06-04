@@ -42,22 +42,22 @@ Summary table
      - z\ :sub:`eff`
      - Observable
      - Status
-   * - :doc:`Leauthaud12HODModel — Leauthaud+2012 <benchmark_leauthaud2012>`
+   * - Leauthaud12HODModel — Leauthaud+2012
      - COSMOS
      - 0.66
      - :math:`\Delta\Sigma`
      - Needs data transcription (Figure 6 digitization)
-   * - :doc:`VanUitert16CSMFModel — van Uitert+2016 <benchmark_vanutert2016>`
+   * - VanUitert16CSMFModel — van Uitert+2016
      - GAMA+KiDS
      - 0.25
      - :math:`\Delta\Sigma`
      - Data digitized from Figure 2 (preliminary, ~3% precision)
-   * - :doc:`ZuMandelbaum15HODModel — Zu & Mandelbaum+2015 <benchmark_zumandelbaum2015>`
+   * - ZuMandelbaum15HODModel — Zu & Mandelbaum+2015
      - SDSS DR7
      - 0.07
      - :math:`\Delta\Sigma`
      - Needs data transcription (Figure 6 digitization)
-   * - :doc:`Zacharegkas25HODModel — Zacharegkas+2025 <benchmark_zacharegkas2025>`
+   * - Zacharegkas25HODModel — Zacharegkas+2025
      - DES Y3
      - 0.30
      - :math:`\Delta\Sigma`

@@ -41,6 +41,23 @@ galaxy clustering and weak gravitational lensing observables using models of the
    halos
    data_io
 
+.. toctree::
+   :hidden:
+
+   benchmarks_deltasigma
+   benchmarks_joint
+   benchmark_guo2018
+   benchmark_guo2019
+   benchmark_kravtsov2004
+   benchmark_leauthaud2012
+   benchmark_vanutert2016
+   benchmark_zheng2007
+   benchmark_zumandelbaum2015
+   benchmark_zacharegkas2025
+   bgs_ls10_wp_survey
+   bgs_m10_nl_allmodels
+   bgs_m10_nonlinear_models
+
 Indices and tables
 ==================
 

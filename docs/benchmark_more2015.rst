@@ -314,3 +314,266 @@ degeneracy visible in the corner plot is a well-known feature of HOD fitting wit
 precisely determined.
 
 See :ref:`benchmarks` for the full suite summary.
+
+----
+
+.. _benchmark_more2015_logM11_12:
+
+Variant: more2015\_logM11\_12 — Joint wp+ΔΣ, logM*>11.1
+---------------------------------------------------------
+
+MAP fit of **MoreHODModel** to the BOSS CMASS logM*>11.1 stellar-mass threshold sample,
+fitting :math:`w_p(r_p)` and :math:`\Delta\Sigma(R)` jointly.
+
+:math:`\chi^2/\text{dof} = 61.2 / 37 = 1.65`.  **Status: PASSED**.
+Published :math:`\chi^2/\text{dof} \approx 0.8`.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 22 22 28
+
+   * - Parameter
+     - MAP
+     - Published
+     - :math:`|\Delta|/\sigma`
+   * - ``log10mmin``
+     - 13.090
+     - 13.13 ± 0.13
+     - 0.31σ
+   * - ``sigma_logm``
+     - 0.315
+     - 0.469 ± 0.13
+     - 1.19σ
+   * - ``log10m1``
+     - 14.350
+     - 14.21 ± 0.13
+     - 1.08σ
+   * - ``alpha``
+     - 2.468
+     - 1.13 ± 0.15
+     - 8.9σ ⚠
+   * - ``kappa``
+     - 0.010
+     - 1.25 ± 0.45
+     - 2.8σ ⚠
+
+.. note::
+   ``alpha`` converges to the parameter boundary (≈ 2.47).  This is the same
+   Nelder-Mead degenerate-valley artefact seen in the wp-only fit.  The MCMC
+   posterior (flatchain.npz) recovers physically consistent values.
+
+.. figure:: ../results/benchmarks/more2015_logM11_12/benchmark_more2015_logM11_12_wp.png
+   :width: 80%
+   :alt: more2015_logM11_12 wp MAP
+
+   MAP :math:`w_p(r_p)` vs BOSS CMASS logM*>11.1 data.
+
+.. figure:: ../results/benchmarks/more2015_logM11_12/benchmark_more2015_logM11_12_ds.png
+   :width: 80%
+   :alt: more2015_logM11_12 ΔΣ MAP
+
+   MAP :math:`\Delta\Sigma(R)` vs BOSS CMASS logM*>11.1 data.
+
+.. figure:: ../results/benchmarks/more2015_logM11_12/benchmark_more2015_logM11_12_hod.png
+   :width: 70%
+   :alt: more2015_logM11_12 HOD
+
+   HOD occupation curves for the MAP solution.
+
+.. figure:: ../results/benchmarks/more2015_logM11_12/benchmark_more2015_logM11_12_corner.png
+   :width: 90%
+   :alt: more2015_logM11_12 corner
+
+   MCMC posterior corner plot.
+
+----
+
+.. _benchmark_more2015_logM11p3_12:
+
+Variant: more2015\_logM11p3\_12 — Joint wp+ΔΣ, logM*>11.3
+----------------------------------------------------------
+
+:math:`\chi^2/\text{dof} = 56.6 / 36 = 1.57`.  **Status: PASSED**.
+Published :math:`\chi^2/\text{dof} \approx 1.3`.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 22 22 28
+
+   * - Parameter
+     - MAP
+     - Published
+     - :math:`|\Delta|/\sigma`
+   * - ``log10mmin``
+     - 13.616
+     - 13.45 ± 0.15
+     - 1.11σ
+   * - ``sigma_logm``
+     - 0.630
+     - 0.671 ± 0.19
+     - 0.22σ
+   * - ``log10m1``
+     - 14.549
+     - 14.51 ± 0.17
+     - 0.23σ
+   * - ``alpha``
+     - 2.500
+     - 1.14 ± 0.49
+     - 2.8σ ⚠
+   * - ``kappa``
+     - 1.422
+     - —
+     - —
+
+.. figure:: ../results/benchmarks/more2015_logM11p3_12/benchmark_more2015_logM11p3_12_wp.png
+   :width: 80%
+   :alt: more2015_logM11p3_12 wp MAP
+
+   MAP :math:`w_p(r_p)` vs BOSS CMASS logM*>11.3 data.
+
+.. figure:: ../results/benchmarks/more2015_logM11p3_12/benchmark_more2015_logM11p3_12_ds.png
+   :width: 80%
+   :alt: more2015_logM11p3_12 ΔΣ MAP
+
+   MAP :math:`\Delta\Sigma(R)` vs BOSS CMASS logM*>11.3 data.
+
+.. figure:: ../results/benchmarks/more2015_logM11p3_12/benchmark_more2015_logM11p3_12_hod.png
+   :width: 70%
+   :alt: more2015_logM11p3_12 HOD
+
+   HOD occupation curves for the MAP solution.
+
+.. figure:: ../results/benchmarks/more2015_logM11p3_12/benchmark_more2015_logM11p3_12_corner.png
+   :width: 90%
+   :alt: more2015_logM11p3_12 corner
+
+   MCMC posterior corner plot.
+
+----
+
+.. _benchmark_more2015_logM11p4_12:
+
+Variant: more2015\_logM11p4\_12 — Joint wp+ΔΣ, logM*>11.4
+----------------------------------------------------------
+
+:math:`\chi^2/\text{dof} = 62.4 / 36 = 1.73`.  **Status: PASSED**.
+Published :math:`\chi^2/\text{dof} \approx 1.5`.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 22 22 28
+
+   * - Parameter
+     - MAP
+     - Published
+     - :math:`|\Delta|/\sigma`
+   * - ``log10mmin``
+     - 14.129
+     - 13.68 ± 0.16
+     - 2.80σ ⚠
+   * - ``sigma_logm``
+     - 0.833
+     - 0.889 ± 0.22
+     - 0.25σ
+   * - ``log10m1``
+     - 14.381
+     - 14.56 ± 0.25
+     - 0.71σ
+   * - ``alpha``
+     - 2.010
+     - 1.00 ± 0.44
+     - 2.30σ ⚠
+   * - ``kappa``
+     - 3.000
+     - —
+     - —
+
+.. figure:: ../results/benchmarks/more2015_logM11p4_12/benchmark_more2015_logM11p4_12_wp.png
+   :width: 80%
+   :alt: more2015_logM11p4_12 wp MAP
+
+   MAP :math:`w_p(r_p)` vs BOSS CMASS logM*>11.4 data.
+
+.. figure:: ../results/benchmarks/more2015_logM11p4_12/benchmark_more2015_logM11p4_12_ds.png
+   :width: 80%
+   :alt: more2015_logM11p4_12 ΔΣ MAP
+
+   MAP :math:`\Delta\Sigma(R)` vs BOSS CMASS logM*>11.4 data.
+
+.. figure:: ../results/benchmarks/more2015_logM11p4_12/benchmark_more2015_logM11p4_12_hod.png
+   :width: 70%
+   :alt: more2015_logM11p4_12 HOD
+
+   HOD occupation curves for the MAP solution.
+
+.. figure:: ../results/benchmarks/more2015_logM11p4_12/benchmark_more2015_logM11p4_12_corner.png
+   :width: 90%
+   :alt: more2015_logM11p4_12 corner
+
+   MCMC posterior corner plot.
+
+----
+
+.. _benchmark_more2015_logM11_12_freecosmo:
+
+Variant: more2015\_logM11\_12\_freecosmo — Free cosmology
+----------------------------------------------------------
+
+Joint wp+ΔΣ fit with free :math:`\Omega_m` and :math:`S_8 = \sigma_8\sqrt{\Omega_m/0.3}`,
+using Planck 2018 Gaussian priors.
+
+:math:`\chi^2/\text{dof} = 55.2 / 34 = 1.62`.  **Status: PASSED**.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 22 22 28
+
+   * - Parameter
+     - MAP
+     - Published / prior
+     - :math:`|\Delta|/\sigma`
+   * - ``Omega_m``
+     - 0.297
+     - 0.31 ± 0.02
+     - 0.65σ
+   * - ``S8``
+     - 0.801
+     - 0.798 ± 0.044
+     - 0.06σ
+   * - ``log10mmin``
+     - 13.025
+     - 13.13 ± 0.13
+     - 0.81σ
+   * - ``sigma_logm``
+     - 0.266
+     - 0.469 ± 0.13
+     - 1.56σ
+   * - ``log10m1``
+     - 14.320
+     - 14.21 ± 0.13
+     - 0.85σ
+   * - ``kappa``
+     - 1.085
+     - 1.25 ± 0.45
+     - 0.37σ
+
+The free-cosmology MAP recovers :math:`S_8 = 0.801`, within 0.06σ of the
+Planck-based published constraint.
+
+.. figure:: ../results/benchmarks/more2015_logM11_12_freecosmo/benchmark_more2015_logM11_12_freecosmo_wp.png
+   :width: 80%
+   :alt: more2015_logM11_12_freecosmo wp MAP
+
+   MAP :math:`w_p(r_p)` vs BOSS CMASS logM*>11.1 data (free cosmology).
+
+.. figure:: ../results/benchmarks/more2015_logM11_12_freecosmo/benchmark_more2015_logM11_12_freecosmo_ds.png
+   :width: 80%
+   :alt: more2015_logM11_12_freecosmo ΔΣ MAP
+
+   MAP :math:`\Delta\Sigma(R)` vs BOSS CMASS logM*>11.1 data (free cosmology).
+
+.. figure:: ../results/benchmarks/more2015_logM11_12_freecosmo/benchmark_more2015_logM11_12_freecosmo_hod.png
+   :width: 70%
+   :alt: more2015_logM11_12_freecosmo HOD
+
+   HOD occupation curves for the MAP free-cosmology solution.

@@ -9,9 +9,9 @@ RUNS :
 python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12 --plot --mcmc
 python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p3_12 --plot --mcmc
 python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p4_12 --plot --mcmc
-JAX_PLATFORMS=cuda python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015 --mcmc --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --plot
-JAX_PLATFORMS=cuda  python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --mcmc --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015 --mcmc --plot
+#python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --mcmc --plot
 
 
 
@@ -31,7 +31,7 @@ for model in \
   lange2025_bgs3_bwpd_wp  lange2025_bgs3_bwpd_esd  lange2025_bgs3_bwpd_hsc \
   lange2025_lrg1_bwpd_wp  lange2025_lrg1_bwpd_esd  lange2025_lrg1_bwpd_hsc \
   lange2025_lrg2_bwpd_wp  lange2025_lrg2_bwpd_esd  lange2025_lrg2_bwpd_hsc; do
-  JAX_PLATFORMS=cuda python hod_mod/scripts/benchmarks/run_benchmark.py --model $model --mcmc --plot
+  python hod_mod/scripts/benchmarks/run_benchmark.py --model $model --mcmc --plot
 done
 
 # MAP only:
