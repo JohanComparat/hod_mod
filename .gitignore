@@ -39,7 +39,7 @@ docs/_build/
 .vscode/
 
 # Generated results (figures, chains, fits)
-results/
+# results/
 
 # Scratch / refactor files
 _refactor_*.py
