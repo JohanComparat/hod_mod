@@ -598,6 +598,7 @@ class FullHaloModelPrediction:
         baryon_fraction=None,
         pk_nl=None,
         nl_2halo: bool = False,
+        bnl_model=None,
     ):
         if profile not in ("nfw", "einasto"):
             raise ValueError(f"profile must be 'nfw' or 'einasto', got {profile!r}")
@@ -610,6 +611,7 @@ class FullHaloModelPrediction:
         self._baryon_fraction = baryon_fraction
         self._pk_nl = pk_nl
         self._nl_2halo = nl_2halo and (pk_nl is not None)
+        self._bnl_model = bnl_model
         # Cache for HOD-parameter-independent quantities (pk_lin, uk, dndm, c).
         # Keyed by _cosmo_cache_key() so re-evaluated only when cosmology changes.
         # Rounded keys prevent per-step cache misses during free-cosmo MAP fitting.
@@ -764,18 +766,31 @@ class FullHaloModelPrediction:
                 pk_nl_np = np.asarray(
                     self._pk_nl.pk_nonlinear(k_np, float(z), theta_cosmo), dtype=float
                 )
+
+            # Peak heights for BNL interpolation: nu = delta_c / sigma(M, z)
+            with jax.disable_jit():
+                sig_arr = self._hod._hmf.sigma(m_grid, float(z), theta_cosmo)
+            nu_np = 1.686 / np.asarray(sig_arr, dtype=float)
+
+            # Pre-compute the (Nk, NM, NM) beta^NL matrix once per cosmology
+            bnl_matrix = None
+            if self._bnl_model is not None:
+                bnl_matrix = self._bnl_model.beta_nl_matrix(k_np, nu_np)
+
             self._static_cache[cosmo_key] = {
-                "m_np":     m_np,
-                "dndm_np":  np.asarray(dndm_arr, dtype=float),
-                "bias_np":  np.asarray(bias_arr, dtype=float),
-                "rho_m":    rho_m,
-                "uk":       uk,
-                "pk_lin":   pk_lin_np,
-                "pk_nl":    pk_nl_np,
-                "k_np":     k_np,
+                "m_np":      m_np,
+                "dndm_np":   np.asarray(dndm_arr, dtype=float),
+                "bias_np":   np.asarray(bias_arr, dtype=float),
+                "rho_m":     rho_m,
+                "uk":        uk,
+                "pk_lin":    pk_lin_np,
+                "pk_nl":     pk_nl_np,
+                "k_np":      k_np,
+                "nu_np":     nu_np,
+                "bnl_matrix": bnl_matrix,
                 # store concentration and halo radius for gas profile computation
-                "c_np":     c_np,
-                "r_delta":  r_delta,
+                "c_np":      c_np,
+                "r_delta":   r_delta,
             }
 
         sc = self._static_cache[cosmo_key]
@@ -870,6 +885,8 @@ class FullHaloModelPrediction:
 
         log_pgm_cdm = None
         log_pgm_b   = None
+        P_gm_cdm    = None
+        P_gm_b      = None
 
         pk_2h = sc["pk_nl"] if self._nl_2halo else pk_lin
 
@@ -917,11 +934,8 @@ class FullHaloModelPrediction:
             P_gm_b_1h   = np.trapezoid(integrand_pgm_b,   m_np, axis=1) / n_gal
             P_gm_1h     = P_gm_cdm_1h + P_gm_b_1h
 
-            P_gm_cdm = P_gm_cdm_1h + b_eff * pk_2h
+            P_gm_cdm = P_gm_cdm_1h + b_eff * pk_2h   # updated below if BNL active
             P_gm_b   = P_gm_b_1h
-
-            log_pgm_cdm = jnp.log(jnp.maximum(jnp.asarray(P_gm_cdm), 1e-20))
-            log_pgm_b   = jnp.log(jnp.maximum(jnp.asarray(P_gm_b),   1e-20))
         else:
             # Standard 1-halo galaxy-matter without baryon split
             integrand_pgm = dndm_np[None, :] * (
@@ -931,6 +945,33 @@ class FullHaloModelPrediction:
 
         P_gg_2h = b_eff**2 * pk_2h
         P_gm_2h = b_eff * pk_2h
+
+        # Beyond-linear bias correction (Mead & Verde 2021, arXiv:2011.08858)
+        if self._bnl_model is not None:
+            bnl_matrix = sc["bnl_matrix"]   # (Nk, NM, NM), pre-computed per cosmology
+            # Trapezoid integration weights for the mass grid
+            _dm = np.zeros_like(m_np)
+            _dm[:-1] += np.diff(m_np) / 2.0
+            _dm[1:]  += np.diff(m_np) / 2.0
+            # Galaxy-side weight: dndm * N_tot * b / n_gal * dm
+            w_g = dndm_np * nt_np * bias_np / n_gal * _dm        # (NM,)
+            # Matter-side weight: dndm * M * b / rho_m * dm
+            w_m = dndm_np * m_np * bias_np / rho_m * _dm         # (NM,)
+            delta_gg = self._bnl_model.correction_2h_gg(
+                k_np, sc["nu_np"], w_g, uk, beta_matrix=bnl_matrix
+            )
+            delta_gm = self._bnl_model.correction_2h_gm(
+                k_np, sc["nu_np"], w_g, w_m, uk, uk, beta_matrix=bnl_matrix
+            )
+            P_gg_2h = P_gg_2h + pk_2h * delta_gg
+            P_gm_2h = P_gm_2h + pk_2h * delta_gm
+            if P_gm_cdm is not None:
+                P_gm_cdm = P_gm_cdm + pk_2h * delta_gm
+
+        if P_gm_cdm is not None:
+            log_pgm_cdm = jnp.log(jnp.maximum(jnp.asarray(P_gm_cdm), 1e-20))
+            log_pgm_b   = jnp.log(jnp.maximum(jnp.asarray(P_gm_b),   1e-20))
+
         P_gg = P_gg_1h + P_gg_2h
         P_gm = P_gm_1h + P_gm_2h
 

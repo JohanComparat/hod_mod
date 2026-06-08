@@ -3,6 +3,7 @@ from .nonlinear import NonLinearPowerSpectrum
 from .halo_mass_function import HaloMassFunction, make_hmf
 from .halo_profiles import HaloProfile, nfw_uk, einasto_rho
 from .halo_model import HaloModelPowerSpectrum
+from .beyond_linear_bias import BeyondLinearBiasMead21
 from .distances import (
     hubble_e,
     comoving_distance,
@@ -36,4 +37,5 @@ __all__ = [
     "lookback_time",
     "age_of_universe",
     "distance_modulus",
+    "BeyondLinearBiasMead21",
 ]
