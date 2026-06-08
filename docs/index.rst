@@ -24,15 +24,6 @@ galaxy clustering and weak gravitational lensing observables using models of the
 
 .. toctree::
    :maxdepth: 2
-   :caption: Sensitivity Studies
-
-   autodiff_sensitivity
-   autodiff_hod_sensitivity
-   autodiff_ds_sensitivity
-   autodiff_ds_hod_sensitivity
-
-.. toctree::
-   :maxdepth: 2
    :caption: Module Reference
 
    cosmology

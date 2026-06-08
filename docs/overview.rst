@@ -161,7 +161,6 @@ Repository structure
 
     hod_mod/scripts/
     ├── cosmology/           demo scripts (P(k), HMF, profiles)
-    ├── sensitivity/         autodiff sensitivity studies (w_p and ΔΣ)
     ├── benchmarks/          literature benchmark runner
     └── fitting/
         ├── bgs_ls10/        BGS/LS10 fitting campaign

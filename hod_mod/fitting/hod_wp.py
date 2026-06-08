@@ -142,6 +142,7 @@ class FitConfig:
     ng_obs:             float       = 3.0e-4
     ng_frac_err:        float       = 0.20
     ds_format:          str         = "csv"   # "csv" or "bwpd"
+    fit_ng:             bool        = False   # include chi2_ng in likelihood
     # FITS JK fields (None = no FITS loading)
     jk_dir:             str | None  = None
     jk_pattern:         str         = "NSIDE_04"
@@ -260,6 +261,7 @@ def load_config(path: str) -> FitConfig:
 
     # DS-file: from ``joint:`` section (joint fit) or ``ds:`` section (DS-only)
     ds_file = None
+    fit_ng  = False  # default: never constrain n_g
     if joint_cfg:
         ds_file_rel = joint_cfg.get("ds_file", "")
         ds_file = os.path.join(repo_root, ds_file_rel) if ds_file_rel else None
@@ -268,6 +270,7 @@ def load_config(path: str) -> FitConfig:
         ng_obs      = float(joint_cfg.get("ng_obs", 3.0e-4))
         ng_frac_err = float(joint_cfg.get("ng_frac_err", 0.20))
         ds_fmt      = joint_cfg.get("ds_format", "csv")
+        fit_ng      = bool(joint_cfg.get("fit_ng", False))
     elif ds_only_cfg:
         ds_file_rel = ds_only_cfg.get("file", "")
         ds_file = os.path.join(repo_root, ds_file_rel) if ds_file_rel else None
@@ -276,6 +279,7 @@ def load_config(path: str) -> FitConfig:
         ng_obs      = float(ds_only_cfg.get("ng_obs", 3.0e-4))
         ng_frac_err = float(ds_only_cfg.get("ng_frac_err", 0.20))
         ds_fmt      = ds_only_cfg.get("ds_format", "csv")
+        fit_ng      = bool(ds_only_cfg.get("fit_ng", False))  # ESD-only default: no n_g
     else:
         ds_rp_min   = 0.1
         ds_rp_max   = 20.0
@@ -310,6 +314,7 @@ def load_config(path: str) -> FitConfig:
         ng_obs             = ng_obs,
         ng_frac_err        = ng_frac_err,
         ds_format          = ds_fmt,
+        fit_ng             = fit_ng,
         jk_dir             = data_file if fits_cfg else None,
         jk_pattern         = fits_cfg.get("jk_pattern", "NSIDE_04"),
         h_hubble           = float(fits_cfg.get("h", 0.6736)),
@@ -1025,15 +1030,18 @@ class JointFitter(WpFitter):
                 self.predictor.delta_sigma(jnp.array(self.R_arr), self.config.z,
                                            theta_cosmo, hod_params)
             )
-            ng_pred = self.predictor.n_gal(self.config.z, theta_cosmo, hod_params)
+            if self.config.fit_ng:
+                ng_pred = self.predictor.n_gal(self.config.z, theta_cosmo, hod_params)
         except Exception:
             return -np.inf
         chi2_wp = float((wp_pred - self.wp_obs) @ self.icov_wp @ (wp_pred - self.wp_obs))
         chi2_ds = float((ds_pred - self.ds_obs) @ self.icov_ds @ (ds_pred - self.ds_obs))
-        chi2_ng = float(
-            ((ng_pred - self.config.ng_obs) / (self.config.ng_frac_err * self.config.ng_obs)) ** 2
-        )
-        return log_pi - 0.5 * (chi2_wp + chi2_ds + chi2_ng)
+        if self.config.fit_ng:
+            chi2_ng = float(
+                ((ng_pred - self.config.ng_obs) / (self.config.ng_frac_err * self.config.ng_obs)) ** 2
+            )
+            return log_pi - 0.5 * (chi2_wp + chi2_ds + chi2_ng)
+        return log_pi - 0.5 * (chi2_wp + chi2_ds)
 
     def map_fit(self) -> dict:
         """Maximum a-posteriori fit for the joint wp+ΔΣ+n_g likelihood.
@@ -1064,17 +1072,21 @@ class JointFitter(WpFitter):
                 self.config.z, theta_cosmo, best_params))
             ds_pred = np.asarray(self.predictor.delta_sigma(
                 jnp.array(self.R_arr), self.config.z, theta_cosmo, best_params))
-            ng_pred = self.predictor.n_gal(self.config.z, theta_cosmo, best_params)
             chi2_wp = float((wp_pred - self.wp_obs) @ self.icov_wp @ (wp_pred - self.wp_obs))
             chi2_ds = float((ds_pred - self.ds_obs) @ self.icov_ds @ (ds_pred - self.ds_obs))
-            chi2_ng = float(
-                ((ng_pred - self.config.ng_obs) / (self.config.ng_frac_err * self.config.ng_obs)) ** 2
-            )
-            chi2_data = chi2_wp + chi2_ds + chi2_ng
-            n_data    = len(self.rp_arr) + len(self.R_arr) + 1
+            n_data  = len(self.rp_arr) + len(self.R_arr)
+            if self.config.fit_ng:
+                ng_pred   = self.predictor.n_gal(self.config.z, theta_cosmo, best_params)
+                chi2_ng   = float(
+                    ((ng_pred - self.config.ng_obs) / (self.config.ng_frac_err * self.config.ng_obs)) ** 2
+                )
+                chi2_data = chi2_wp + chi2_ds + chi2_ng
+                n_data   += 1
+            else:
+                chi2_data = chi2_wp + chi2_ds
         except Exception:
             chi2_data = float("nan")
-            n_data    = len(self.rp_arr) + len(self.R_arr) + 1
+            n_data    = len(self.rp_arr) + len(self.R_arr)
         return {
             "theta":   best_theta,
             "params":  best_params,
@@ -1155,14 +1167,17 @@ class DeltaSigmaFitter(WpFitter):
                 self.predictor.delta_sigma(jnp.array(self.R_arr), self.config.z,
                                            theta_cosmo, hod_params)
             )
-            ng_pred = self.predictor.n_gal(self.config.z, theta_cosmo, hod_params)
+            if self.config.fit_ng:
+                ng_pred = self.predictor.n_gal(self.config.z, theta_cosmo, hod_params)
         except Exception:
             return -np.inf
         chi2_ds = float((ds_pred - self.ds_obs) @ self.icov_ds @ (ds_pred - self.ds_obs))
-        chi2_ng = float(
-            ((ng_pred - self.config.ng_obs) / (self.config.ng_frac_err * self.config.ng_obs)) ** 2
-        )
-        return log_pi - 0.5 * (chi2_ds + chi2_ng)
+        if self.config.fit_ng:
+            chi2_ng = float(
+                ((ng_pred - self.config.ng_obs) / (self.config.ng_frac_err * self.config.ng_obs)) ** 2
+            )
+            return log_pi - 0.5 * (chi2_ds + chi2_ng)
+        return log_pi - 0.5 * chi2_ds
 
     def map_fit(self) -> dict:
         """Maximum a-posteriori fit for the ΔΣ-only likelihood.

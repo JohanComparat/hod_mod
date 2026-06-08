@@ -259,7 +259,7 @@ cosmology.  Two likely causes:
    far from training nodes at this low redshift.
 
 The Aletheia path remains valid for **autodiff through cosmological parameters**
-(its primary use case, see :doc:`autodiff_sensitivity`) but should not be used
+but should not be used
 as a drop-in replacement for HMcode in :math:`w_p` fitting until the
 extrapolation behaviour is resolved.
 

@@ -14,6 +14,13 @@ python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015 --mcmc --plo
 python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --mcmc --plot
 
 
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12 --plot-only
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p3_12 --plot-only
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p4_12 --plot-only
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015 --plot-only
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --plot-only
+
+
 
 #LANge 2025
 cd /home/comparat/software/hod_mod
@@ -100,5 +107,3 @@ python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg1_bwpd_h
 # LRG2 — z=0.705  (f_Gamma free, init=0.8)
 python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg2_bwpd_wp  --plot
 python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg2_bwpd_hsc --plot
-
-

@@ -1,4 +1,4 @@
-"""Best-fit MAP parameter loader for sensitivity and showcase scripts.
+"""Best-fit MAP parameter loader for showcase and fitting scripts.
 
 Tries to load MAP results from ``results/bgs_multiprobe/``.  Falls back to
 each model's ``default_params()`` when no fitted result is on disk.
