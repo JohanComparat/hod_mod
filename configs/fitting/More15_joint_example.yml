@@ -35,7 +35,7 @@ cosmology:
 
 model:
   hod_model:   MoreHODModel
-  hmf_backend: tinker08
+  hmf_backend: csst
   z:           0.53
   pi_max:      100.0
 

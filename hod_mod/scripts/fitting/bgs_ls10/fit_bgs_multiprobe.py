@@ -86,12 +86,14 @@ import argparse
 import glob
 import json
 import os
+import time
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 import numpy as np
 import jax.numpy as jnp
 
+from hod_mod.cosmology.beyond_linear_bias import BeyondLinearBiasMead21
 from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
 from hod_mod.cosmology.halo_mass_function import make_hmf
 from hod_mod.cosmology.halo_profiles import HaloProfile
@@ -115,10 +117,7 @@ from hod_mod.data_io.sum_stat_reader import SumStatReader
 # Constants
 # ---------------------------------------------------------------------------
 
-SUM_STAT_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..",
-                 "sum_stat", "data")
-)
+SUM_STAT_DIR = "/home/comparat/software/sum_stat/data"
 
 # Cosmological parameters that are varied with a Planck Gaussian prior.
 # Omega_b is held fixed; Omega_cdm is derived as Omega_m - Omega_b.
@@ -562,6 +561,9 @@ class MultiProbeFitter:
         use_free_cosmo: bool = False,
         use_esd_calib: bool = False,
         use_sat_ext: bool = False,
+        use_stellar_mass: bool = False,
+        use_incompleteness: bool = False,
+        use_bnl: bool = True,
         hod_model: str = "more2015",
         profile: str = "nfw",
         einasto_alpha: float = 0.18,
@@ -586,6 +588,9 @@ class MultiProbeFitter:
         self.use_free_cosmo      = use_free_cosmo
         self.use_esd_calib       = use_esd_calib
         self.use_sat_ext         = use_sat_ext
+        self.use_stellar_mass    = use_stellar_mass
+        self.use_incompleteness  = use_incompleteness
+        self.use_bnl             = use_bnl
         self.profile             = profile
         self.einasto_alpha       = einasto_alpha
         self.n_walkers           = n_walkers
@@ -696,10 +701,12 @@ class MultiProbeFitter:
         # Jackknife subsamples for the full 90-element vector (for diagnostic overplot)
         if "subsamples" in jt:
             subs = jt["subsamples"]          # (n_jk, 90) in h-units
+            self.n_jk = int(subs.shape[0])
             self.wp_subs_full  = subs[:, :n_full]            # (n_jk, 30)
             self.ds_hsc_subs_full = subs[:, n_full:2*n_full] # (n_jk, 30)
             self.ds_des_subs_full = subs[:, 2*n_full:]        # (n_jk, 30)
         else:
+            self.n_jk = None
             self.wp_subs_full = self.ds_hsc_subs_full = self.ds_des_subs_full = None
 
         # Fit-range views for quick access (populated if probe selected)
@@ -846,6 +853,23 @@ class MultiProbeFitter:
             for k in ["b_sat_conc", "f_cut", "gamma_inner"]:
                 self.param_prior_types[k] = "uniform"
 
+        # Incompleteness parameters (More+2015 Eq. 3): free alpha_inc and log10m_inc
+        # when the sample may not be 100% complete above the stellar mass threshold.
+        if self.use_incompleteness:
+            self.free_params += ["alpha_inc", "log10m_inc"]
+            self.param_init.update({"alpha_inc": 0.44, "log10m_inc": 13.57})
+            self.param_bounds.update({"alpha_inc": (-2.0, 2.0), "log10m_inc": (10.0, 14.0)})
+            for k in ["alpha_inc", "log10m_inc"]:
+                self.param_prior_types[k] = "uniform"
+
+        # Point-mass stellar contribution to ΔΣ: ΔΣ_*(R) = M_*_cen / (π R²)
+        # log10_M_star_cen is the log10 mean stellar mass of centrals [M_sun/h]
+        if self.use_stellar_mass:
+            self.free_params.append("log10_M_star_cen")
+            self.param_init["log10_M_star_cen"]        = 10.5
+            self.param_bounds["log10_M_star_cen"]      = (8.0, 12.0)
+            self.param_prior_types["log10_M_star_cen"] = "uniform"
+
         # Cosmology: either free (Planck Gaussian priors) or fixed to Planck mean.
         # When use_free_cosmo=True, h, Omega_m, n_s, ln10As are freed with
         # Gaussian priors from Planck 2018 TT,TE,EE+lowE (arXiv:1807.06209)
@@ -877,7 +901,7 @@ class MultiProbeFitter:
 
     def _build_predictor(self):
         self._pk_cached = _CachedPkLinear(self._pk_lin)
-        hmf = make_hmf("tinker08", pk_func=self._pk_cached.pk_linear)
+        hmf = make_hmf("csst")
         cfg = HOD_REGISTRY[self.hod_model]
         if cfg.get("bias_arg", True):
             hod = cfg["class"](hmf, hmf.bias)
@@ -887,9 +911,11 @@ class MultiProbeFitter:
         halo_profile = HaloProfile(self.cosmo_default)
 
         bf = BaryonFractionSigmoid() if self.use_baryon_fraction else None
+        bnl = BeyondLinearBiasMead21() if self.use_bnl else None
         self.predictor = FullHaloModelPrediction(
             self._pk_cached, hod, halo_profile, baryon_fraction=bf,
             profile=self.profile, einasto_alpha=self.einasto_alpha,
+            bnl_model=bnl,
         )
 
         # NLA model uses P_lin (correct per Bridle & King 2007 arXiv:0705.0166 §2;
@@ -922,6 +948,24 @@ class MultiProbeFitter:
 
     # ------------------------------------------------------------------
     # Core log-probability
+
+    def _log_pi(self, theta_vec: np.ndarray) -> float:
+        """Prior log-probability only (no data residuals)."""
+        log_pi = 0.0
+        for name, val in zip(self.free_params, theta_vec):
+            lo, hi = self.param_bounds[name]
+            if not (lo <= val <= hi):
+                return -np.inf
+            ptype = self.param_prior_types.get(name, "uniform")
+            if ptype == "gaussian":
+                log_pi += gaussian_log_prior(
+                    val,
+                    self.param_prior_means[name],
+                    self.param_prior_sigmas[name],
+                    lo,
+                    hi,
+                )
+        return log_pi
 
     def _log_prob(self, theta_vec) -> float:
         log_p = _log_prob_multiprobe(
@@ -1007,12 +1051,14 @@ class MultiProbeFitter:
         """
         from scipy.optimize import minimize
 
+        t0 = time.time()
         result = minimize(
             lambda x: -self._log_prob(x),
             self._x0,
             method="Nelder-Mead",
             options={"maxiter": 20000, "xatol": 1e-4, "fatol": 1e-4, "disp": False},
         )
+        elapsed = round(time.time() - t0, 1)
         best_theta = result.x
         best_params = dict(self._fixed_params)
         for name, val in zip(self.free_params, best_theta):
@@ -1020,13 +1066,23 @@ class MultiProbeFitter:
 
         n_data = len(self.dv_obs)
         n_free = len(self.free_params)
+        chi2_total = float(-2.0 * self._log_prob(best_theta))
+        chi2_data  = chi2_total + 2.0 * float(self._log_pi(best_theta))
+        if self.n_jk is not None:
+            hartlap = (self.n_jk - n_data - 2) / (self.n_jk - 1)
+        else:
+            hartlap = None
         return {
-            "theta":   best_theta,
-            "params":  best_params,
-            "chi2":    float(-2.0 * self._log_prob(best_theta)),
-            "ndof":    n_data - n_free,
-            "success": result.success,
-            "message": result.message,
+            "theta":          best_theta,
+            "params":         best_params,
+            "chi2":           chi2_total,
+            "chi2_data":      chi2_data,
+            "ndof":           n_data - n_free,
+            "n_jk":           self.n_jk,
+            "hartlap_factor": hartlap,
+            "success":        result.success,
+            "message":        result.message,
+            "elapsed":        elapsed,
         }
 
     # ------------------------------------------------------------------
@@ -1200,6 +1256,14 @@ def main():
                              "f_cut (inner suppression [1-exp(-r/r_cut)], Ext B), "
                              "gamma_inner (power-law depletion (r/r_vir)^γ, Ext C). "
                              "All three are freed simultaneously with uniform priors.")
+    parser.add_argument("--use-stellar-mass", action="store_true",
+                        help="Add point-mass stellar contribution to ΔΣ: "
+                             "ΔΣ_*(R) = M_*_cen / (π R²). "
+                             "Adds free parameter log10_M_star_cen with uniform prior (8, 12).")
+    parser.add_argument("--use-incompleteness", action="store_true",
+                        help="Free the More+2015 incompleteness parameters alpha_inc and "
+                             "log10m_inc (fixed to 0 and 11.5 by default in BGS fits). "
+                             "Use when the sample may not be fully complete.")
     parser.add_argument(
         "--hod-model", default="more2015",
         choices=list(HOD_REGISTRY), metavar="NAME",
@@ -1232,11 +1296,16 @@ def main():
     # rp_min encoded as integer milliparsecs/h: 0.30→rp300, 0.10→rp100, 0.05→rp050
     rp_tag  = f"rp{int(round(args.rp_min_wp * 1000)):03d}"
     suffix  = "_".join(filter(None, [
-        args.profile,                                   # always included
-        rp_tag,                                         # always included
-        "fcosmo" if args.free_cosmo     else "",
-        "fcalib" if args.free_esd_calib else "",
-        "sext"   if args.use_sat_ext    else "",
+        args.profile,                                       # always included
+        rp_tag,                                             # always included
+        "ia"      if args.use_ia              else "",
+        "offcen"  if args.use_offcentering    else "",
+        "bfrac"   if args.use_baryon_fraction else "",
+        "stellar" if args.use_stellar_mass    else "",
+        "inc"     if args.use_incompleteness  else "",
+        "fcosmo"  if args.free_cosmo          else "",
+        "fcalib"  if args.free_esd_calib      else "",
+        "sext"    if args.use_sat_ext         else "",
     ]))
     dir_name = f"mstar{mstar_str}_{probe_tag}_{args.hod_model}_{suffix}"
     output_dir = os.path.join(args.output_dir, dir_name)
@@ -1265,6 +1334,8 @@ def main():
         use_free_cosmo       = args.free_cosmo,
         use_esd_calib        = args.free_esd_calib,
         use_sat_ext          = args.use_sat_ext,
+        use_stellar_mass     = args.use_stellar_mass,
+        use_incompleteness   = args.use_incompleteness,
         hod_model            = args.hod_model,
         profile              = args.profile,
         einasto_alpha        = args.einasto_alpha,
@@ -1294,6 +1365,7 @@ def main():
         for name, val in zip(fitter.free_params, result["theta"]):
             print(f"  {name:30s} = {val:.5f}")
         print(f"  chi2/dof = {result['chi2']:.2f} / {result['ndof']}")
+        print(f"  MAP elapsed: {result['elapsed']:.1f} s")
         print(f"  Optimizer: {result['message']}")
 
         out_json = os.path.join(output_dir, "map_result.json")
@@ -1304,6 +1376,7 @@ def main():
                     "params":   result["params"],
                     "chi2":     result["chi2"],
                     "ndof":     result["ndof"],
+                    "elapsed":  result["elapsed"],
                     "success":  result["success"],
                     "message":  result["message"],
                     # --- sample / data ---

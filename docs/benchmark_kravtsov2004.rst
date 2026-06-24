@@ -1,3 +1,5 @@
+:orphan:
+
 .. _benchmark_kravtsov2004:
 
 Benchmark: Kravtsov+2004 — BOSS CMASS

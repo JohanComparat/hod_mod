@@ -1,3 +1,5 @@
+:orphan:
+
 .. _benchmark_vanutert2016:
 
 Benchmark: van Uitert+2016 — GAMA + KiDS

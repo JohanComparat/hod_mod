@@ -264,6 +264,118 @@ class HALOFITSpectrum:
         return jnp.asarray(np.exp(log_pk))
 
 
+class WHMSpectrum:
+    """Non-linear P(k, z) via the Web-Halo Model (WHM, Brieden et al. 2025).
+
+    Requires the WHM-CAMB fork installed in place of (or alongside) standard CAMB::
+
+        git clone https://github.com/SamuelBrieden/WHM
+        pip install -e WHM/WHM-CAMB
+
+    The WHM is parameter-free and combines the halo model with perturbation
+    theory, modelling haloes, filaments, and sheets via physically-motivated
+    window functions.  Achieves ~2 % accuracy up to k = 0.4 h/Mpc⁻¹ across
+    a wide range of cosmologies (arXiv:2508.10902).
+
+    Parameters
+    ----------
+    whm_version : str
+        WHM variant.  Default ``'brieden2023'``.
+        Available choices:
+
+        ``'brieden2023'``          — baseline WHM (recommended)
+        ``'brieden2023_feedback'`` — WHM with baryonic feedback
+        ``'brieden2023_halo'``     — halo term only
+        ``'brieden2023_fila'``     — filament term only
+        ``'brieden2023_sheet'``    — sheet term only
+        ``'brieden2023_halosphere'``, ``'brieden2023_filasphere'``,
+        ``'brieden2023_sheetsphere'`` — spherical-profile variants
+
+    Notes
+    -----
+    Each call runs a full CAMB evaluation (~1–5 s).  Wrap with
+    :class:`CachedPkNonlinear` in MCMC hot loops.
+    Gradients are not available through this class.
+    """
+
+    _VALID_VERSIONS = (
+        "brieden2023",
+        "brieden2023_feedback",
+        "brieden2023_halo",
+        "brieden2023_fila",
+        "brieden2023_sheet",
+        "brieden2023_halosphere",
+        "brieden2023_filasphere",
+        "brieden2023_sheetsphere",
+    )
+
+    def __init__(self, whm_version: str = "brieden2023"):
+        if whm_version not in self._VALID_VERSIONS:
+            raise ValueError(
+                f"whm_version must be one of {self._VALID_VERSIONS}, got '{whm_version}'"
+            )
+        self._version = whm_version
+
+    def pk_nonlinear(self, k: np.ndarray, z: float, theta: dict) -> jnp.ndarray:
+        """Non-linear P(k) [(h^{-1} Mpc)^3] from the WHM via CAMB.
+
+        Parameters
+        ----------
+        k : array_like [h/Mpc]
+        z : float
+        theta : dict — hod_mod cosmological parameter dict
+
+        Returns
+        -------
+        jnp.ndarray, shape (len(k),)
+            P_nl(k) in (h^{-1} Mpc)^3, log-log interpolated from the CAMB grid.
+        """
+        try:
+            import camb
+        except ImportError as e:
+            raise ImportError("camb not installed — pip install camb") from e
+
+        k_arr = np.asarray(k, dtype=float)
+        h = float(theta["h"])
+        lnAs = float(theta["ln10^{10}A_s"])
+
+        pars = camb.CAMBparams()
+        pars.set_cosmology(
+            H0=h * 100.0,
+            ombh2=float(theta["Omega_b"])   * h ** 2,
+            omch2=float(theta["Omega_cdm"]) * h ** 2,
+        )
+        w0 = float(theta.get("w0", -1.0))
+        wa = float(theta.get("wa", 0.0))
+        if w0 != -1.0 or wa != 0.0:
+            pars.set_dark_energy(w=w0, wa=wa)
+        pars.InitPower.set_params(
+            As=np.exp(lnAs) * 1e-10,
+            ns=float(theta["n_s"]),
+        )
+        pars.NonLinear = camb.model.NonLinear_pk
+        try:
+            pars.NonLinearModel.set_params(halofit_version=self._version)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to set halofit_version='{self._version}'. "
+                "Install WHM-CAMB: pip install -e WHM/WHM-CAMB "
+                "(https://github.com/SamuelBrieden/WHM)"
+            ) from e
+        pars.set_matter_power(
+            redshifts=[float(z)],
+            kmax=float(k_arr.max()) * 1.2,
+        )
+        results = camb.get_results(pars)
+        k_h, _, pk2d = results.get_matter_power_spectrum(
+            minkh=float(k_arr.min()) * 0.8,
+            maxkh=float(k_arr.max()) * 1.2,
+            npoints=512,
+        )
+        log_pk = np.interp(np.log(k_arr), np.log(k_h), np.log(pk2d[0]))
+        return jnp.asarray(np.exp(log_pk))
+
+
 class CachedPkNonlinear:
     """Caching wrapper for any non-linear power spectrum backend.
 

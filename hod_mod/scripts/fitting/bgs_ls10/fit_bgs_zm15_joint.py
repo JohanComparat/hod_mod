@@ -475,48 +475,47 @@ class JointZM15:
         os.makedirs(out_dir, exist_ok=True)
         backend_path = os.path.join(out_dir, "chain.h5")
 
+        # Burn-in and production are kept in ONE continuous chain on disk (no
+        # mid-run reset), and emcee's HDFBackend flushes after *every* step.  A
+        # job killed by the walltime can therefore be resumed exactly where it
+        # stopped simply by re-submitting: ``backend.iteration`` tells us how
+        # many steps survived, and we run only the remainder.  Burn-in is
+        # discarded at read-out (below), never on disk.
+        total   = int(n_burnin) + int(n_steps)
         backend = emcee.backends.HDFBackend(backend_path)
         already = backend.iteration if os.path.exists(backend_path) else 0
-
-        if already >= n_burnin + n_steps:
-            print(f"  chain already complete ({already} iterations) — skipping sampling")
-            print(f"  chain at {backend_path}")
-            return emcee.EnsembleSampler(n_walkers, ndim, self.log_prob,
-                                         backend=backend)
 
         sampler = emcee.EnsembleSampler(n_walkers, ndim, self.log_prob,
                                         backend=backend)
 
-        if already == 0:
+        if already >= total:
+            print(f"  chain already complete ({already} >= {total} steps) — "
+                  f"skipping sampling  ({backend_path})")
+        elif already == 0:
             x0    = np.asarray(x_start if x_start is not None else self.x0, dtype=float)
             rng   = np.random.default_rng(42)
             scale = np.maximum(np.abs(x0) * 1e-2, 1e-3)
             p0    = x0 + rng.normal(0, scale, (n_walkers, ndim))
             for i, (lo, hi) in enumerate(self.bounds):
                 p0[:, i] = np.clip(p0[:, i], lo + 1e-6, hi - 1e-6)
-            print(f"  burn-in: {n_burnin} steps ...")
-            state = sampler.run_mcmc(p0, n_burnin, progress=True)
-            sampler.reset()
-            print(f"  sampling: {n_steps} steps ...")
-            sampler.run_mcmc(state, n_steps, progress=True)
-        elif already < n_burnin:
-            remaining_burnin = n_burnin - already
-            print(f"  resuming burn-in from step {already} ({remaining_burnin} left) ...")
-            state = sampler.run_mcmc(None, remaining_burnin, progress=True)
-            sampler.reset()
-            print(f"  sampling: {n_steps} steps ...")
-            sampler.run_mcmc(state, n_steps, progress=True)
+            print(f"  running {total} steps "
+                  f"({n_burnin} burn-in + {n_steps} production), checkpointing "
+                  f"every step to {backend_path} ...")
+            sampler.run_mcmc(p0, total, progress=True)
         else:
-            remaining = n_burnin + n_steps - already
-            print(f"  resuming production from step {already - n_burnin} "
+            remaining = total - already
+            print(f"  resuming from step {already}/{total} "
                   f"({remaining} steps left) ...")
             sampler.run_mcmc(None, remaining, progress=True)
 
+        # Discard the burn-in only when reading the chain back out.
+        n_done  = sampler.iteration
+        discard = min(int(n_burnin), max(n_done - 1, 0))
         out = os.path.join(out_dir, "flatchain.npz")
-        np.savez(out, flatchain=sampler.get_chain(flat=True),
+        np.savez(out, flatchain=sampler.get_chain(discard=discard, flat=True),
                  param_names=np.array(FREE_NAMES))
         try:
-            tau = sampler.get_autocorr_time(tol=0)
+            tau = sampler.get_autocorr_time(discard=discard, tol=0)
             print(f"  mean autocorr time: {np.nanmean(tau):.1f} steps")
         except Exception:
             pass

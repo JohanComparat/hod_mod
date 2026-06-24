@@ -36,6 +36,11 @@ from hod_mod.cosmology.halo_profiles import HaloProfile
 from hod_mod.galaxies.clustering import FullHaloModelPrediction
 from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
 from hod_mod.data_io.sum_stat_reader import SumStatReader
+from hod_mod.galaxies.hod import (
+    _mstar_from_mh_zu15,
+    shmr_zacharegkas25,
+    _mean_stellar_mass_c_vanuitert16,
+)
 
 # Import the fitting helpers
 _FIT_SCRIPT = os.path.join(os.path.dirname(__file__), "fit_bgs_multiprobe.py")
@@ -64,7 +69,7 @@ OUT_DIR = os.path.abspath(OUT_DIR)
 os.makedirs(OUT_DIR, exist_ok=True)
 
 SUM_STAT_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..",
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..",
                  "sum_stat", "data"))
 
 MODEL_COLOR = {
@@ -137,7 +142,7 @@ PARAM_LABEL = {
 }
 
 DOCS_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs"))
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "docs"))
 
 
 def _rp_tag(rp_min):
@@ -188,7 +193,7 @@ def _build_predictor_for(hod_model, profile, pk_cached):
     """Build a FullHaloModelPrediction for the given (hod_model, profile)."""
     pk_lin = LinearPowerSpectrum()
     cosmo  = pk_lin.default_cosmology()
-    hmf    = make_hmf("tinker08", pk_func=pk_cached.pk_linear)
+    hmf    = make_hmf("csst")
     cfg    = HOD_REGISTRY[hod_model]
     if cfg.get("bias_arg", True):
         hod = cfg["class"](hmf, hmf.bias)
@@ -238,7 +243,7 @@ def _plot_per_model_wp(model_key, predictions, predictions_at_data,
 
     if rp_data is not None:
         ax.errorbar(rp_data, rp_data * wp_data, rp_data * wp_err,
-                    fmt="o", color="k", ms=4, lw=1.2, zorder=10,
+                    fmt="o", color="k", ms=4, lw=1.2, zorder=2,
                     label="BGS LS10 data", capsize=2)
         axr.axhline(1.0, color="k", lw=1.2, zorder=5)
         axr.fill_between(rp_data,
@@ -260,12 +265,12 @@ def _plot_per_model_wp(model_key, predictions, predictions_at_data,
             lw    = 1.8 if prof == "nfw" else 1.2
             alpha = 0.92 if prof == "nfw" else 0.65
             ax.plot(rp_fine, rp_fine * predictions[key][rp_min],
-                    ls=ls, lw=lw, alpha=alpha, color=color, label=lbl)
+                    ls=ls, lw=lw, alpha=alpha, color=color, label=lbl, zorder=5)
             if (rp_data is not None
                     and key in predictions_at_data
                     and rp_min in predictions_at_data[key]):
                 ratio = predictions_at_data[key][rp_min] / wp_data
-                axr.plot(rp_data, ratio, ls=ls, lw=lw, alpha=alpha, color=color)
+                axr.plot(rp_data, ratio, ls=ls, lw=lw, alpha=alpha, color=color, zorder=5)
 
     if not has_any:
         plt.close(fig)
@@ -362,6 +367,102 @@ def _plot_per_model_params(model_key, records, out_dir):
         fontsize=11)
 
     base = os.path.join(out_dir, f"fig_wp_params_{model_key}")
+    for ext in ("pdf", "png"):
+        fig.savefig(f"{base}.{ext}", bbox_inches="tight", dpi=150)
+        print(f"  Saved {base}.{ext}")
+    plt.close(fig)
+
+
+def _plot_shmr_comparison(records, chi2_table, out_dir):
+    """Stellar-to-halo mass relation comparison for all models at rp>0.05.
+
+    Explicit-SHMR models (zu_mandelbaum15, zacharegkas25, vanuitert16) are
+    shown as continuous curves; threshold HODs (more2015, zheng2007, aum)
+    as single markers at (log10mmin, 10.0).
+    """
+    log10m_h = np.linspace(11.0, 15.0, 300)
+
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    ax.set_xlabel(r"$\log_{10}(M_{\rm halo}\;[h^{-1}\,M_\odot])$", fontsize=12)
+    ax.set_ylabel(r"$\log_{10}(M_*\;[h^{-1}\,M_\odot])$", fontsize=12)
+    ax.set_title(
+        r"Stellar–halo mass relation — MAP fits at $r_p > 0.05\,h^{-1}$Mpc",
+        fontsize=11)
+    ax.set_xlim(11.5, 15.0)
+    ax.set_ylim(9.0, 12.5)
+
+    # Threshold line at M* = 10^10 h-1 Msun
+    ax.axhline(10.0, color="0.75", ls=":", lw=1.2, zorder=0)
+    ax.text(14.9, 10.05, r"$M_*$ threshold", ha="right", va="bottom",
+            fontsize=8, color="0.6")
+
+    # Index records by (model, profile) at rp=0.05
+    by_key = {}
+    for r in records:
+        m    = r.get("hod_model", "?")
+        p    = r.get("profile", "nfw")
+        sext = r.get("use_sat_ext", False)
+        rp   = float(r.get("rp_min_wp", 0.3))
+        if sext or abs(rp - 0.05) > 1e-6:
+            continue
+        by_key[(m, p)] = r
+
+    _COSMO = {"h", "Omega_m", "n_s", "ln10^{10}A_s"}
+
+    for prof, ls, label_suf in [("nfw", "-", "NFW"), ("einasto", "--", "Einasto")]:
+        # --- explicit SHMR models ---
+        for model in ["zu_mandelbaum15", "zacharegkas25", "vanuitert16"]:
+            rec = by_key.get((model, prof))
+            if rec is None:
+                continue
+            p   = rec["params"]
+            color = MODEL_COLOR[model]
+            lbl   = f"{MODEL_LABEL[model]} ({label_suf})" if prof == "nfw" else None
+
+            if model == "zu_mandelbaum15":
+                mstar = np.array([
+                    float(_mstar_from_mh_zu15(lm, p["lg_m1h"], p["lg_m0star"],
+                                              p["beta"], p["delta"], p["gamma"]))
+                    for lm in log10m_h
+                ])
+            elif model == "zacharegkas25":
+                mstar = np.asarray(shmr_zacharegkas25(
+                    jnp.array(log10m_h),
+                    p["log10m1_shmr"], p["log10eps"],
+                    p["alpha_shmr"], p["gamma_shmr"], p["delta_shmr"],
+                ))
+            else:  # vanuitert16
+                mstar = np.array([
+                    float(_mean_stellar_mass_c_vanuitert16(
+                        lm, p["log10m_star0"], p["log10m_h1"],
+                        p["beta1"], p["log10_beta2"]))
+                    for lm in log10m_h
+                ])
+
+            ax.plot(log10m_h, mstar, ls=ls, lw=2.0,
+                    color=color, label=lbl, zorder=5)
+
+        # --- threshold HODs: single marker at (Mmin, 10.0) ---
+        if prof == "nfw":  # show once; NFW and Einasto Mmin are similar
+            for model in ["more2015", "zheng2007", "aum"]:
+                rec_nfw = by_key.get((model, "nfw"))
+                rec_ein = by_key.get((model, "einasto"))
+                for rec, marker, fs in [(rec_nfw, "o", "full"),
+                                        (rec_ein, "s", "none")]:
+                    if rec is None:
+                        continue
+                    mmin = float(rec["params"]["log10mmin"])
+                    ax.plot(mmin, 10.0, marker=marker, ms=10,
+                            color=MODEL_COLOR[model], fillstyle=fs,
+                            zorder=6,
+                            label=(f"{MODEL_LABEL[model]} (NFW)"
+                                   if (rec is rec_nfw) else None))
+
+    # Legend
+    ax.legend(fontsize=8, loc="upper left", framealpha=0.9,
+              ncol=2, handlelength=2.0)
+
+    base = os.path.join(out_dir, "fig_shmr_comparison")
     for ext in ("pdf", "png"):
         fig.savefig(f"{base}.{ext}", bbox_inches="tight", dpi=150)
         print(f"  Saved {base}.{ext}")
@@ -591,10 +692,10 @@ def main():
         ax  = all_ax[0, col]
         axr = all_ax[1, col]
 
-        # ---- data ----
+        # ---- data (plotted first so models draw on top) ----
         if rp_data is not None:
             ax.errorbar(rp_data, rp_data * wp_data, rp_data * wp_err,
-                        fmt="o", color="k", ms=3, lw=1.0, zorder=10,
+                        fmt="o", color="k", ms=3, lw=1.0, zorder=2,
                         capsize=1.5)
             axr.axhline(1.0, color="k", lw=1.2, zorder=5)
             axr.fill_between(rp_data,
@@ -602,7 +703,7 @@ def main():
                              1 + wp_err / wp_data,
                              color="k", alpha=0.12, zorder=0)
 
-        # ---- models ----
+        # ---- models (zorder=5 so they overlay the data points) ----
         for model in MODELS:
             for prof, ls in [("nfw", "-"), ("einasto", "--")]:
                 key = (model, prof)
@@ -615,13 +716,13 @@ def main():
                 lbl   = (f"{MODEL_LABEL[model]}  "
                          r"$\chi^2=$" + f"{c2n:.2f}") if prof == "nfw" else None
                 ax.plot(rp_fine, rp_fine * wp_p,
-                        ls=ls, lw=lw, alpha=alpha,
+                        ls=ls, lw=lw, alpha=alpha, zorder=5,
                         color=MODEL_COLOR[model], label=lbl)
                 if (rp_data is not None
                         and key in predictions_at_data
                         and rp_min_show in predictions_at_data[key]):
                     ratio = predictions_at_data[key][rp_min_show] / wp_data
-                    axr.plot(rp_data, ratio, ls=ls, lw=lw, alpha=alpha,
+                    axr.plot(rp_data, ratio, ls=ls, lw=lw, alpha=alpha, zorder=5,
                              color=MODEL_COLOR[model])
 
         # ---- satellite extension ----
@@ -630,14 +731,14 @@ def main():
             wp_s = predictions[key_s][rp_min_show]
             c2n  = chi2_table.get(("sext", "nfw", rp_min_show), float("nan"))
             ax.plot(rp_fine, rp_fine * wp_s, ls="-", lw=2.2,
-                    color=MODEL_COLOR["sext"], zorder=9,
+                    color=MODEL_COLOR["sext"], zorder=6,
                     label=(r"$+$sat.ext.  " r"$\chi^2=$" + f"{c2n:.2f}"))
             if (rp_data is not None
                     and key_s in predictions_at_data
                     and rp_min_show in predictions_at_data[key_s]):
                 ratio = predictions_at_data[key_s][rp_min_show] / wp_data
                 axr.plot(rp_data, ratio, ls="-", lw=2.2,
-                         color=MODEL_COLOR["sext"], zorder=9)
+                         color=MODEL_COLOR["sext"], zorder=6)
 
         ax.axvline(rp_min_show,  color="0.5", ls=":", lw=1.0)
         axr.axvline(rp_min_show, color="0.5", ls=":", lw=1.0)
@@ -766,6 +867,9 @@ def main():
 
     _write_permodel_rst(MODELS, records, chi2_table, DOCS_DIR)
 
+    print("\nGenerating SHMR comparison figure …")
+    _plot_shmr_comparison(records, chi2_table, OUT_DIR)
+
     # Copy all new figures to docs/_images/ (Sphinx source directory)
     docs_images = os.path.join(DOCS_DIR, "_images")
     os.makedirs(docs_images, exist_ok=True)
@@ -774,7 +878,8 @@ def main():
             src = os.path.join(OUT_DIR, f"fig_wp_{tag}_{model}.png")
             if os.path.exists(src):
                 shutil.copy(src, docs_images)
-    for name in ("fig_wp_survey_predictions.png", "fig_wp_survey_chi2.png"):
+    for name in ("fig_wp_survey_predictions.png", "fig_wp_survey_chi2.png",
+                 "fig_shmr_comparison.png"):
         src = os.path.join(OUT_DIR, name)
         if os.path.exists(src):
             shutil.copy(src, docs_images)

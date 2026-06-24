@@ -40,12 +40,11 @@ For a conda-free, reproducible environment using [GNU Guix](https://guix.gnu.org
 see [INSTALL_GUIX.md](INSTALL_GUIX.md). In short:
 
 ```bash
-guix shell --container --network -m manifest.scm   # hermetic Python + toolchain
+# time-machine pins Guix to channels.scm -> Python 3.11 (required for camb 1.4.0)
+guix time-machine -C channels.scm -- shell --container --network -m manifest.scm
 python -m venv .venv-guix && source .venv-guix/bin/activate
 export LD_LIBRARY_PATH="$GUIX_ENVIRONMENT/lib"     # so wheels find libz/libstdc++/…
-pip install numpy scipy astropy matplotlib h5py \
-            jax jaxlib camb colossus AletheiaCosmo
-pip install emcee pyyaml pandas   # the hod_mod[fitting] extra
+pip install -r requirements-guix.txt               # validated pinned versions
 pip install --no-build-isolation --no-deps -e .
 ```
 

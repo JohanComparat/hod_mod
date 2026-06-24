@@ -4,7 +4,7 @@ Run a single HOD literature benchmark.
 
 Usage
 -----
-    python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015 [--mcmc] [--plot]
+    python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12 [--mcmc] [--plot]
 
 Each benchmark loads its config from configs/benchmarks/benchmark_{model}.yml,
 fits the HOD model to the paper's published data vector using the paper's
@@ -31,19 +31,6 @@ _REPO_ROOT = os.path.dirname(
 )
 
 BENCHMARK_REGISTRY = {
-    "more2015": {
-        "config": "configs/benchmarks/benchmark_more2015.yml",
-        "label": "More+2015 BOSS CMASS (MoreHODModel)",
-        "published_params": {
-            "log10mmin": (13.03, 0.02),
-            "sigma_logm": (0.38, 0.05),
-            "log10m1":    (13.80, 0.05),
-            "alpha":      (1.17, 0.10),
-            "kappa":      (0.51, 0.20),
-        },
-        "published_chi2_ndof": 0.9,
-        "data_status": "ready",
-    },
     # -----------------------------------------------------------------------
     # More+2015 individual stellar-mass subsamples (Fig 3)
     # wp+ESD jointly fit; free cosmology in paper; here fixed to published MAP.
@@ -156,6 +143,95 @@ BENCHMARK_REGISTRY = {
             "eta":           (-0.04, 0.02),
             "fc":            (0.86, 0.14),
             "bsat":          (8.98, 1.18),
+        },
+        "published_chi2_ndof": None,
+        "data_status": "ready",
+    },
+    # -----------------------------------------------------------------------
+    # Zu & Mandelbaum 2015 — per-bin iHOD fits (real digitized data from Fig. 6)
+    # Each bin uses log10m_star_thresh=lo, log10m_star_max=hi → bin HOD.
+    # published_params = global iHOD Table 2 values (shared reference for all bins).
+    # -----------------------------------------------------------------------
+    "zumandelbaum2015_bin_9p4_9p8": {
+        "config": "configs/benchmarks/benchmark_zumandelbaum2015_bin_9p4_9p8.yml",
+        "label": "ZM15 SDSS bin [9.4-9.8] wp-only (ZuMandelbaum15HODModel)",
+        "published_params": {
+            "lg_m1h": (12.10, 0.17), "lg_m0star": (10.31, 0.10),
+            "beta": (0.33, 0.21), "delta": (0.42, 0.04), "gamma": (1.21, 0.20),
+            "sigma_lnmstar": (0.50, 0.04), "eta": (-0.04, 0.02),
+            "fc": (0.86, 0.14), "bsat": (8.98, 1.18),
+        },
+        "published_chi2_ndof": None,
+        "data_status": "ready",
+    },
+    "zumandelbaum2015_bin_9p8_10p2": {
+        "config": "configs/benchmarks/benchmark_zumandelbaum2015_bin_9p8_10p2.yml",
+        "label": "ZM15 SDSS bin [9.8-10.2] wp-only (ZuMandelbaum15HODModel)",
+        "published_params": {
+            "lg_m1h": (12.10, 0.17), "lg_m0star": (10.31, 0.10),
+            "beta": (0.33, 0.21), "delta": (0.42, 0.04), "gamma": (1.21, 0.20),
+            "sigma_lnmstar": (0.50, 0.04), "eta": (-0.04, 0.02),
+            "fc": (0.86, 0.14), "bsat": (8.98, 1.18),
+        },
+        "published_chi2_ndof": None,
+        "data_status": "ready",
+    },
+    "zumandelbaum2015_bin_10p2_10p6": {
+        "config": "configs/benchmarks/benchmark_zumandelbaum2015_bin_10p2_10p6.yml",
+        "label": "ZM15 SDSS bin [10.2-10.6] joint wp+ESD (ZuMandelbaum15HODModel)",
+        "published_params": {
+            "lg_m1h": (12.10, 0.17), "lg_m0star": (10.31, 0.10),
+            "beta": (0.33, 0.21), "delta": (0.42, 0.04), "gamma": (1.21, 0.20),
+            "sigma_lnmstar": (0.50, 0.04), "eta": (-0.04, 0.02),
+            "fc": (0.86, 0.14), "bsat": (8.98, 1.18),
+        },
+        "published_chi2_ndof": None,
+        "data_status": "ready",
+    },
+    "zumandelbaum2015_bin_10p6_11p0": {
+        "config": "configs/benchmarks/benchmark_zumandelbaum2015_bin_10p6_11p0.yml",
+        "label": "ZM15 SDSS bin [10.6-11.0] joint wp+ESD (ZuMandelbaum15HODModel)",
+        "published_params": {
+            "lg_m1h": (12.10, 0.17), "lg_m0star": (10.31, 0.10),
+            "beta": (0.33, 0.21), "delta": (0.42, 0.04), "gamma": (1.21, 0.20),
+            "sigma_lnmstar": (0.50, 0.04), "eta": (-0.04, 0.02),
+            "fc": (0.86, 0.14), "bsat": (8.98, 1.18),
+        },
+        "published_chi2_ndof": None,
+        "data_status": "ready",
+    },
+    "zumandelbaum2015_bin_11p0_11p2": {
+        "config": "configs/benchmarks/benchmark_zumandelbaum2015_bin_11p0_11p2.yml",
+        "label": "ZM15 SDSS bin [11.0-11.2] joint wp+ESD (ZuMandelbaum15HODModel)",
+        "published_params": {
+            "lg_m1h": (12.10, 0.17), "lg_m0star": (10.31, 0.10),
+            "beta": (0.33, 0.21), "delta": (0.42, 0.04), "gamma": (1.21, 0.20),
+            "sigma_lnmstar": (0.50, 0.04), "eta": (-0.04, 0.02),
+            "fc": (0.86, 0.14), "bsat": (8.98, 1.18),
+        },
+        "published_chi2_ndof": None,
+        "data_status": "ready",
+    },
+    "zumandelbaum2015_bin_11p2_11p4": {
+        "config": "configs/benchmarks/benchmark_zumandelbaum2015_bin_11p2_11p4.yml",
+        "label": "ZM15 SDSS bin [11.2-11.4] joint wp+ESD (ZuMandelbaum15HODModel)",
+        "published_params": {
+            "lg_m1h": (12.10, 0.17), "lg_m0star": (10.31, 0.10),
+            "beta": (0.33, 0.21), "delta": (0.42, 0.04), "gamma": (1.21, 0.20),
+            "sigma_lnmstar": (0.50, 0.04), "eta": (-0.04, 0.02),
+            "fc": (0.86, 0.14), "bsat": (8.98, 1.18),
+        },
+        "published_chi2_ndof": None,
+        "data_status": "ready",
+    },
+    "zumandelbaum2015_bin_11p4_12p0": {
+        "config": "configs/benchmarks/benchmark_zumandelbaum2015_bin_11p4_12p0.yml",
+        "label": "ZM15 SDSS bin [11.4-12.0] joint wp+ESD (ZuMandelbaum15HODModel)",
+        "published_params": {
+            "lg_m1h": (12.10, 0.17), "lg_m0star": (10.31, 0.10),
+            "beta": (0.33, 0.21), "delta": (0.42, 0.04), "gamma": (1.21, 0.20),
+            "sigma_lnmstar": (0.50, 0.04), "eta": (-0.04, 0.02),
+            "fc": (0.86, 0.14), "bsat": (8.98, 1.18),
         },
         "published_chi2_ndof": None,
         "data_status": "ready",
@@ -765,7 +841,8 @@ def _make_plots(fitter, params, chi2_ndof, model_key, output_dir, joint, ds_only
     # ------------------------------------------------------------------ #
     # 4.  HOD figure                                                       #
     # ------------------------------------------------------------------ #
-    _plot_hod(fitter, params, pub_params, model_key, output_dir)
+    _plot_hod(fitter, params, pub_params, model_key, output_dir,
+              flatchain=flatchain, param_names=fc_names)
 
     # ------------------------------------------------------------------ #
     # 5.  Corner plot (only when flatchain is available)                   #

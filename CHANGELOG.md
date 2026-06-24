@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.5] — 2026-06-24
+
+### Added
+
+- Zu & Mandelbaum 2015 (iHOD) benchmark suite, consolidated for release:
+  - Digitized SDSS DR7 data from ZM15 Figure 6 added to the repository
+    (`data/zumandelbaum2015_sdss/`): 7 stellar-mass-binned `w_p(r_p)` files
+    (9.4–12.0), 5 binned `\Delta\Sigma(R)` files (10.2–12.0), and the raw
+    WebPlotDigitizer `Fig6_*.txt` source files, with updated `metadata.json`.
+  - Regenerated the model-anchored threshold-sample data vectors
+    (`wp_thresh_mstar102.csv`, `ds_thresh_mstar102.csv`).
+  - MAP benchmarks (threshold, ΔΣ-only, 7 stellar-mass bins, and joint) refreshed
+    via `run_benchmark.py`; figures and result JSON regenerated.
+  - Benchmark documentation linked into the navigation: `benchmark_zumandelbaum2015`
+    and `benchmark_zumandelbaum2015_multisample` added to the `docs/index.rst`
+    Benchmark toctree and summarised in `docs/benchmarks.rst`.
+- Conda-free installation with GNU Guix. New files at the repository root:
+  `manifest.scm` (hermetic Python + C/Fortran toolchain + runtime libs for
+  manylinux wheels), `channels.scm` (pinned Guix revision for reproducible
+  `guix time-machine` builds), `requirements-guix.txt` (the validated, pinned
+  Python dependency set — `camb==1.4.0`, `numpy==2.4.6`, …), and `INSTALL_GUIX.md`
+  (step-by-step procedure and binary-install prerequisites).
+- Installation instructions for Guix in `README.md` and `docs/overview.rst`.
+
+### Notes
+
+- The Guix workflow runs `pip` inside a `guix shell --container --network` and
+  points `LD_LIBRARY_PATH` at `$GUIX_ENVIRONMENT/lib`, so PyPI wheels (numpy,
+  scipy, h5py, jax/jaxlib, camb, …) load against the Guix interpreter without
+  relying on Guix's own Python packages or clobbering glibc.
+- Use `guix time-machine -C channels.scm` so the environment pins to Python 3.11:
+  `camb==1.4.0` (validated, source-only) needs ≤ 3.11, and an unpinned newer camb
+  on Python 3.12 fails under numpy ≥ 2.4 (``camb/model.py:691`` TypeError).
+- `.venv-guix/` added to `.gitignore`.
+
 ## [0.0.2] — 2026-06-01
 
 ### Added

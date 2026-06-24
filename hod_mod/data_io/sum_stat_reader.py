@@ -237,24 +237,37 @@ class SumStatReader:
                     "attrs":       dict(subgrp.attrs),
                 }
 
+            if "number_density" in f:
+                nd_grp = f["number_density"]
+                subgrp, _ = _first_subgroup(nd_grp)
+                # n is a number density (Mpc^-3 → h^3 Mpc^-3): divide by h^3.
+                val = np.array(subgrp["value"]) / h**3
+                err = np.array(subgrp["err"])   / h**3
+                cov = np.array(subgrp["cov"])   / h**6
+                cache["number_density"] = {
+                    "n":         float(np.ravel(val)[0]),
+                    "n_err":     float(np.ravel(err)[0]),
+                    "cov":       cov,
+                    "estimator": str(subgrp.attrs.get("estimator", "")),
+                    "attrs":     dict(subgrp.attrs),
+                }
+
             if "joint_covariance" in f:
                 jg = f["joint_covariance"]
                 jg_attrs = dict(jg.attrs)
 
-                if "slice_wp" in jg_attrs:
-                    # New BGS joint format: slice indices stored as attrs, multiple ESD surveys.
-                    # Read raw arrays without conversion; accessor applies h-units on request.
+                slice_keys = [k for k in jg_attrs if k.startswith("slice_")]
+                if slice_keys:
+                    # New BGS joint format: one slice_<stat> index pair per measured
+                    # statistic (e.g. slice_nbar, slice_wp, slice_esd_hsc).  Built
+                    # dynamically so files carrying any subset of stats parse.
+                    # Read raw arrays without conversion; accessor applies h-units.
                     def _parse_slice(a):
                         return (int(a[0]), int(a[1]))
 
                     slices = {
-                        "smf":      _parse_slice(jg_attrs["slice_smf"]),
-                        "wp":       _parse_slice(jg_attrs["slice_wp"]),
-                        "esd_hsc":  _parse_slice(jg_attrs["slice_esd_hsc"]),
-                        "esd_des":  _parse_slice(jg_attrs["slice_esd_des"]),
-                        "esd_kids": _parse_slice(jg_attrs["slice_esd_kids"]),
-                        "wtheta":   _parse_slice(jg_attrs["slice_wtheta"]),
-                        "knn":      _parse_slice(jg_attrs["slice_knn"]),
+                        key[len("slice_"):]: _parse_slice(jg_attrs[key])
+                        for key in slice_keys
                     }
                     subs_raw = np.array(jg["subsamples"]) if "subsamples" in jg else None
                     cache["joint_bgs"] = {
@@ -413,6 +426,23 @@ class SumStatReader:
             raise KeyError(f"No esd group found in {self._path}.")
         return self._cache["esd"]
 
+    def number_density(self) -> dict:
+        """Return the galaxy number density n of the sample.
+
+        Returns
+        -------
+        dict with keys:
+
+        * ``n``         — number density in h³ Mpc⁻³
+        * ``n_err``     — uncertainty in h³ Mpc⁻³
+        * ``cov``       — (1, 1) variance in (h³ Mpc⁻³)²
+        * ``estimator`` — ``'sum(w_i / Vmax_i)'``
+        * ``attrs``     — raw HDF5 group attributes
+        """
+        if "number_density" not in self._cache:
+            raise KeyError(f"No number_density group found in {self._path}.")
+        return self._cache["number_density"]
+
     def joint(self) -> dict:
         """Return the full joint data vector and covariance matrix.
 
@@ -479,7 +509,7 @@ class SumStatReader:
 
         # Probe → h-scale factor (WP: Mpc → Mpc/h; ESD: invariant; others: 1)
         _wp_probes  = {"wp", "wtheta"}
-        _smf_probes = {"smf"}
+        _smf_probes = {"smf", "nbar"}   # number densities: Mpc^-3 → h^3 Mpc^-3
 
         indices   = []
         scales    = []
@@ -526,7 +556,8 @@ class SumStatReader:
 
     def list_groups(self) -> list:
         """List available statistic types in this file."""
-        return [k for k in ("wp", "smf", "esd", "joint", "joint_bgs") if k in self._cache]
+        return [k for k in ("wp", "smf", "esd", "number_density", "joint", "joint_bgs")
+                if k in self._cache]
 
     def attrs(self) -> dict:
         """File-level attributes (creation date, version)."""

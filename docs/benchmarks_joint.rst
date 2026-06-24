@@ -1,3 +1,5 @@
+:orphan:
+
 .. _benchmarks_joint:
 
 HOD Literature Benchmarks — Joint WP & ESD

@@ -14,7 +14,7 @@ data:
 
 model:
   hod_model:   MoreHODModel
-  hmf_backend: tinker08
+  hmf_backend: csst
   z:           0.52
   pi_max:      60.0
 

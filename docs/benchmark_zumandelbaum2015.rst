@@ -1,3 +1,5 @@
+:orphan:
+
 .. _benchmark_zumandelbaum2015:
 
 Benchmark: Zu & Mandelbaum 2015 — SDSS DR7
@@ -326,10 +328,12 @@ fixed at iHOD values.
 Results
 -------
 
-MAP fit: **PASSED** (:math:`\chi^2/\mathrm{dof} = 0.000`).
-Nelder-Mead optimizer initialized at the published iHOD params converges to essentially
-the same point — confirming that the data are consistent with the published model by
-construction (model-anchored data extraction).
+MAP fit: **PASSED** (:math:`\chi^2/\mathrm{dof} = 0.807 / 13 = 0.062`).
+The model-anchored data vector is reproduced to well below the assigned errors, but the fit
+is **degenerate**: a single stellar-mass threshold sample (13 data points, 9 free parameters)
+does not constrain the high-mass shape of the SHMR, so the optimizer drives ``delta`` and
+``gamma`` to their prior bounds while keeping :math:`\chi^2` near zero. The per-bin
+multi-sample benchmark (:doc:`benchmark_zumandelbaum2015_multisample`) breaks this degeneracy.
 
 .. list-table::
    :header-rows: 1
@@ -338,47 +342,49 @@ construction (model-anchored data extraction).
    * - Parameter
      - MAP
      - Published iHOD
-     - :math:`|\Delta|/\sigma`
+     - :math:`\Delta/\sigma`
    * - ``lg_m1h``
-     - 12.101
+     - 12.182
      - 12.10
-     - 0.01σ
+     - +0.48σ
    * - ``lg_m0star``
-     - 10.309
+     - 10.245
      - 10.31
-     - 0.01σ
+     - −0.65σ
    * - ``beta``
-     - 0.332
+     - 0.808
      - 0.33
-     - 0.01σ
+     - +2.28σ
    * - ``delta``
-     - 0.429
+     - 2.000
      - 0.42
-     - 0.22σ
+     - +39.5σ (at bound)
    * - ``gamma``
-     - 1.226
+     - 5.000
      - 1.21
-     - 0.08σ
+     - +18.95σ (at bound)
    * - ``sigma_lnmstar``
-     - 0.500
+     - 0.401
      - 0.50
-     - 0.01σ
+     - −2.47σ
    * - ``eta``
-     - −0.040
+     - −0.152
      - −0.04
-     - 0.01σ
+     - −5.59σ
    * - ``fc``
-     - 0.860
+     - 0.937
      - 0.86
-     - 0.00σ
+     - +0.55σ
    * - ``bsat``
-     - 8.982
+     - 8.867
      - 8.98
-     - 0.00σ
+     - −0.10σ
 
-All nine parameters agree with the published iHOD values within :math:`\lesssim 0.22\sigma`,
-confirming that the optimizer finds the correct minimum. The small deviations arise from the
-optimization tolerance and the Nelder-Mead simplex stopping criterion.
+The well-constrained parameters (:math:`\log M_{1h}`, :math:`\log M_{*0}`, :math:`f_c`,
+:math:`B_\mathrm{sat}`) are recovered within :math:`\lesssim 0.7\sigma`, but the SHMR
+high-mass parameters :math:`\delta` and :math:`\gamma` run to their prior bounds: a single
+threshold sample carries no leverage on them. This is expected and motivates the joint
+multi-sample fit.
 
 .. figure:: ../results/benchmarks/zumandelbaum2015_sdss/benchmark_zumandelbaum2015_wp.png
    :width: 80%

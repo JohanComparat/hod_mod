@@ -574,6 +574,145 @@ class TestMakeHmf:
         with pytest.raises(ValueError, match="pk_func"):
             make_hmf("tinker08")
 
+    def test_aemulusnu_backend_key(self, pk_func):
+        """make_hmf('aemulusnu') returns AemulusNuHaloMassFunction."""
+        pytest.importorskip("aemulusnu_hmf")
+        from hod_mod.cosmology.halo_mass_function import AemulusNuHaloMassFunction
+        hmf = make_hmf("aemulusnu", pk_func=pk_func)
+        assert isinstance(hmf, AemulusNuHaloMassFunction)
+
+    def test_csst_backend_key(self):
+        """make_hmf('csst') returns CsstHaloMassFunction."""
+        pytest.importorskip("CEmulator")
+        from hod_mod.cosmology.halo_mass_function import CsstHaloMassFunction
+        hmf = make_hmf("csst")
+        assert isinstance(hmf, CsstHaloMassFunction)
+
+
+# ---------------------------------------------------------------------------
+# AemulusNu emulator backend
+# ---------------------------------------------------------------------------
+
+class TestAemulusNuHaloMassFunction:
+    """AemulusNuHaloMassFunction: dndm, bias, sigma, mass-range warning."""
+
+    aemulusnu_hmf = pytest.importorskip("aemulusnu_hmf")
+
+    @pytest.fixture(scope="class")
+    def theta(self):
+        return LinearPowerSpectrum.default_cosmology()
+
+    @pytest.fixture(scope="class")
+    def hmf(self):
+        pk = LinearPowerSpectrum()
+        return make_hmf("aemulusnu", pk_func=pk.pk_linear)
+
+    @pytest.fixture(scope="class")
+    def m_grid(self):
+        return jnp.logspace(13, 15, 8)
+
+    def test_dndm_shape(self, hmf, m_grid, theta):
+        dn = hmf.dndm(m_grid, 0.0, theta)
+        assert dn.shape == m_grid.shape
+
+    def test_dndm_positive(self, hmf, m_grid, theta):
+        dn = hmf.dndm(m_grid, 0.0, theta)
+        assert jnp.all(dn > 0)
+
+    def test_dndm_finite(self, hmf, m_grid, theta):
+        dn = hmf.dndm(m_grid, 0.0, theta)
+        assert jnp.all(jnp.isfinite(dn))
+
+    def test_dndm_decreasing_with_mass(self, hmf, m_grid, theta):
+        dn = hmf.dndm(m_grid, 0.0, theta)
+        assert jnp.all(jnp.diff(dn) < 0)
+
+    def test_dndm_mass_range_warning(self, hmf, theta):
+        m_low = jnp.array([1e12])
+        with pytest.warns(UserWarning, match="calibration range"):
+            hmf.dndm(m_low, 0.0, theta)
+
+    def test_sigma_shape(self, hmf, m_grid, theta):
+        sig = hmf.sigma(m_grid, 0.0, theta)
+        assert sig.shape == m_grid.shape
+
+    def test_sigma_positive(self, hmf, m_grid, theta):
+        sig = hmf.sigma(m_grid, 0.0, theta)
+        assert jnp.all(sig > 0)
+
+    def test_bias_shape(self, hmf, m_grid, theta):
+        b = hmf.bias(m_grid, 0.0, theta)
+        assert b.shape == m_grid.shape
+
+    def test_bias_positive(self, hmf, m_grid, theta):
+        b = hmf.bias(m_grid, 0.0, theta)
+        assert jnp.all(b > 0)
+
+    def test_no_pk_func_sigma_raises(self, theta):
+        from hod_mod.cosmology.halo_mass_function import AemulusNuHaloMassFunction
+        hmf_nopk = AemulusNuHaloMassFunction(pk_func=None)
+        with pytest.raises(RuntimeError, match="pk_func"):
+            hmf_nopk.sigma(jnp.array([1e14]), 0.0, theta)
+
+    def test_dndm_agrees_with_tinker_order_of_magnitude(self, hmf, theta):
+        """Aemulus-ν and Tinker08 dndm agree within a factor of 5 at z=0, M∈[10^13,10^14.5]."""
+        pk = LinearPowerSpectrum()
+        hmf_t = make_hmf("tinker08", pk_func=pk.pk_linear)
+        # Limit to [1e13, 1e14.5]: Aemulus-ν calibrated range; at M>1e14.5 neutrino
+        # suppression and different mass definitions cause >5× divergence vs Tinker08.
+        m = jnp.logspace(13, 14.5, 5)
+        dn_ae  = jnp.asarray(hmf.dndm(m, 0.0, theta))
+        dn_ti  = jnp.asarray(hmf_t.dndm(m, 0.0, theta))
+        ratio  = dn_ae / dn_ti
+        assert jnp.all(ratio > 0.2) and jnp.all(ratio < 5.0), \
+            f"Aemulus/Tinker ratio out of range: {ratio}"
+
+
+# ---------------------------------------------------------------------------
+# CSST emulator backend
+# ---------------------------------------------------------------------------
+
+class TestCsstHaloMassFunction:
+    """CsstHaloMassFunction: dndm, bias, sigma."""
+
+    CEmulator = pytest.importorskip("CEmulator")
+
+    @pytest.fixture(scope="class")
+    def theta(self):
+        return LinearPowerSpectrum.default_cosmology()
+
+    @pytest.fixture(scope="class")
+    def hmf(self):
+        return make_hmf("csst")
+
+    @pytest.fixture(scope="class")
+    def m_grid(self):
+        return jnp.logspace(13, 15, 8)
+
+    def test_dndm_shape(self, hmf, m_grid, theta):
+        dn = hmf.dndm(m_grid, 0.0, theta)
+        assert dn.shape == m_grid.shape
+
+    def test_dndm_positive(self, hmf, m_grid, theta):
+        dn = hmf.dndm(m_grid, 0.0, theta)
+        assert jnp.all(dn > 0)
+
+    def test_dndm_finite(self, hmf, m_grid, theta):
+        dn = hmf.dndm(m_grid, 0.0, theta)
+        assert jnp.all(jnp.isfinite(dn))
+
+    def test_bias_shape(self, hmf, m_grid, theta):
+        b = hmf.bias(m_grid, 0.0, theta)
+        assert b.shape == m_grid.shape
+
+    def test_bias_positive(self, hmf, m_grid, theta):
+        b = hmf.bias(m_grid, 0.0, theta)
+        assert jnp.all(b > 0)
+
+    def test_sigma_shape(self, hmf, m_grid, theta):
+        sig = hmf.sigma(m_grid, 0.0, theta)
+        assert sig.shape == m_grid.shape
+
 
 # ---------------------------------------------------------------------------
 # Einasto profile

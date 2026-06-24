@@ -41,7 +41,23 @@ intersphinx_mapping = {
 }
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = [
+    "_build", "Thumbs.db", ".DS_Store",
+    # Benchmark pages removed from navigation (keep files on disk but don't build)
+    "benchmarks.rst",
+    "benchmark_lange2025.rst",
+    "benchmark_comparat2025.rst",
+    "benchmark_zheng2007.rst",
+    "benchmark_guo2018.rst",
+    "benchmark_guo2019.rst",
+    "benchmark_kravtsov2004.rst",
+    "benchmark_leauthaud2012.rst",
+    "benchmark_vanutert2016.rst",
+    "benchmark_zumandelbaum2015.rst",
+    "benchmark_zacharegkas2025.rst",
+    "benchmarks_deltasigma.rst",
+    "benchmarks_joint.rst",
+]
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]

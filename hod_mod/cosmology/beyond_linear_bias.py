@@ -7,7 +7,8 @@ Data source: https://github.com/alexander-mead/BNL
 from pathlib import Path
 
 import numpy as np
-from scipy.interpolate import RegularGridInterpolator
+import jax.numpy as jnp
+from jax.scipy.interpolate import RegularGridInterpolator
 
 _DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data" / "bnl"
 _DEFAULT_SNAP = "85"
@@ -70,11 +71,16 @@ class BeyondLinearBiasMead21:
         self._beta_nl_grid = one_plus_bnl.transpose(2, 0, 1) - 1.0   # (25, 8, 8)
         self._log_k_ref = np.log(self._k_ref)
 
+        # JAX arrays for computation
+        self._nu_ref_jax       = jnp.asarray(self._nu_ref)
+        self._log_k_ref_jax    = jnp.asarray(self._log_k_ref)
+        self._beta_nl_grid_jax = jnp.asarray(self._beta_nl_grid)
+
         # 3-D linear interpolator in (log_k, nu1, nu2).
         # fill_value=0 → beta^NL = 0 outside the tabulated range.
         self._interp = RegularGridInterpolator(
-            (self._log_k_ref, self._nu_ref, self._nu_ref),
-            self._beta_nl_grid,
+            (self._log_k_ref_jax, self._nu_ref_jax, self._nu_ref_jax),
+            self._beta_nl_grid_jax,
             method="linear",
             bounds_error=False,
             fill_value=0.0,
@@ -89,7 +95,7 @@ class BeyondLinearBiasMead21:
         k: np.ndarray,
         nu1: np.ndarray,
         nu2: np.ndarray,
-    ) -> np.ndarray:
+    ) -> jnp.ndarray:
         """Interpolate beta^NL(k, nu1, nu2).
 
         Parameters
@@ -102,13 +108,13 @@ class BeyondLinearBiasMead21:
         -------
         ndarray, shape (Nk, N1, N2)
         """
-        k = np.asarray(k, dtype=float)
-        nu1 = np.asarray(nu1, dtype=float)
-        nu2 = np.asarray(nu2, dtype=float)
+        k   = jnp.asarray(k)
+        nu1 = jnp.asarray(nu1)
+        nu2 = jnp.asarray(nu2)
 
-        lk = np.log(k)
-        LK, NU1, NU2 = np.meshgrid(lk, nu1, nu2, indexing="ij")
-        pts = np.stack([LK.ravel(), NU1.ravel(), NU2.ravel()], axis=1)
+        lk = jnp.log(k)
+        LK, NU1, NU2 = jnp.meshgrid(lk, nu1, nu2, indexing="ij")
+        pts = jnp.stack([LK.ravel(), NU1.ravel(), NU2.ravel()], axis=1)
         return self._interp(pts).reshape(len(k), len(nu1), len(nu2))
 
     # ------------------------------------------------------------------
@@ -119,7 +125,7 @@ class BeyondLinearBiasMead21:
         self,
         k_arr: np.ndarray,
         nu_arr: np.ndarray = None,
-    ) -> np.ndarray:
+    ) -> jnp.ndarray:
         """Return the beta^NL matrix on the coarse 8-bin nu grid.
 
         Returns beta^NL(k, nu_ref, nu_ref) of shape (Nk, 8, 8).  This small
@@ -149,7 +155,7 @@ class BeyondLinearBiasMead21:
         self,
         nu_arr: np.ndarray,
         w_eff: np.ndarray,
-    ) -> np.ndarray:
+    ) -> jnp.ndarray:
         """Project mass-grid weights onto the 8 BNL nu bins via linear interp.
 
         Parameters
@@ -161,21 +167,28 @@ class BeyondLinearBiasMead21:
         -------
         W_coarse : (Nk, 8)  projected weights
         """
-        # Build (NM, 8) linear interpolation weight matrix
-        nu_arr = np.asarray(nu_arr, dtype=float)
-        NM = len(nu_arr)
+        nu_arr = jnp.asarray(nu_arr)
+        w_eff  = jnp.asarray(w_eff)
+        NM = nu_arr.shape[0]
         nb = len(self._nu_ref)
-        phi = np.zeros((NM, nb))
-        for i, nu in enumerate(nu_arr):
-            if nu <= self._nu_ref[0] or nu >= self._nu_ref[-1]:
-                continue   # outside range → zero (fill_value=0 convention)
-            idx = int(np.searchsorted(self._nu_ref, nu, side="right")) - 1
-            idx = max(0, min(idx, nb - 2))
-            alpha = (nu - self._nu_ref[idx]) / (
-                self._nu_ref[idx + 1] - self._nu_ref[idx]
-            )
-            phi[i, idx] = 1.0 - alpha
-            phi[i, idx + 1] = alpha
+
+        # Vectorised linear interpolation: find left bin index for each nu
+        idx = jnp.searchsorted(self._nu_ref_jax, nu_arr, side="right") - 1
+        idx = jnp.clip(idx, 0, nb - 2)
+
+        alpha = (nu_arr - self._nu_ref_jax[idx]) / (
+            self._nu_ref_jax[idx + 1] - self._nu_ref_jax[idx]
+        )
+
+        # Scatter interpolation weights into (NM, nb) matrix
+        row = jnp.arange(NM)
+        phi = jnp.zeros((NM, nb))
+        phi = phi.at[row, idx    ].set(1.0 - alpha)
+        phi = phi.at[row, idx + 1].add(alpha)
+
+        # Zero out entries outside the tabulated nu range
+        mask = (nu_arr > self._nu_ref_jax[0]) & (nu_arr < self._nu_ref_jax[-1])
+        phi = phi * mask[:, None]
 
         # W_coarse[k, a] = Σ_i phi[i, a] * w_eff[k, i]
         return w_eff @ phi   # (Nk, NM) @ (NM, 8) → (Nk, 8)
@@ -191,7 +204,7 @@ class BeyondLinearBiasMead21:
         weights: np.ndarray,
         uk: np.ndarray,
         beta_matrix: np.ndarray | None = None,
-    ) -> np.ndarray:
+    ) -> jnp.ndarray:
         """Additive BNL correction to P_gg^{2h}(k) / P_lin(k).
 
         Computes the double mass-integral:
@@ -216,18 +229,19 @@ class BeyondLinearBiasMead21:
         -------
         delta_gg : (Nk,)
         """
-        k_arr = np.asarray(k_arr, dtype=float)
-        nu_arr = np.asarray(nu_arr, dtype=float)
-        weights = np.asarray(weights, dtype=float)
-        uk = np.asarray(uk, dtype=float)
+        k_arr   = jnp.asarray(k_arr)
+        nu_arr  = jnp.asarray(nu_arr)
+        weights = jnp.asarray(weights)
+        uk      = jnp.asarray(uk)
 
-        w_eff = weights[None, :] * uk                          # (Nk, NM)
-        W_coarse = self._project_weights(nu_arr, w_eff)        # (Nk, 8)
+        w_eff    = weights[None, :] * uk                        # (Nk, NM)
+        W_coarse = self._project_weights(nu_arr, w_eff)         # (Nk, 8)
 
         if beta_matrix is None:
-            beta_matrix = self.beta_nl_matrix(k_arr)           # (Nk, 8, 8)
+            beta_matrix = self.beta_nl_matrix(k_arr)            # (Nk, 8, 8)
+        beta_matrix = jnp.asarray(beta_matrix)
 
-        return np.einsum("ka,kab,kb->k", W_coarse, beta_matrix, W_coarse)
+        return jnp.einsum("ka,kab,kb->k", W_coarse, beta_matrix, W_coarse)
 
     def correction_2h_gm(
         self,
@@ -238,7 +252,7 @@ class BeyondLinearBiasMead21:
         uk_g: np.ndarray,
         uk_m: np.ndarray,
         beta_matrix: np.ndarray | None = None,
-    ) -> np.ndarray:
+    ) -> jnp.ndarray:
         """Additive BNL correction to P_gm^{2h}(k) / P_lin(k).
 
         Computes the asymmetric double mass-integral:
@@ -261,20 +275,21 @@ class BeyondLinearBiasMead21:
         -------
         delta_gm : (Nk,)
         """
-        k_arr = np.asarray(k_arr, dtype=float)
-        nu_arr = np.asarray(nu_arr, dtype=float)
-        weights_g = np.asarray(weights_g, dtype=float)
-        weights_m = np.asarray(weights_m, dtype=float)
-        uk_g = np.asarray(uk_g, dtype=float)
-        uk_m = np.asarray(uk_m, dtype=float)
+        k_arr     = jnp.asarray(k_arr)
+        nu_arr    = jnp.asarray(nu_arr)
+        weights_g = jnp.asarray(weights_g)
+        weights_m = jnp.asarray(weights_m)
+        uk_g      = jnp.asarray(uk_g)
+        uk_m      = jnp.asarray(uk_m)
 
-        wg_eff = weights_g[None, :] * uk_g                     # (Nk, NM)
-        wm_eff = weights_m[None, :] * uk_m                     # (Nk, NM)
+        wg_eff = weights_g[None, :] * uk_g                      # (Nk, NM)
+        wm_eff = weights_m[None, :] * uk_m                      # (Nk, NM)
 
-        Wg_coarse = self._project_weights(nu_arr, wg_eff)      # (Nk, 8)
-        Wm_coarse = self._project_weights(nu_arr, wm_eff)      # (Nk, 8)
+        Wg_coarse = self._project_weights(nu_arr, wg_eff)       # (Nk, 8)
+        Wm_coarse = self._project_weights(nu_arr, wm_eff)       # (Nk, 8)
 
         if beta_matrix is None:
-            beta_matrix = self.beta_nl_matrix(k_arr)           # (Nk, 8, 8)
+            beta_matrix = self.beta_nl_matrix(k_arr)            # (Nk, 8, 8)
+        beta_matrix = jnp.asarray(beta_matrix)
 
-        return np.einsum("ka,kab,kb->k", Wg_coarse, beta_matrix, Wm_coarse)
+        return jnp.einsum("ka,kab,kb->k", Wg_coarse, beta_matrix, Wm_coarse)

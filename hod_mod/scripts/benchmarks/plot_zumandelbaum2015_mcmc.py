@@ -113,7 +113,7 @@ def load_map_params():
         return None
     with open(result_file) as f:
         result = json.load(f)
-    map_p = result.get("map_params", {})
+    map_p = result.get("params", {})
     return {**FIXED_PARAMS, **map_p}
 
 

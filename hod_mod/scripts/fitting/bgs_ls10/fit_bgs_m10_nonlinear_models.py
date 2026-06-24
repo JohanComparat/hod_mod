@@ -81,7 +81,7 @@ def load_data(data_file):
 
 def build_predictors():
     pk_lin = LinearPowerSpectrum()
-    hmf    = make_hmf("tinker08", pk_func=pk_lin.pk_linear)
+    hmf    = make_hmf("csst")
     hp     = HaloProfile(_COLOSSUS, cm_relation="diemer19")
     pk_nl  = CachedPkNonlinear(HALOFITSpectrum("mead2020"))
 

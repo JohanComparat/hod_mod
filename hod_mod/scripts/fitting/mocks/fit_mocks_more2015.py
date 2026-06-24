@@ -135,7 +135,7 @@ def build_config(mstar_lo: float, info: dict, sum_stat_dir: str, output_root: st
         rp_min             = 0.3,
         rp_max             = 50.0,
         hod_model          = "MoreHODModel",
-        hmf_backend        = "tinker08",
+        hmf_backend        = "csst",
         z                  = z_eff,
         pi_max             = 100.0,
         free_params        = free_params,

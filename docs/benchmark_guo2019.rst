@@ -1,3 +1,5 @@
+:orphan:
+
 .. _benchmark_guo2019:
 
 Benchmark: Guo+2019 — eBOSS ELG

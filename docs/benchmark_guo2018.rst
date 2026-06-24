@@ -1,3 +1,5 @@
+:orphan:
+
 .. _benchmark_guo2018:
 
 Benchmark: Guo+2018 — SDSS LOWZ

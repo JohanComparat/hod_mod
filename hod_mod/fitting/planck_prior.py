@@ -38,7 +38,7 @@ clipping beyond which the log-prior returns ``-inf``::
 
 from __future__ import annotations
 
-import numpy as np
+import jax.numpy as jnp
 
 # ---------------------------------------------------------------------------
 # Planck 2018 TT,TE,EE+lowE best-fit values and 1σ uncertainties
@@ -73,6 +73,8 @@ PLANCK18_3SIGMA: dict[str, tuple[float, float]] = {
            PLANCK18_MEANS[name] + 3.0 * PLANCK18_SIGMAS[name])
     for name in PLANCK18_MEANS
 }
+
+_NEG_INF = float("-inf")
 
 
 # ---------------------------------------------------------------------------
@@ -109,14 +111,14 @@ def planck18_log_prior(theta: dict, params: list | None = None) -> float:
         val  = float(theta[k])
         lo, hi = PLANCK18_3SIGMA[k]
         if not (lo <= val <= hi):
-            return -np.inf
+            return _NEG_INF
         z = (val - PLANCK18_MEANS[k]) / PLANCK18_SIGMAS[k]
-        log_pi -= 0.5 * z * z
+        log_pi -= 0.5 * float(z * z)
     return log_pi
 
 
 def gaussian_log_prior(val: float, mean: float, sigma: float,
-                        lo: float = -np.inf, hi: float = np.inf) -> float:
+                        lo: float = float("-inf"), hi: float = float("inf")) -> float:
     """Gaussian log-prior for a single parameter.
 
     .. math::
@@ -134,7 +136,6 @@ def gaussian_log_prior(val: float, mean: float, sigma: float,
     lo, hi : float
         Hard bounds (uniform outside returns -inf).
     """
-    if not (lo <= val <= hi):
-        return -np.inf
+    in_bounds = (val >= lo) & (val <= hi)
     z = (val - mean) / sigma
-    return -0.5 * z * z
+    return float(jnp.where(in_bounds, -0.5 * z * z, _NEG_INF))

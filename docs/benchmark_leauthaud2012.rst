@@ -1,3 +1,5 @@
+:orphan:
+
 .. _benchmark_leauthaud2012:
 
 Benchmark: Leauthaud+2012 — COSMOS PHOTO_z2

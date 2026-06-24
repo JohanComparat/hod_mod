@@ -767,14 +767,13 @@ class FullHaloModelPrediction:
                     self._pk_nl.pk_nonlinear(k_np, float(z), theta_cosmo), dtype=float
                 )
 
-            # Peak heights for BNL interpolation: nu = delta_c / sigma(M, z)
-            with jax.disable_jit():
-                sig_arr = self._hod._hmf.sigma(m_grid, float(z), theta_cosmo)
-            nu_np = 1.686 / np.asarray(sig_arr, dtype=float)
-
-            # Pre-compute the (Nk, NM, NM) beta^NL matrix once per cosmology
+            # Peak heights and BNL matrix — only needed when bnl_model is active
+            nu_np = None
             bnl_matrix = None
             if self._bnl_model is not None:
+                with jax.disable_jit():
+                    sig_arr = self._hod._hmf.sigma(m_grid, float(z), theta_cosmo)
+                nu_np = 1.686 / np.asarray(sig_arr, dtype=float)
                 bnl_matrix = self._bnl_model.beta_nl_matrix(k_np, nu_np)
 
             self._static_cache[cosmo_key] = {
@@ -1160,6 +1159,13 @@ class FullHaloModelPrediction:
                 chi_max=chi_max, n_chi=n_chi, n_R_tab=n_R_tab,
                 **extra_kwargs,
             )
+
+        if "log10_M_star_cen" in hod_params:
+            # Point-mass stellar contribution: ΔΣ_*(R) = M_*_cen / (π R²)
+            # R [Mpc/h] → R_pc [pc/h]; M_star [M_sun/h] / R² [pc²/h²] = M_sun h pc⁻²
+            R_pc = R * 1.0e6
+            ds = ds + jnp.power(10.0, hod_params["log10_M_star_cen"]) / (jnp.pi * R_pc**2)
+
         return ds
 
     def delta_sigma_split(
@@ -1239,6 +1245,11 @@ class FullHaloModelPrediction:
             f_b_cosmic = float(theta_cosmo["Omega_b"]) / float(theta_cosmo["Omega_m"])
             ds_cdm = (1.0 - f_b_cosmic) * ds_total
             ds_b   = f_b_cosmic * ds_total
+
+        if "log10_M_star_cen" in hod_params:
+            R_pc = R * 1.0e6
+            ds_stellar = jnp.power(10.0, hod_params["log10_M_star_cen"]) / (jnp.pi * R_pc**2)
+            ds_total = ds_total + ds_stellar
 
         return {
             "cdm":   ds_cdm,

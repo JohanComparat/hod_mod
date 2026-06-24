@@ -380,7 +380,7 @@ def main():
 
     print("\nBuilding shared pipeline (HMF + halo profile)…")
     pk_lin = LinearPowerSpectrum()
-    hmf    = make_hmf("tinker08", pk_func=pk_lin.pk_linear)
+    hmf    = make_hmf("csst")
     hp     = HaloProfile(_COLOSSUS, cm_relation="diemer19")
     print("  Done.")
 

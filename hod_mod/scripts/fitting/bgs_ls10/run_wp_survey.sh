@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-SCRIPT="scripts/fitting/bgs_ls10/fit_bgs_multiprobe.py"
+SCRIPT="hod_mod/scripts/fitting/bgs_ls10/fit_bgs_multiprobe.py"
 MSTAR=10.0
 PROBES="wp"
 COMMON="--mstar ${MSTAR} --probes ${PROBES} --use-ia --use-baryon-fraction --use-offcentering --map-only"

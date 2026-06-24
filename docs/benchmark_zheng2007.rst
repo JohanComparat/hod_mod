@@ -1,3 +1,5 @@
+:orphan:
+
 .. _benchmark_zheng2007:
 
 Benchmark: Zheng+2007 — SDSS M\ :sub:`r` < −21

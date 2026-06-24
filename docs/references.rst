@@ -88,6 +88,19 @@ approximations through simulation-calibrated fits to modern emulators.
    Tinker+2008 HMF; used in the 2-halo term of ``hod_mod``.
    `arXiv:1001.3162 <https://arxiv.org/abs/1001.3162>`_
 
+.. [ChenCSST2025] Chen Z. et al. 2025, Science China: Physics, Mechanics & Astronomy 68, 9513.
+   CEmulator v2.0: Gaussian-Process emulator of halo statistics (HMF, matter power
+   spectrum, halo-matter cross-correlation) for CSST cosmologies spanning
+   :math:`w_0w_a\nu`CDM; ``make_hmf("csst")`` in ``hod_mod``.
+   `ADS <https://ui.adsabs.harvard.edu/abs/2025SCPMA..6809513C>`_
+
+.. [ShenAemulus2025] Shen X. et al. 2025, JCAP 2025 (03), 056.
+   Aemulus-ν: Gaussian-Process HMF emulator for massive-neutrino wCDM cosmologies,
+   calibrated on 150 high-resolution N-body simulations for
+   :math:`M \geq 10^{13}\,M_\odot/h`, :math:`z \leq 2`; ``make_hmf("aemulusnu")``
+   in ``hod_mod``.
+   `arXiv:2410.00913 <https://arxiv.org/abs/2410.00913>`_
+
 .. [Nishimichi2019] Nishimichi T. et al. 2019, ApJ 884, 29.
    Dark Emulator: Gaussian Process emulation of halo clustering statistics;
    enables rapid HOD predictions for arbitrary ΛCDM cosmologies.
@@ -383,6 +396,48 @@ the baryon fraction and gas concentration models in ``hod_mod``.
    Machine-learning gas profiles: halo mass as primary driver beyond
    :math:`M_{\rm BH}`.
    `arXiv:2512.09021 <https://arxiv.org/abs/2512.09021>`_
+
+----
+
+Gas Profiles and Cross-Correlations
+--------------------------------------
+
+Papers providing the gas profile parametrisations and the observational
+benchmarks for galaxy × tSZ and galaxy × soft X-ray cross-correlations.
+
+.. [Arnaud2010] Arnaud M., Pratt G.W., Piffaretti R. et al. 2010, A&A 517, A92.
+   Universal pressure profile of galaxy clusters from the REXCESS sample
+   (generalised NFW; Table 1: P₀=8.403, c₅₀₀=1.177, γ=0.3081, α=1.0510,
+   β=5.4905, α_p=0.12).  Implemented as
+   :class:`~hod_mod.cosmology.gas_profiles.PressureProfileA10`.
+   `arXiv:0910.1234 <https://arxiv.org/abs/0910.1234>`_
+
+.. [Oppenheimer2025] Oppenheimer B.D. et al. 2025.
+   DPMhalo: parametric electron density profiles for the diffuse gas around
+   galaxies; 3 calibrated model variants with mass- and redshift-dependent
+   normalisations.  Implemented as
+   :class:`~hod_mod.cosmology.gas_profiles.GasDensityDPM`.
+   `arXiv:2505.14782 <https://arxiv.org/abs/2505.14782>`_
+
+.. [Comparat2025] Comparat J. et al. 2025, A&A 697, A173.
+   Galaxy × eROSITA eRASS:5 soft X-ray (0.5–2 keV) angular cross-correlation
+   for 7 stellar-mass-selected LS DR10 samples (M*>10¹⁰–10¹¹·⁵ M☉);
+   HOD + DPM gas model (Tables 3–4).  Data in
+   ``hod_mod/data/benchmarks/xray/``.
+   `arXiv:2503.19796 <https://arxiv.org/abs/2503.19796>`_
+
+.. [Amodeo2021] Amodeo S. et al. 2021, Phys. Rev. D 103, 063514.
+   ACT DR4 × BOSS: stacked tSZ and kSZ profiles around BOSS CMASS and LOWZ
+   galaxies; 4.5σ measurement of the baryonic mass density in the warm-hot
+   intergalactic medium.  Model comparison target for
+   ``validate_amodeo2021.py``.
+   `arXiv:2009.05557 <https://arxiv.org/abs/2009.05557>`_
+
+.. [Pandey2025] Pandey S. et al. 2025.
+   DES Year 3 × ACT DR6: 21σ detection of the lensing × tSZ cross-correlation
+   C_ℓ^{γ,y}; constraints on baryonic feedback at group–cluster scales.
+   Model comparison target for ``validate_pandey2025.py``.
+   `arXiv:2506.07432 <https://arxiv.org/abs/2506.07432>`_
 
 ----
 

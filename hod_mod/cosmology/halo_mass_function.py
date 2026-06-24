@@ -32,6 +32,60 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 
+# scipy ≥ 1.11 renamed simps → simpson; add back-compat alias so that
+# CEmulator (which still imports `simps`) can be imported without error.
+import scipy.integrate as _scipy_integrate
+if not hasattr(_scipy_integrate, "simps"):
+    _scipy_integrate.simps = _scipy_integrate.simpson
+
+
+# numpy ≥ 2.0 removed np.trapz (renamed np.trapezoid).
+# CEmulator's HMF interpolation still calls np.trapz.
+if not hasattr(np, "trapz"):
+    np.trapz = np.trapezoid
+
+
+def _patch_cemulator_numpy2() -> None:
+    """Patch CEmulator internals for numpy ≥ 2.0 compatibility.
+
+    numpy 2.0 forbids implicit conversion of length-1 arrays to scalars when
+    assigning to scalar slots (e.g. ``out[i] = array_of_shape_1``).
+    Two CEmulator methods trigger this:
+
+    1. ``GaussianProcessRegressor.predict`` → squeeze length-1 output.
+    2. ``Cosmology.get_Omegam`` → squeeze the length-1 ``get_Ez`` result.
+    """
+    try:
+        from CEmulator.GaussianProcess.GaussianProcess import GaussianProcessRegressor as _CGPR
+        from CEmulator.cosmology import Cosmology as _Cosmo
+    except ImportError:
+        return   # CEmulator not installed — nothing to patch
+
+    # --- patch 1: GPR.predict ---
+    _orig_predict = _CGPR.predict
+
+    def _predict_compat(self, X, *args, **kwargs):
+        result = _orig_predict(self, X, *args, **kwargs)
+        if isinstance(result, np.ndarray) and result.ndim == 1 and result.size == 1:
+            return result[0]
+        return result
+
+    _CGPR.predict = _predict_compat
+
+    # --- patch 2: Cosmology.get_Omegam ---
+    def _get_Omegam_compat(self, z):
+        z = np.atleast_1d(z)
+        out = np.zeros(len(z))
+        for iz in range(len(z)):
+            val = self.Omegam * (1 + z[iz]) ** 3 / self.get_Ez(z[iz]).reshape(-1) ** 2
+            out[iz] = float(val[0])
+        return out
+
+    _Cosmo.get_Omegam = _get_Omegam_compat
+
+
+_patch_cemulator_numpy2()
+
 from .power_spectrum import rho_critical_0
 
 _RHO_CRIT0 = rho_critical_0()          # (Msun/h)/(Mpc/h)³
@@ -887,7 +941,10 @@ class CsstHaloMassFunction:
         try:
             from CEmulator.Emulator import HMF_CEmulator, CBaseEmulator
         except ImportError as e:
-            raise ImportError("CEmulator not installed") from e
+            raise ImportError(
+                "CEmulator not installed. Run: "
+                "pip install git+https://github.com/czymh/csstemu"
+            ) from e
         self._hmf_emu  = HMF_CEmulator()
         self._pk_emu   = CBaseEmulator()
         self.massdef   = massdef
@@ -922,13 +979,15 @@ class CsstHaloMassFunction:
         return jnp.asarray(dndlnM[0]) / jnp.asarray(m_np)
 
     def sigma(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
-        """RMS linear density fluctuation σ(M, z) via the CSST linear P(k) emulator."""
+        """RMS linear density fluctuation σ(M, z) via the CSST linear P(k) (CAMB backend)."""
         import numpy as np
         self._set_cosmos(self._pk_emu, theta)
         omega_m = float(theta["Omega_m"])
         growth  = _growth_factor_flat_jax(z, omega_m)
         k_np    = np.asarray(self._k_int)
-        pk2d    = self._pk_emu.get_pklin(z=0.0, k=k_np)
+        # type='CAMB' is required — the CEmulator GP backend for PkLin has a
+        # scikit-learn API incompatibility that causes predict() to return arrays.
+        pk2d    = self._pk_emu.get_pklin(z=0.0, k=k_np, type="CAMB")
         pk_z0   = jnp.asarray(pk2d[0])
 
         @partial(jax.jit, static_argnums=())
@@ -961,11 +1020,136 @@ class CsstHaloMassFunction:
 
 
 # ---------------------------------------------------------------------------
+# Aemulus-ν emulator HMF wrapper
+# ---------------------------------------------------------------------------
+
+class AemulusNuHaloMassFunction:
+    """Halo mass function from the Aemulus-ν emulator (Shen+2025, arXiv:2410.00913).
+
+    Wraps ``aemulusnu_hmf.emulator.dn_dM`` and exposes the same interface as
+    ``HaloMassFunction``.
+
+    **Calibration range**: M ≥ 10^13 M_sun/h, z ∈ [0, 2], wνCDM cosmologies
+    (w0waCDM + neutrino mass).  A ``UserWarning`` is issued if ``dndm`` is
+    called with masses below 10^13 M_sun/h, but the mass array is *not*
+    clipped — values below the calibrated floor are passed straight to the
+    GP emulator and silently extrapolated, which can return wildly wrong
+    (huge, near-zero, or non-monotonic) ``dn/dM`` values.
+
+    **Caveat for HOD predictions**: ``FullHaloModelPrediction``,
+    ``HODBase`` and ``HaloModelCrossSpectra`` all integrate over a fixed
+    M = 10^10–10^16 M_sun/h grid regardless of which HMF backend is
+    plugged in. For galaxy samples whose central occupation is
+    non-negligible below 10^13 M_sun/h — e.g. low stellar-mass-threshold
+    samples such as Comparat+2025 S1 (``log10m_star_thresh`` ≈ 9.5) — the
+    resulting ``wp``/``n_gal``/``delta_sigma``/``C_ell^{gX}`` predictions
+    are dominated by this unreliable extrapolated region and can look
+    dramatically different from analytic backends like ``tinker08``. This
+    backend is only recommended for cluster-scale / high-mass-threshold
+    samples where the occupation is concentrated above 10^13 M_sun/h.
+
+    Bias falls back to Tinker 2010 using σ(M) from a linear power spectrum
+    callable supplied at construction time (``pk_func``).
+
+    Parameters
+    ----------
+    pk_func : callable
+        (k, z, theta) → P_lin(k) [(Mpc/h)^3].  Required for ``sigma()``
+        and ``bias()``.
+    rho_mean : float
+        Mean comoving matter density at z=0 [M_sun/h / (Mpc/h)^3].
+    Delta : float
+        Overdensity for the Tinker 2010 bias (default 200, mean density).
+    """
+
+    _M_MIN_CALIBRATED = 1e13   # M_sun/h
+
+    def __init__(
+        self,
+        pk_func=None,
+        rho_mean: float = _RHO_MEAN_PLANCK18,
+        Delta: float = 200.0,
+    ):
+        try:
+            from aemulusnu_hmf.emulator import dn_dM as _dn_dM
+        except ImportError as e:
+            raise ImportError(
+                "aemulusnu_hmf not installed. Run: "
+                "pip install git+https://github.com/DelonShen/aemulusnu_hmf"
+            ) from e
+        self._dn_dM   = _dn_dM
+        self._pk_func = pk_func
+        self.rho_mean = float(rho_mean)
+        self.Delta    = float(Delta)
+        self._k_int   = jnp.logspace(-4, 3, 512)
+        # Reuse the σ²(M) JIT kernel from HaloMassFunction via a thin wrapper
+        self._hmf_sigma = HaloMassFunction(pk_func, rho_mean=rho_mean) if pk_func is not None else None
+
+    @staticmethod
+    def _theta_to_cosmo(theta: dict) -> dict:
+        """Map hod_mod theta dict → aemulusnu_hmf cosmology dict."""
+        import numpy as np
+        h  = float(theta["h"])
+        return {
+            "10^9 As":    np.exp(float(theta["ln10^{10}A_s"])) * 1e-1,
+            "ns":         float(theta["n_s"]),
+            "H0":         h * 100.0,
+            "w0":         float(theta.get("w0", -1.0)),
+            "ombh2":      float(theta["Omega_b"])   * h**2,
+            "omch2":      float(theta["Omega_cdm"]) * h**2,
+            "nu_mass_ev": float(theta.get("mnu", 0.0)),
+        }
+
+    def dndm(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
+        """Halo mass function dn/dM [h^4 Mpc^{-3} (M_sun/h)^{-1}].
+
+        Parameters
+        ----------
+        m_h : jnp.ndarray  Halo masses [M_sun/h].
+        z : float  Redshift (must be ≤ 2).
+        theta : dict  Cosmological parameters.
+        """
+        import warnings, numpy as np
+        m_np = np.asarray(m_h)
+        if m_np.min() < self._M_MIN_CALIBRATED:
+            warnings.warn(
+                f"AemulusNuHaloMassFunction: masses below {self._M_MIN_CALIBRATED:.0e} "
+                "M_sun/h are outside the emulator calibration range.",
+                UserWarning, stacklevel=2,
+            )
+        cosmo = self._theta_to_cosmo(theta)
+        a = 1.0 / (1.0 + float(z))
+        result = self._dn_dM(cosmo, m_np, a)
+        return jnp.asarray(result)
+
+    def sigma(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
+        """RMS linear density fluctuation σ(M, z) via the supplied pk_func."""
+        if self._hmf_sigma is None:
+            raise RuntimeError(
+                "pk_func is required for sigma(). Pass pk_func= to AemulusNuHaloMassFunction."
+            )
+        return self._hmf_sigma.sigma(m_h, z, theta)
+
+    def bias(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
+        """Tinker 2010 large-scale halo bias b(M, z) [dimensionless]."""
+        delta_c = 1.686
+        sig = self.sigma(m_h, z, theta)
+        nu  = delta_c / sig
+        return tinker10_bias(nu, self.Delta)
+
+    def n_eff(self, m_min: float, m_max: float, z: float, theta: dict) -> jnp.ndarray:
+        """Integrated number density n(m_min < M < m_max) [h^3 Mpc^{-3}]."""
+        m_grid = jnp.logspace(jnp.log10(m_min), jnp.log10(m_max), 256)
+        dn = self.dndm(m_grid, z, theta)
+        return jnp.trapezoid(dn, m_grid)
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
 _BACKENDS = tuple(_FSIGMA_MODELS.keys())
-_EMULATOR_BACKENDS = ("csst",)
+_EMULATOR_BACKENDS = ("csst", "aemulusnu")
 
 
 def make_hmf(
@@ -984,10 +1168,18 @@ def make_hmf(
     backend : str
         Analytic multiplicity model (any key in ``_FSIGMA_MODELS``, e.g.
         ``tinker08``, ``bocquet16``, ``yung25``) **or** an emulator backend:
-        ``"csst"`` — CSST CEmulator HMF (Chen+2025).
+
+        * ``"csst"`` — CSST CEmulator HMF (Chen+2025, SCPMA 2025).
+        * ``"aemulusnu"`` — Aemulus-ν HMF (Shen+2025, JCAP 2025,
+          arXiv:2410.00913).  Valid for M ≥ 10^13 M_sun/h, z ≤ 2; masses
+          below that are silently extrapolated (see
+          :class:`AemulusNuHaloMassFunction`), so this backend is not
+          recommended for low stellar-mass-threshold HOD samples whose
+          occupation extends well below 10^13 M_sun/h.
     pk_func : callable
-        (k, z, theta) → P_lin(k).  Required for analytic backends; ignored
-        for emulator backends that compute P(k) internally.
+        (k, z, theta) → P_lin(k).  Required for analytic backends and for
+        ``bias()`` / ``sigma()`` when using emulator backends.  Ignored for
+        ``"csst"`` σ (uses CSST PkLin emulator internally).
     rho_mean : float
         Mean comoving matter density at z=0 [M_sun/h / (Mpc/h)^3].
     Delta : float
@@ -1000,9 +1192,12 @@ def make_hmf(
     >>> hmf = make_hmf("tinker08", pk_func=my_pk)
     >>> hmf = make_hmf("bocquet16", pk_func=my_pk, hydro=True)
     >>> hmf = make_hmf("csst")
+    >>> hmf = make_hmf("aemulusnu", pk_func=my_pk)
     """
     if backend == "csst":
         return CsstHaloMassFunction(rho_mean=rho_mean)
+    if backend == "aemulusnu":
+        return AemulusNuHaloMassFunction(pk_func=pk_func, rho_mean=rho_mean, Delta=Delta)
     if backend not in _BACKENDS:
         raise ValueError(
             f"backend must be one of {_BACKENDS + _EMULATOR_BACKENDS}, got '{backend}'"

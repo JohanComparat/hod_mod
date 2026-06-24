@@ -2,26 +2,193 @@ data: verify all the data in the data directory and its consistency. All the ben
 documentation: continue reading and proofing. (Overview and data formats page are final, next is the forward model showcase.)
 code coverage, and tests.
 
-
+Benchmark from More et al. 2015.
 RUNS :
+# DONE :
+# python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12 --plot --mcmc --force-mcmc
+# python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p3_12 --plot --mcmc --force-mcmc
+# python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p4_12 --plot --mcmc --force-mcmc
+# TO FINISH :
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --mcmc --plot 
 
-# More 2015, individual runs and joint run, cosmo run
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12 --plot --mcmc
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p3_12 --plot --mcmc
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p4_12 --plot --mcmc
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015 --mcmc --plot
-#python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --plot
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --mcmc --plot
-
-
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12 --plot-only
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p3_12 --plot-only
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p4_12 --plot-only
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015 --plot-only
+# TO REDO THE plots
+# python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12 --plot-only# python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p3_12 --plot-only
+# python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11p4_12 --plot-only
 python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12_freecosmo --plot-only
 
 
+Model benchmark, using LS10 BGS data set.
+Run for this page :
+file:///home/comparat/software/hod_mod/docs/_build/html/bgs_ls10_wp_survey.html
+# Step 1 — 60 MAP fits (sequential ~6–12h, or parallel ~2–4h)
+# DONE
+# bash hod_mod/scripts/fitting/bgs_ls10/run_wp_survey.sh
+# or:
+# bash hod_mod/scripts/fitting/bgs_ls10/run_wp_survey.sh --parallel
+# DONE :
+# Step 2 — regenerate figures and RST auto-content
+# python hod_mod/scripts/fitting/bgs_ls10/plot_wp_survey.py
+# DONE
+# Step 3 — rebuild the HTML docs page
+# python3 -m sphinx docs docs/_build/html -b html -q
 
+
+LS10 BGS M*>10 fit
+# MAP only (quick smoke test) DONE
+python hod_mod/scripts/fitting/run_fit.py \
+    configs/fitting/BGS_LS10_Comparat2025_Mstar10_LargeScaleCuts.yml --map-only # --plot-only
+python hod_mod/scripts/fitting/run_fit.py \
+    configs/fitting/BGS_LS10_Comparat2025_Mstar10_NoScaleCuts.yml --map-only # --plot-only
+# Large scale cuts (wp > 0.5, ESD_HSC > 1.5 Mpc/h)
+python hod_mod/scripts/fitting/run_fit.py \
+    configs/fitting/BGS_LS10_Comparat2025_Mstar10_LargeScaleCuts.yml  --plot-only
+# No scale cuts (rp_min = 1e-3 Mpc/h)
+python hod_mod/scripts/fitting/run_fit.py configs/fitting/BGS_LS10_Comparat2025_Mstar10_NoScaleCuts.yml
+# Output lands in results/bgs_comparat2025/mstar10.0_wp_esd_hsc_more2015_nfw_rp500_ia_offcen_bfrac_stellar_inc/ (large cuts) and .../rp001_ia_offcen_bfrac_stellar_inc/ (no cuts).
+python hod_mod/scripts/fitting/run_fit.py configs/fitting/BGS_LS10_Comparat2025_Mstar10_NoScaleCuts.yml --plot-only
+#LOOK IN DETAILS ON HOW TO MAKE THE MODEL FIT.
+The above fails miserably.
+OK it does not work, now try to fit only the WPRP
+
+
+DONE : 
+For the More et al. 2015 model for clustering and lensing.
+for example: python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12
+Write a clean version of fitting observations with the More 2015 model, named run_fit_More15.py .
+Write a documentation page on how to use it. I should be flexible in using WPRP, ESD or both with diagonal errors or a covariiance matrix. 
+add a page that explains how to use it: yml file, options, inputs, outputs, plots, ...
+Put it after the forward model showcase page, 
+
+DONE : 
+Let's do a complete benchmark of the Zu and Mandelbaum model. 
+The goal is to reproduce their paper's result using the data sets they measured. 
+There is already a page for that and some data digitized.
+Let's check the status to devise whaty needs to be done.
+
+DONE :
+# rp > 0.5 Mpc/h MCMC, default walker/step counts from YAML (or use defaults)
+python hod_mod/scripts/fitting/run_fit.py \
+    configs/fitting/TestA1_wp_rp500.yml \
+    --n-walkers 64 --n-steps 3000 --n-burnin 500
+# rp > 0.3 Mpc/h MCMC
+python hod_mod/scripts/fitting/run_fit.py \
+    configs/fitting/TestA2_wp_rp300.yml \
+    --n-walkers 64 --n-steps 3000 --n-burnin 500
+# rp > 0.1 Mpc/h MCMC + off-centering + incompleteness
+python hod_mod/scripts/fitting/run_fit.py \
+    configs/fitting/TestA4_wp_rp100_offcen_inc.yml \
+    --n-walkers 64 --n-steps 3000 --n-burnin 500
+
+Once it finishes, use these parameters as inputs for the cross-correlation fits.
+see below ( and after fixing the AGN model)
+
+# Comparat 2025 cross-correlation
+ONGOING :
+
+/home/comparat/mamba/envs/hod_mod/bin/python3.11 -m hod_mod.scripts.direct_prediction_gal_gas_agn
+
+# MAP all samples (first run ~12 min/sample for shape; instant thereafter)
+python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S2 S3 S4 S5 S6 S7 --mode map --add-syst 10 # DONE
+# MCMC for S1 + S5 (amplitude-only, very fast after shape cache)
+python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --mode mcmc 
+--n-steps 2000 # DONE
+# 3-parameter fit (A_X + HOD) for S5
+python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --mode mcmc --fit-hod
+python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S5 --mode both --fit-hod
+# Statistical-only chi2 (no systematic floor)
+python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --f-sys 0
+
+# Apply fix and run S1
+python -m hod_mod.scripts.fitting.fit_comparat2025 \
+    --sample S1 --mode map --clear-cache
+# Expected: chi2/dof << 1e28, MAP params [log10_A_gas, log10_A_AGN] finite,
+#           a fresh S1_*.npz written to shape_cache (gas and agn both NaN=False)
+# Then run all samples
+python -m hod_mod.scripts.fitting.fit_comparat2025 \
+    --sample S1 S2 S3 S4 S5 S6 S7 --mode map
+
+There is a problem with the AGN component of the fit.
+
+
+Full joint fit:
+
+python -m hod_mod.scripts.fitting.fit_joint_lsdr10 --sample S1 --mode map
+
+
+
+Script (hod_mod/scripts/direct_prediction_gal_gas_agn.py) expanded to 7 diagnostic figures:
+
+Fig	Content	Diagnoses
+1	HOD N_c(M), N_s(M), integrands, b_eff integrand	iHOD occupation shape; b_eff = 1.47
+2	ne(r, M) profiles; ne at 0.3R200 vs M; ne² vs M	Calibrated β_n=0.20 shallower than default β=0.36
+3	X̃(k,M) FT at z_eff	Scale- and mass-dependence of emissivity
+4	1h cen/sat and 2h integrands; cumulative mass fractions	Satellites dominate at k~1 h/Mpc
+5	P_gX(k) with all components	1h/2h crossover at k≈0.3 h/Mpc
+6	C_ell before/after King PSF	PSF onset at ℓ~75000
+7	w_θ(θ) vs data + model/data ratio	Model is ~10⁸× below data
+Key finding exposed: The DPM emissivity (cm⁻⁶ units) is missing the conversion to X-ray surface brightness — needs Λ_eff [erg cm³/s] × instrument factors. The fitting parameter log10_A_gas = -2.0 hits the lower bound because even with a free amplitude, the model shape doesn't match (chi2/dof = 4699). The HOD parameter mismatch (iHOD ignores simple HOD keys) also contributes.
+
+Documentation page docs/direct_prediction_gal_gas.rst added to the BGS Analysis section, with all 7 figures embedded and the amplitude mismatch prominently highlighted as a warning block with explanation of the required unit conversion and next steps.
+
+
+Now I have the full picture. Let me answer both issues together.
+
+Why the w(θ) is far off — it's a unit problem, not a bug. The two components are computed very differently:
+
+GAS emissivity (cross_spectra.py:518-519):
+
+
+X̃_gas(k|M) = 4π ∫ n_e²(r|M) j₀(kr) r² dr
+emissivity_uk computes the Fourier transform of n_e² directly. No cooling function Λ_eff is applied. The result has units (Mpc/h)³ cm⁻⁶ — raw electron density squared, not observed X-ray brightness. A_gas must absorb Λ_eff [erg cm³/s] / (4π) plus all detector factors (effective area, exposure, energy-to-count conversion, sr→arcsec²) to connect to the data.
+
+AGN emissivity (cross_spectra.py:556-580):
+
+
+agn_conv = 1e43 / (Lambda_0 * mpc_cm_h**3)   # Lambda_0 = 3e-23 erg cm³/s
+P_gX_agn = P_gX_agn_raw * agn_conv
+AGN are point sources. agn_emissivity_uk returns L_X/10⁴³ (dimensionless luminosity). The conversion agn_conv divides by Lambda_0 to express the AGN luminosity as an effective n_e² — putting it in the same (Mpc/h)³ cm⁻⁶ units as gas. So AGN already has a Lambda_0 applied; A_AGN absorbs the ratio (true Λ_eff / Lambda_0) plus the same geometric factors.
+
+The 10⁸ discrepancy is therefore entirely expected. For gas:
+
+(Mpc/h) cm⁻⁶ × Λ_eff × (Mpc/h→cm) / (4π) × A_eff × T_exp / E_mean × (sr→arcsec²)
+≈ 2.4×10⁻⁹ × 3×10⁻²³ × 4.6×10²⁴ / 12.6 × 1000 × 2000 / 1.6×10⁻⁹ / 4.25×10¹⁰
+This chain gives roughly A_gas ~ 10⁷–10⁸, consistent with the observed gap. The data wtheta column is the angular cross-correlation of galaxy positions with raw X-ray photon counts, not normalized to mean emissivity.
+
+The direct prediction figure cannot show the correct amplitude without A_gas. The right path forward is to run the MAP fit with the corrected HOD parameters (Fix 1 is in place), read the converged log10_A_gas, and either:
+
+Apply A_gas as a fixed rescaling in the direct prediction figure, or
+Rely on the fit result figure (plot_bestfit) which applies A_gas automatically.
+Do you want to run the S1 MAP fit now?
+
+The diagnosis is clear. At theta = 8–30 arcsec, the AGN PSF template alone gives 3.6 × 0.36 = 1.29 vs data 0.86 — it already overshoots the data. Adding any gas signal (even tiny A_gas = 10⁷) makes it worse. The optimizer correctly sends A_gas to the lower bound.
+
+The root cause is the gas model is too flat with theta:
+
+theta	data	gas_shape × 10⁷	model ratio
+8″	0.86	0.25	0.29×
+30″	0.22	0.18	0.82×
+300″	0.04	0.029	0.72×
+The data drops by 22× from 8″ to 300″. The gas model drops by only 8.7× over the same range. The model doesn't have enough curvature — the 2-halo term at large theta is too strong relative to the 1-halo term at small theta.
+
+Two separate issues are at play:
+
+AGN template overshoots at small theta: A_AGN = 3.6, PSF(8″) = 0.36 → model = 1.29 vs data = 0.86. The PSF template is normalized to peak at 1, so A_AGN is being driven to match data/PSF at intermediate theta rather than the small-theta peak.
+
+Gas shape slope mismatch: The 2-halo integral includes all halos (massive clusters with high b(M) × X̃(k|M)) producing too much large-scale power. For a galaxy sample at log10M* > 10, the large-theta signal is dominated by cluster halos that are merely correlated with galaxy positions, not hosting them.
+
+The fits cannot succeed until either the gas profile shape is corrected (e.g., higher beta_gas to concentrate signal in more massive halos, or a scale cut on the 2-halo X̃ integral), or the AGN normalization is re-examined. Do you want to look at which of these to tackle first?
+
+
+
+
+
+
+
+
+
+
+# THE LANGE 2025 benchmarks do not have enough signal to noise to converge.
+# Except for the full combination ?
 #LANge 2025
 cd /home/comparat/software/hod_mod
 
@@ -107,3 +274,20 @@ python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg1_bwpd_h
 # LRG2 — z=0.705  (f_Gamma free, init=0.8)
 python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg2_bwpd_wp  --plot
 python hod_mod/scripts/benchmarks/run_benchmark.py --model lange2025_lrg2_bwpd_hsc --plot
+
+
+
+final step for the model. 
+Energetics. Compute the total energy output by AGN in the sample. 
+Convert it into kinetic, thermal , radiative energy, quantify if the average n_e profile's excursion form the NFW can be achieved with this energy input over a the age of the universe.
+Look into hydrodynamical simulations to convert a total energy input into a net displacement on the gas profile.
+CAMELS
+https://arxiv.org/abs/2409.05815
+https://arxiv.org/abs/2512.09021
+https://arxiv.org/abs/2412.04559
+
+
+python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S5 --mode map --agn-model hod --agn-finc 0.003 --plot
+
+python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --mode map --agn-model hod --agn-finc 0.003 --plot
+

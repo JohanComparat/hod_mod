@@ -15,5 +15,8 @@ from .hod import (
     Leauthaud12HODModel,
 )
 from .clustering import HODClusteringPrediction, FullHaloModelPrediction
+from .cross_spectra import psf_window_ell, psf_king_profile, psf_king_window_ell
 from .sham import SHAMModel
 from .clf import CLFModel, VanDenBosch13CLFModel, BASILISKCLFModel
+from .agn import XrayAGNModel
+from .agn_ham import HamAGNModel, obscured_fraction

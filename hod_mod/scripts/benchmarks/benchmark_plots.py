@@ -162,8 +162,13 @@ def residual_panel(ax, x, obs, pred, err, pub=None, bands=None, fmt="o",
 # ---------------------------------------------------------------------------
 
 def plot_hod(fitter, params: dict, pub_params: dict | None,
-             model_key: str, output_dir: str):
-    """Save ``N_c``, ``N_s``, ``N_total`` vs halo mass."""
+             model_key: str, output_dir: str,
+             flatchain=None, param_names: list[str] | None = None):
+    """Save ``N_c``, ``N_s``, ``N_total`` vs halo mass.
+
+    If *flatchain* and *param_names* are provided, the 16th/84th percentile
+    posterior bands are drawn behind the MAP lines.
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -183,21 +188,56 @@ def plot_hod(fitter, params: dict, pub_params: dict | None,
     nt_m = nc_m + ns_m
 
     fig, ax = plt.subplots(figsize=(6, 5))
-    ax.loglog(m_np, nc_m, "-",  color=_COL_MAP, lw=2,   label=r"$\langle N_c \rangle$ MAP")
-    ax.loglog(m_np, ns_m, "--", color=_COL_MAP, lw=2,   label=r"$\langle N_s \rangle$ MAP")
-    ax.loglog(m_np, nt_m, ":",  color=_COL_MAP, lw=2.5, label=r"$\langle N \rangle$ MAP")
+
+    # MCMC posterior bands (16th / median / 84th percentile)
+    if flatchain is not None and param_names is not None:
+        fixed = fitter._fixed_params
+        step  = max(1, len(flatchain) // 300)
+        nc_samples, ns_samples = [], []
+        with jax.disable_jit():
+            for row in flatchain[::step]:
+                hp = {**fixed, **dict(zip(param_names, row))}
+                nc_i, ns_i = hod.nc_ns(log10m, hp)
+                nc_samples.append(np.asarray(nc_i))
+                ns_samples.append(np.asarray(ns_i))
+        nc_arr = np.array(nc_samples)   # (n_samples, n_mass)
+        ns_arr = np.array(ns_samples)
+        nt_arr = nc_arr + ns_arr
+        for arr, ls, label_base in [
+            (nc_arr, "-",  r"$N_c$"),
+            (ns_arr, "--", r"$N_s$"),
+            (nt_arr, ":",  r"$N$"),
+        ]:
+            med = np.median(arr, axis=0)
+            lo  = np.percentile(arr, 16, axis=0)
+            hi  = np.percentile(arr, 84, axis=0)
+            # clip zeros for log scale
+            med = np.clip(med, 1e-4, None)
+            lo  = np.clip(lo,  1e-4, None)
+            hi  = np.clip(hi,  1e-4, None)
+            ax.fill_between(m_np, lo, hi, color=_COL_MAP, alpha=0.18, lw=0)
+            ax.loglog(m_np, med, ls, color=_COL_MAP, lw=1.4, alpha=0.7,
+                      label=rf"$\langle {label_base[1:-1]} \rangle$ MCMC median")
+
+    # MAP lines on top
+    ax.loglog(m_np, np.clip(nc_m, 1e-4, None), "-",  color=_COL_MAP, lw=2,
+              label=r"$\langle N_c \rangle$ MAP")
+    ax.loglog(m_np, np.clip(ns_m, 1e-4, None), "--", color=_COL_MAP, lw=2,
+              label=r"$\langle N_s \rangle$ MAP")
+    ax.loglog(m_np, np.clip(nt_m, 1e-4, None), ":",  color=_COL_MAP, lw=2.5,
+              label=r"$\langle N \rangle$ MAP")
 
     if pub_params:
         try:
             with jax.disable_jit():
                 nc_p, ns_p = [np.asarray(x) for x in hod.nc_ns(log10m, pub_params)]
             nt_p = nc_p + ns_p
-            ax.loglog(m_np, nc_p, "-",  color=_COL_PUB, lw=1.5, alpha=0.8,
-                      label=r"$\langle N_c \rangle$ published")
-            ax.loglog(m_np, ns_p, "--", color=_COL_PUB, lw=1.5, alpha=0.8,
-                      label=r"$\langle N_s \rangle$ published")
-            ax.loglog(m_np, nt_p, ":",  color=_COL_PUB, lw=2.0, alpha=0.8,
-                      label=r"$\langle N \rangle$ published")
+            ax.loglog(m_np, np.clip(nc_p, 1e-4, None), "-",  color=_COL_PUB, lw=1.5,
+                      alpha=0.8, label=r"$\langle N_c \rangle$ published")
+            ax.loglog(m_np, np.clip(ns_p, 1e-4, None), "--", color=_COL_PUB, lw=1.5,
+                      alpha=0.8, label=r"$\langle N_s \rangle$ published")
+            ax.loglog(m_np, np.clip(nt_p, 1e-4, None), ":",  color=_COL_PUB, lw=2.0,
+                      alpha=0.8, label=r"$\langle N \rangle$ published")
         except Exception:
             pass
 
@@ -205,7 +245,7 @@ def plot_hod(fitter, params: dict, pub_params: dict | None,
     ax.set_ylabel(r"$\langle N \rangle_M$")
     ax.set_xlim(1e11, 1e16)
     ax.set_ylim(5e-3, 50)
-    ax.legend(fontsize=8, ncol=2, loc="upper left")
+    ax.legend(fontsize=7, ncol=2, loc="upper left")
     ax.grid(True, which="both", ls=":", alpha=0.3)
     ax.set_title(f"HOD: {model_key}", fontsize=10)
     fig.tight_layout()

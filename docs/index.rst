@@ -18,9 +18,18 @@ galaxy clustering and weak gravitational lensing observables using models of the
 
 .. toctree::
    :maxdepth: 2
+   :caption: HOD Model Reference
+
+   hod_more2015
+   hod_zumandelbaum2015
+
+.. toctree::
+   :maxdepth: 2
    :caption: Benchmark
 
    benchmark_more2015
+   benchmark_zumandelbaum2015
+   benchmark_zumandelbaum2015_multisample
 
 .. toctree::
    :maxdepth: 1
@@ -29,6 +38,7 @@ galaxy clustering and weak gravitational lensing observables using models of the
    bgs_ls10_wp_survey
    bgs_comparat2025_mstar10_joint_fit
    timing_joint_model
+   direct_prediction_gal_gas
 
 .. toctree::
    :maxdepth: 2

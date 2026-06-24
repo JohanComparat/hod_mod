@@ -59,6 +59,29 @@ For development, create and activate the conda/mamba environment, then install i
     mamba activate hod_mod
     pip install -e .
 
+With GNU Guix (no conda)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A conda-free, reproducible environment can be built with `GNU Guix
+<https://guix.gnu.org/>`_. Guix provides a hermetic Python interpreter and the
+C/Fortran toolchain inside a container; the Python libraries are installed with
+``pip`` into a virtualenv. See ``INSTALL_GUIX.md`` in the repository root for the
+full procedure and prerequisites. In short:
+
+.. code-block:: bash
+
+    guix shell --container --network -m manifest.scm   # hermetic Python + toolchain
+    python -m venv .venv-guix && source .venv-guix/bin/activate
+    export LD_LIBRARY_PATH="$GUIX_ENVIRONMENT/lib"     # so wheels find libz/libstdc++/…
+    pip install numpy scipy astropy matplotlib h5py \
+                jax jaxlib camb colossus AletheiaCosmo
+    pip install emcee pyyaml pandas                    # the hod_mod[fitting] extra
+    pip install --no-build-isolation --no-deps -e .
+
+The repository is pinned to a known-good Guix revision via ``channels.scm``; prefix
+the ``guix shell`` command with ``guix time-machine -C channels.scm --`` for a fully
+reproducible build.
+
 ---
 
 Quick start
@@ -87,6 +110,11 @@ Compute the projected correlation function :math:`w_p(r_p)` with a the HOD model
     rp     = jnp.logspace(-1, 1.5, 20)
     params = MoreHODModel.default_params()
     wp     = pred.wp(rp, pi_max=60.0, z=0.5, theta_cosmo=theta, hod_params=params)
+
+``"tinker08"`` is the library's dependency-free default HMF backend, used
+above for the quickstart. The project's fitting pipelines instead use
+``make_hmf("csst")`` (CSSTEMU) as their baseline — see
+:doc:`cosmology` for the full list of backends and why.
 
 ---
 

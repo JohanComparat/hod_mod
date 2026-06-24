@@ -1,3 +1,5 @@
+:orphan:
+
 .. _benchmark_lange2025:
 
 Lange+2025 — DESI DR1 Tracer Analysis

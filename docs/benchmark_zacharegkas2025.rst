@@ -1,3 +1,5 @@
+:orphan:
+
 .. _benchmark_zacharegkas2025:
 
 Benchmark: Zacharegkas+2025 — DES Y3

@@ -1,9 +1,20 @@
 from .power_spectrum import LinearPowerSpectrum
-from .nonlinear import NonLinearPowerSpectrum
+from .nonlinear import NonLinearPowerSpectrum, WHMSpectrum
 from .halo_mass_function import HaloMassFunction, make_hmf
 from .halo_profiles import HaloProfile, nfw_uk, einasto_rho
 from .halo_model import HaloModelPowerSpectrum
 from .beyond_linear_bias import BeyondLinearBiasMead21
+from .gas_profiles import (
+    PressureProfileA10,
+    PressureProfileDPM,
+    GasDensityDPM,
+    MetallicityProfileDPM,
+    temperature_from_dpm,
+    temperature_from_profiles,
+    xray_cooling_function,
+    ApecCoolingTable,
+    m200_to_m500c,
+)
 from .distances import (
     hubble_e,
     comoving_distance,
@@ -38,4 +49,14 @@ __all__ = [
     "age_of_universe",
     "distance_modulus",
     "BeyondLinearBiasMead21",
+    "WHMSpectrum",
+    "PressureProfileA10",
+    "PressureProfileDPM",
+    "GasDensityDPM",
+    "MetallicityProfileDPM",
+    "temperature_from_dpm",
+    "temperature_from_profiles",
+    "xray_cooling_function",
+    "ApecCoolingTable",
+    "m200_to_m500c",
 ]

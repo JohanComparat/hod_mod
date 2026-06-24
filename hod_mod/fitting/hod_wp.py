@@ -60,6 +60,7 @@ import jax.numpy as jnp
 from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
 from hod_mod.cosmology.halo_mass_function import make_hmf
 from hod_mod.cosmology.halo_profiles import HaloProfile
+from hod_mod.cosmology.beyond_linear_bias import BeyondLinearBiasMead21
 from hod_mod.galaxies.clustering import FullHaloModelPrediction
 from hod_mod.galaxies.hod import (
     HODModel,
@@ -149,6 +150,7 @@ class FitConfig:
     h_hubble:           float       = 0.6736
     cosmology:          dict | None = None   # None → use pk_lin.default_cosmology()
     use_free_cosmo:     bool        = False  # free Ω_m + S8 with Planck priors
+    use_bnl:            bool        = True   # beyond-linear halo bias (Mead & Verde 2021)
 
 
 # Backward-compatibility aliases
@@ -292,7 +294,7 @@ def load_config(path: str) -> FitConfig:
         rp_min             = float(data_cfg.get("rp_min", 0.1)),
         rp_max             = float(data_cfg.get("rp_max", 60.0)),
         hod_model          = model_cfg["hod_model"],
-        hmf_backend        = model_cfg.get("hmf_backend", "tinker08"),
+        hmf_backend        = model_cfg.get("hmf_backend", "csst"),
         z                  = float(model_cfg["z"]),
         pi_max             = float(model_cfg["pi_max"]),
         free_params        = free_params,
@@ -320,6 +322,7 @@ def load_config(path: str) -> FitConfig:
         h_hubble           = float(fits_cfg.get("h", 0.6736)),
         cosmology          = cosmology,
         use_free_cosmo     = bool(fit_cfg.get("use_free_cosmo", False)),
+        use_bnl            = bool(model_cfg.get("use_bnl", True)),
     )
 
 
@@ -801,7 +804,11 @@ class WpFitter:
         hmf     = make_hmf(self.config.hmf_backend, pk_func=self._pk_lin.pk_linear)
         hod_cls = HOD_MODELS[self.config.hod_model]
         hod     = hod_cls(hmf) if hod_cls._SINGLE_ARG_INIT else hod_cls(hmf, hmf.bias)
-        self.predictor = FullHaloModelPrediction(self._pk_lin, hod, HaloProfile(self.theta_cosmo))
+        bnl     = BeyondLinearBiasMead21() if self.config.use_bnl else None
+        self.predictor = FullHaloModelPrediction(
+            self._pk_lin, hod, HaloProfile(self.theta_cosmo),
+            bnl_model=bnl,
+        )
 
     def _build_icov(self):
         if self._cov_wp is not None:
@@ -1131,11 +1138,14 @@ class DeltaSigmaFitter(WpFitter):
     """Fit an HOD model to ΔΣ(R) data only (no wp constraint).
 
     Uses the galaxy–matter cross-correlation ΔΣ(R) and optionally the
-    galaxy number density n_g as constraints.  The log-posterior is::
+    galaxy number density n_g as constraints.  The log-posterior is:
+
+    .. code-block:: text
 
         log P(θ|d) = −½ (χ²_ΔΣ + χ²_n_g)
 
     Config requirements:
+
     - ``ds_file`` must point to a valid CSV with columns
       ``R_hMpc``, ``ds_Msun_h_pc2``, ``ds_err_Msun_h_pc2``.
     - ``ng_obs`` and ``ng_frac_err`` control the n_g constraint weight

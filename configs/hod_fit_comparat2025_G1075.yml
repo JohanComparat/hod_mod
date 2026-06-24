@@ -22,7 +22,7 @@ data:
 
 model:
   hod_model:   ZuMandelbaum15HODModel
-  hmf_backend: tinker08
+  hmf_backend: csst
   z:           0.26
   pi_max:      100.0
 

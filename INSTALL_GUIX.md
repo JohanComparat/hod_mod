@@ -54,24 +54,31 @@ sudo guix archive --authorize < "$KD/bordeaux.guix.gnu.org.pub"
 #    guix describe -f channels > channels.scm
 
 # 1. Enter a Guix container with network access.
-#    Reproducible variant: prefix with  guix time-machine -C channels.scm --
-guix shell --container --network -m manifest.scm
+#    The time-machine pins Guix to channels.scm -> Python 3.11, which is REQUIRED:
+#    camb 1.4.0 (the validated version) is source-only and supports Python <= 3.11.
+source /applis/site/guix-start.sh
+guix time-machine -C channels.scm -- shell --container --network -m manifest.scm
+#    (Plain `guix shell --container --network -m manifest.scm` uses your host's Guix,
+#     which may ship Python 3.12 — see the camb gotcha below.)
 
 # --- everything below runs INSIDE the container ---
 
 # 2. Create a virtualenv (lives in the repo, reused across sessions).
+#    Delete any existing one first — a venv is bound to the exact Guix profile, so a
+#    stale .venv-guix from another revision/Python version will break.
+rm -rf .venv-guix
 python -m venv .venv-guix
 source .venv-guix/bin/activate
 
 # 3. Let the Guix Python loader find the wheels' shared libraries.
 export LD_LIBRARY_PATH="$GUIX_ENVIRONMENT/lib"
 
-# 4. Install the Python dependencies from PyPI (wheels).
-python -m pip install --upgrade pip
-pip install numpy scipy astropy matplotlib h5py \
-            jax jaxlib colossus AletheiaCosmo camb
-pip install emcee pyyaml pandas   # the hod_mod[fitting] extra (needed for hod_mod.fitting)
-pip install pytest pytest-cov sphinx sphinx-rtd-theme numpydoc   # the dev extra
+# 4. Install the pinned, validated Python dependencies (matches the conda env).
+#    camb 1.4.0 has no wheel — it compiles from source here (the Guix gfortran does it),
+#    so this step is slower the first time.
+python -m pip install --upgrade pip setuptools
+pip install -r requirements-guix.txt
+pip install pytest pytest-cov sphinx sphinx-rtd-theme numpydoc   # dev/test/docs tools
 
 # 5. Install hod_mod itself (editable, deps already satisfied above).
 pip install --no-build-isolation --no-deps -e .
@@ -86,7 +93,8 @@ JAX_PLATFORMS=cpu python -m pytest tests/ -q
 Re-enter the **same** container, re-activate the venv, and re-export the library path:
 
 ```bash
-guix shell --container --network -m manifest.scm   # same manifest as before!
+source /applis/site/guix-start.sh
+guix time-machine -C channels.scm -- shell --container --network -m manifest.scm  # same as before!
 source .venv-guix/bin/activate
 export LD_LIBRARY_PATH="$GUIX_ENVIRONMENT/lib"
 ```
@@ -104,7 +112,15 @@ export LD_LIBRARY_PATH="$GUIX_ENVIRONMENT/lib"
   the `LD_LIBRARY_PATH` trick is safe. `--network` is needed so `pip` can reach PyPI.
 - **CPU-only JAX:** set `JAX_PLATFORMS=cpu`. The PyPI `jaxlib` wheel is the CPU build;
   install the CUDA variant instead if you need GPU.
-- `.venv-guix/` is git-ignored; delete it to rebuild from scratch.
+- **Pin the versions / use the time-machine.** `requirements-guix.txt` pins the validated
+  set (`camb==1.4.0`, `numpy==2.4.6`, …). Installing an *unpinned* newer camb on Python
+  3.12 (what a recent host Guix ships without the time-machine) fails under numpy ≥ 2.4
+  with ``TypeError: only 0-dimensional arrays can be converted to Python scalars`` at
+  ``camb/model.py:691`` — the cause of ~140 test failures. The `guix time-machine -C
+  channels.scm` step locks Python 3.11 so camb 1.4.0 builds and behaves as validated.
+- `.venv-guix/` is git-ignored; delete it to rebuild from scratch. Recreate it whenever you
+  switch Guix revision/Python version (e.g. moving from a plain `guix shell` py3.12 env to
+  the time-machined py3.11 env), since the venv is bound to the exact Guix profile.
 
 ## Alternative: Guix-native packages
 

@@ -1901,3 +1901,84 @@ detail and :mod:`hod_mod.scripts.fitting.calibrate_ham_agn_lx`.
    :alt: ZM15 delta sigma benchmark
 
    SDSS DR7 :math:`\Delta\Sigma(R)` at MAP (ZM15 published parameters).
+
+----
+
+Timing — CPU vs GPU
+-------------------------------
+
+The joint BGS fit (:mod:`hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint`)
+runs on **JAX**, so it can execute on either CPU or GPU.  The backend is selected
+per process by the ``JAX_PLATFORMS`` environment variable (``cpu`` or ``cuda``);
+the ``hod_mod`` environment sets ``JAX_PLATFORMS=cpu`` by default.
+
+**For this fit, CPU is faster** — by roughly 4× per likelihood evaluation and ~2×
+in JIT-compile time.  The benchmark below times one
+:meth:`JointZM15.log_prob` evaluation (the fit's compute core: for each of the 8
+LS10-BGS stellar-mass bins it predicts :math:`w_p(r_p)` via the Ogata
+:math:`j_0` Hankel transform plus :math:`\bar n_g`), measured on an NVIDIA
+RTX 3060 Laptop GPU vs CPU with ``jax`` 0.9.2 (``wp + n_gal``, no lensing).
+
+.. list-table:: JointZM15.log_prob — CPU vs GPU (8 mass bins, wp + n_gal)
+   :header-rows: 1
+   :widths: 40 20 20 20
+
+   * - Metric
+     - CPU
+     - GPU (RTX 3060)
+     - Winner
+   * - Infra build (CAMB + HMF)
+     - 0.22 s
+     - 0.29 s
+     - ~tie
+   * - First call / JIT compile
+     - 245 s
+     - 477 s
+     - CPU ~2×
+   * - Steady-state per evaluation
+     - **8.5 s**
+     - **34.9 s** (±6.1)
+     - **CPU ~4.1×**
+   * - ``log_prob(x0)`` value
+     - −20889.4994
+     - −20889.4943
+     - match (float tol)
+
+The matching ``log_prob`` values confirm an identical workload on both backends.
+
+.. rubric:: Why the GPU is slower here
+
+This is the expected behaviour for this workload, not a misconfiguration:
+
+- The halo-model arrays are modest (:math:`n_k\approx1024`, :math:`n_m\approx512`)
+  and do not saturate the GPU.
+- The likelihood is a **Python loop over the 8 mass bins**, each performing an
+  Ogata :math:`j_0` Hankel transform — many small sequential kernels — and each
+  ``log_prob`` returns a **scalar to** ``scipy``/``emcee``, forcing a
+  host↔device synchronisation every call.  GPU kernel-launch and transfer
+  overhead therefore dominate (and drive the large ±6 s scatter).
+- XLA's GPU compilation is heavier (477 s vs 245 s).
+
+**Recommendation:** run the fit on CPU (keep ``JAX_PLATFORMS=cpu``).  The GPU
+gives no benefit here.  At ~8.5 s/eval on CPU, a full Powell MAP or an
+80,000-evaluation MCMC is expensive; the lever for speed is the per-evaluation
+cost itself (e.g. coarser :math:`w_p` :math:`k`/:math:`r` grids, or vectorising
+the per-bin loop), not the GPU.
+
+.. rubric:: Reproducing the benchmark
+
+The harness :mod:`hod_mod.scripts.timing.bench_bgs_zm15_joint` times
+``log_prob`` (separating JIT compile from steady state, with a host-device sync
+each call for correct asynchronous-GPU timing):
+
+.. code-block:: bash
+
+   # both backends + comparison table in one command
+   python -m hod_mod.scripts.timing.bench_bgs_zm15_joint --both
+
+   # single backend
+   JAX_PLATFORMS=cpu  python -m hod_mod.scripts.timing.bench_bgs_zm15_joint
+   JAX_PLATFORMS=cuda python -m hod_mod.scripts.timing.bench_bgs_zm15_joint
+
+   # include lensing (ESD) in the timed workload
+   python -m hod_mod.scripts.timing.bench_bgs_zm15_joint --both --surveys HSC DES KIDS

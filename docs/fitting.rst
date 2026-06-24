@@ -202,7 +202,8 @@ by ``load_config``):
     rp_min:       0.3           # Mpc/h
     rp_max:       30.0          # Mpc/h
     hod_model:    MoreHODModel
-    hmf_backend:  tinker08
+    hmf_backend:  csst           # pipeline baseline (default if omitted); use
+                                  # tinker08 to reproduce literature results
     z:            0.15
     pi_max:       100.0         # Mpc/h
 
