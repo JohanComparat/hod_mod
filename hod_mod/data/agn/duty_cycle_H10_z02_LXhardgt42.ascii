@@ -1,0 +1,7 @@
+# Haggard 2010 (taken from Georgeakakis 2017) , z=0.2, LX(2-10keV)>10**42
+# log10(stellar mass), log10(duty cycle)
+# MS    DC    DC_up   DC_low    
+10.12  -2.15  -2.03   -2.27
+10.67  -2.02  -1.92   -2.13
+11.21  -1.60  -1.51   -1.72
+11.77  -1.23  -1.08   -1.45

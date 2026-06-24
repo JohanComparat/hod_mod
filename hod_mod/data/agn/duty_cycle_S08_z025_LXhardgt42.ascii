@@ -1,0 +1,6 @@
+# Shi 2008 (taken from Georgeakakis 2017) , z=0.25, LX(2-10keV)>10**42
+# log10(stellar mass), log10(duty cycle)
+# MS    DC    DC_up   DC_low    
+9.99  -2.57   -2.39   -2.76
+10.57 -1.98   -1.88   -2.14
+11.11 -1.93   -1.75   -2.09
