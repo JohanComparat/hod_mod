@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hod_mod"
-version = "0.0.4"
+version = "0.0.5"
 description = "HOD galaxy clustering and weak lensing prediction and fitting"
 authors = [{name = "Johan Comparat", email = "johan.comparat@pm.me"}]
 readme = "README.md"
