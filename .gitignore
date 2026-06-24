@@ -14,6 +14,7 @@ sdist/
 
 # Virtual environments
 .venv/
+.venv-guix/
 venv/
 env/
 
@@ -54,3 +55,4 @@ coverage.xml
 
 # macOS
 __MACOSX/
+oarsub/logs/
