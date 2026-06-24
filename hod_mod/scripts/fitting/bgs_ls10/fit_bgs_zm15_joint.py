@@ -82,6 +82,11 @@ CLI options
 --pi-max-mpc FLOAT   wp π_max in physical Mpc (default 100)
 --z-eff FLOAT     Fallback redshift for bins without measured z_mean (default 0.13)
 --hmf-backend STR HMF multiplicity function: tinker08, bocquet16, … (default tinker08)
+--smf-file PATH   Observed SMF file (sum_stat joint *_smf_* HDF5) for comparison
+                  only — NOT fitted. Default: auto-discover the widest-coverage
+                  BGS_Mstar* file under --smf-data-dir.
+--smf-data-dir PATH  Root searched for an observed SMF file when --smf-file is
+                  omitted (default ~/software/sum_stat/data)
 --ng-frac-err-floor FLOAT  Minimum fractional error on n_g (default 0.05)
 --gaussian-prior  Add Gaussian prior from published ZM15 values (Table 2)
 --n-walkers INT   emcee walkers (default 32)
@@ -96,6 +101,11 @@ map_result.json     MAP parameters, chi2, per-bin breakdown
 chain.h5            emcee HDF5 backend (written incrementally; used for resume)
 flatchain.npz       Flat MCMC chain (written once after all steps complete)
 map_bestfit.pdf     Best-fit figure: wp + ΔΣ per survey for every bin
+hod_occupation.pdf  N_cen / N_sat occupation curves at MAP
+shmr.pdf            Stellar-to-halo mass relation vs literature
+stellar_mass_function.pdf  Model SMF vs observed sum_stat SMF (NOT fitted)
+satellite_fraction.pdf     Model satellite fraction f_sat(>M*)
+zm15_montage.pdf    Combined 2×2 montage: wp, ΔΣ, SMF, SHMR (ZM15 layout)
 
 Usage examples
 --------------
@@ -768,6 +778,323 @@ def plot_hod_shmr(bins, map_result, out_dir, z_eff=0.13):
 
 
 # ---------------------------------------------------------------------------
+# Stellar mass function, satellite fraction, and combined montage
+# ---------------------------------------------------------------------------
+
+def _discover_smf_file(smf_data_dir: str) -> str | None:
+    """Locate the widest-coverage observed SMF file (lowest M* threshold).
+
+    Globs ``<smf_data_dir>/BGS_Mstar*/*joint_smf*.h5`` and returns the file whose
+    threshold (parsed from the ``BGS_Mstar<thr>`` directory name) is lowest — the
+    one spanning the largest stellar-mass range.  Returns ``None`` if none found.
+    """
+    paths = glob.glob(os.path.join(smf_data_dir, "BGS_Mstar*", "*joint_smf*.h5"))
+    if not paths:
+        return None
+
+    def _thr(p: str) -> float:
+        m = re.search(r"BGS_Mstar([0-9.]+)", p)
+        return float(m.group(1)) if m else np.inf
+
+    return min(paths, key=_thr)
+
+
+def load_observed_smf(smf_file: str, z_fallback: float = 0.13) -> dict:
+    """Read the observed stellar mass function from a sum_stat joint file.
+
+    This SMF is **not** part of the joint fit — it is an independent observable
+    used purely for comparison.  Returns physical ``log10(M*/M_sun)`` centres and
+    ``Phi`` [h^3 Mpc^-3 dex^-1], with non-positive / non-finite bins dropped.
+    """
+    from hod_mod.data_io.sum_stat_reader import SumStatReader
+
+    reader = SumStatReader.from_hdf5(smf_file)
+    s = reader.smf()
+    log10mstar = np.asarray(s["log10mstar"], dtype=float)
+    phi        = np.asarray(s["phi"], dtype=float)
+    phi_err_in = s.get("phi_err")
+    good = np.isfinite(phi) & (phi > 0)
+
+    phi_err = None
+    if phi_err_in is not None:
+        phi_err_in = np.asarray(phi_err_in, dtype=float)
+        if phi_err_in.shape == phi.shape:
+            phi_err = phi_err_in[good]
+
+    attrs = s.get("attrs", {})
+    z = attrs.get("z_mean", None)
+    try:
+        z = float(z)
+        if not np.isfinite(z):
+            raise ValueError
+    except (TypeError, ValueError):
+        try:
+            z = 0.5 * (float(attrs.get("z_min")) + float(attrs.get("z_max")))
+        except (TypeError, ValueError):
+            z = z_fallback
+
+    return {
+        "log10mstar": log10mstar[good],
+        "phi":        phi[good],
+        "phi_err":    phi_err,
+        "z":          float(z),
+        "h":          float(reader.h()),
+    }
+
+
+def predict_smf(predictor, theta_cosmo, params, z, log10mstar_grid) -> np.ndarray:
+    """Model stellar mass function ``Phi(M*)`` [h^3 Mpc^-3 dex^-1].
+
+    Built from the predictor's cumulative number density: for each threshold
+    ``M*_i``, ``N(>M*_i) = predictor.n_gal`` with ``log10m_star_thresh=M*_i`` and
+    **no** ``log10m_star_max`` (so ``nc_ns`` returns the cumulative occupation).
+    The SMF is the negative derivative ``Phi = -dN/dlog10M*``.  Native predictor
+    units are already h^3 Mpc^-3, directly comparable to the observed SMF.
+    """
+    grid  = np.asarray(log10mstar_grid, dtype=float)
+    n_cum = np.empty_like(grid)
+    for i, mthr in enumerate(grid):
+        p = dict(params)
+        p["log10m_star_thresh"] = float(mthr)
+        p.pop("log10m_star_max", None)
+        try:
+            n_cum[i] = float(predictor.n_gal(z, theta_cosmo, p))
+        except Exception:
+            n_cum[i] = np.nan
+    phi = -np.gradient(n_cum, grid)        # N decreases with threshold
+    phi[~(phi > 0)] = np.nan
+    return phi
+
+
+def _n_cen_n_sat(predictor, z, theta_cosmo, params) -> tuple[float, float]:
+    """Central and satellite number densities [h^3 Mpc^-3] for *params*.
+
+    Mirrors :meth:`FullHaloModelPrediction.n_gal` (clustering.py) but keeps the
+    central/satellite occupation integrals separate.
+    """
+    import jax
+    hod    = predictor._hod
+    m_grid = np.asarray(hod._m_grid, dtype=float)
+    dndm   = np.asarray(hod._hmf.dndm(hod._m_grid, float(z), theta_cosmo), dtype=float)
+    with jax.disable_jit():
+        nc, ns = hod.nc_ns(hod._log10m_grid, params)
+    n_cen = float(np.trapezoid(dndm * np.asarray(nc, dtype=float), m_grid))
+    n_sat = float(np.trapezoid(dndm * np.asarray(ns, dtype=float), m_grid))
+    return n_cen, n_sat
+
+
+def plot_smf(bins, predictor, theta_cosmo, h, map_result, obs_smf, out_dir):
+    """SMF figure: model curve + per-bin model points vs observed (not fitted)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    params  = map_result["params"]
+    z_model = obs_smf["z"] if obs_smf is not None else (bins[0].get("z") or 0.13)
+    z_fit   = bins[0].get("z") or 0.13
+
+    fig, ax = plt.subplots(figsize=(6.5, 5))
+
+    # observed (independent, not fitted)
+    if obs_smf is not None:
+        ax.errorbar(obs_smf["log10mstar"], obs_smf["phi"], yerr=obs_smf["phi_err"],
+                    fmt="o", ms=4, color="k", zorder=3,
+                    label=fr"observed (sum_stat, not fitted, $z={z_model:.2f}$)")
+
+    # model continuous curve
+    grid    = np.linspace(9.5, 12.0, 60)
+    phi_mod = predict_smf(predictor, theta_cosmo, params, z_model, grid)
+    ax.plot(grid, phi_mod, "-", color="C0", lw=2, zorder=2,
+            label="ZM15 iHOD MAP (model)")
+
+    # model per fit-bin points: n_gal(bin) / Δlog10M*
+    mb, phib = [], []
+    for b in bins:
+        p = dict(params)
+        p["log10m_star_thresh"] = b["thresh"]
+        p["log10m_star_max"]    = b["max"]
+        width = b["max"] - b["thresh"]
+        try:
+            ng = float(predictor.n_gal(z_model, theta_cosmo, p))
+            if width > 0 and np.isfinite(ng):
+                mb.append(0.5 * (b["thresh"] + b["max"]))
+                phib.append(ng / width)
+        except Exception:
+            pass
+    if mb:
+        ax.plot(mb, phib, "s", color="C1", ms=6, zorder=4,
+                label=r"model fit-bin $\bar n/\Delta\log M_*$")
+
+    ax.set_yscale("log")
+    ax.set_xlim(9.5, 12.0)
+    ax.set_xlabel(r"$\log_{10}(M_*\,/\,M_\odot)$")
+    ax.set_ylabel(r"$\Phi$ [$h^3\,{\rm Mpc}^{-3}\,{\rm dex}^{-1}$]")
+    ax.set_title(f"Stellar mass function — model vs observed (not fitted)\n"
+                 fr"model at $z={z_model:.2f}$; fit bins at $z\approx{z_fit:.2f}$")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    out = os.path.join(out_dir, "stellar_mass_function.pdf")
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  → {out}")
+
+
+def plot_satellite_fraction(predictor, theta_cosmo, map_result, out_dir, z_eff,
+                            mstar_grid=None):
+    """Model satellite fraction f_sat(>M*) vs stellar-mass threshold (ZM15-style)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    params = map_result["params"]
+    if mstar_grid is None:
+        mstar_grid = np.linspace(9.5, 11.6, 30)
+    fsat = np.full(mstar_grid.shape, np.nan)
+    for i, mthr in enumerate(mstar_grid):
+        p = dict(params)
+        p["log10m_star_thresh"] = float(mthr)
+        p.pop("log10m_star_max", None)
+        try:
+            nc, ns = _n_cen_n_sat(predictor, z_eff, theta_cosmo, p)
+            tot = nc + ns
+            fsat[i] = ns / tot if tot > 0 else np.nan
+        except Exception:
+            pass
+
+    fig, ax = plt.subplots(figsize=(6, 4.5))
+    ax.plot(mstar_grid, fsat, "-", color="C3", lw=2)
+    ax.set_xlabel(r"$\log_{10}(M_*\,/\,M_\odot)$ threshold")
+    ax.set_ylabel(r"satellite fraction $f_{\rm sat}(>M_*)$")
+    top = np.nanmax(fsat) if np.any(np.isfinite(fsat)) else 0.5
+    ax.set_ylim(0, max(0.05, top * 1.15))
+    ax.set_title(fr"ZM15 iHOD MAP — satellite fraction ($z={z_eff:.2f}$)")
+    fig.tight_layout()
+    out = os.path.join(out_dir, "satellite_fraction.pdf")
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  → {out}")
+
+
+def plot_montage(bins, predictor, theta_cosmo, h, pi_max_h, map_result, obs_smf,
+                 out_dir, surveys, ref_survey="HSC"):
+    """Combined 2×2 publication montage: wp, ΔΣ, SMF, SHMR (ZM15 layout)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import jax.numpy as jnp
+    from hod_mod.galaxies.hod import _mstar_from_mh_zu15
+
+    params = map_result["params"]
+    cmap   = plt.get_cmap("viridis")
+    n_bins = len(bins)
+    colors = [cmap(i / max(n_bins - 1, 1)) for i in range(n_bins)]
+
+    # reference lensing survey for panel B
+    ref = ref_survey if any(ref_survey in b["surveys"] for b in bins) else None
+    if ref is None:
+        for s in surveys:
+            if any(s in b["surveys"] for b in bins):
+                ref = s
+                break
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 9))
+    axA, axB, axC, axD = axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]
+
+    # --- Panel A: wp(rp) all bins ---
+    for b, col in zip(bins, colors):
+        z = b.get("z") or 0.13
+        p = dict(params)
+        p["log10m_star_thresh"] = b["thresh"]
+        p["log10m_star_max"]    = b["max"]
+        rp     = b["rp"]
+        wp_err = np.sqrt(np.diag(np.linalg.inv(b["icov_wp"])))
+        try:
+            wp_mod = np.asarray(predictor.wp(jnp.array(rp), pi_max_h, z, theta_cosmo, p))
+        except Exception:
+            wp_mod = np.full_like(rp, np.nan)
+        axA.errorbar(rp, b["wp_obs"], yerr=wp_err, fmt="o", ms=3, color=col, alpha=0.6)
+        axA.plot(rp, wp_mod, "-", color=col, lw=1.5, label=b["label"])
+    axA.set_xscale("log"); axA.set_yscale("log")
+    axA.set_xlabel(r"$r_p$ [Mpc/$h$]"); axA.set_ylabel(r"$w_p$ [Mpc/$h$]")
+    axA.set_title("Projected clustering")
+    axA.legend(fontsize=6, ncol=2, title=r"$\log M_*$ bin")
+
+    # --- Panel B: ΔΣ(R) all bins, reference survey ---
+    if ref is not None:
+        for b, col in zip(bins, colors):
+            if ref not in b["surveys"]:
+                continue
+            z = b.get("z") or 0.13
+            p = dict(params)
+            p["log10m_star_thresh"] = b["thresh"]
+            p["log10m_star_max"]    = b["max"]
+            R, ds_obs, icov = b["surveys"][ref]
+            ds_err = np.sqrt(np.diag(np.linalg.inv(icov)))
+            try:
+                ds_mod = np.asarray(predictor.delta_sigma(jnp.array(R), z, theta_cosmo, p)) / h
+            except Exception:
+                ds_mod = np.full_like(R, np.nan)
+            axB.errorbar(R, ds_obs, yerr=ds_err, fmt="o", ms=3, color=col, alpha=0.6)
+            axB.plot(R, ds_mod, "-", color=col, lw=1.5)
+    axB.set_xscale("log"); axB.set_yscale("log")
+    axB.set_xlabel(r"$R$ [Mpc/$h$]")
+    axB.set_ylabel(r"$\Delta\Sigma$ [$M_\odot\,h\,{\rm pc}^{-2}$]")
+    axB.set_title(f"Galaxy-galaxy lensing ({ref or 'n/a'})")
+
+    # --- Panel C: SMF model vs observed ---
+    z_model = obs_smf["z"] if obs_smf is not None else (bins[0].get("z") or 0.13)
+    if obs_smf is not None:
+        axC.errorbar(obs_smf["log10mstar"], obs_smf["phi"], yerr=obs_smf["phi_err"],
+                     fmt="o", ms=4, color="k", label="observed (not fitted)")
+    grid = np.linspace(9.5, 12.0, 60)
+    axC.plot(grid, predict_smf(predictor, theta_cosmo, params, z_model, grid),
+             "-", color="C0", lw=2, label="model")
+    axC.set_yscale("log"); axC.set_xlim(9.5, 12.0)
+    axC.set_xlabel(r"$\log_{10}(M_*/M_\odot)$")
+    axC.set_ylabel(r"$\Phi$ [$h^3{\rm Mpc}^{-3}{\rm dex}^{-1}$]")
+    axC.set_title("Stellar mass function")
+    axC.legend(fontsize=8)
+
+    # --- Panel D: SHMR ---
+    log10mh = jnp.linspace(10.5, 15.0, 200)
+    mh      = np.asarray(log10mh)
+    mstar = np.asarray(_mstar_from_mh_zu15(
+        log10mh, lg_m1h=params["lg_m1h"], lg_m0star=params["lg_m0star"],
+        beta=params["beta"], delta=params["delta"], gamma=params["gamma"]))
+    axD.plot(mh, mstar, "-", color="C0", lw=2, label="ZM15 iHOD MAP")
+    mstar_pub = np.asarray(_mstar_from_mh_zu15(
+        log10mh, lg_m1h=PUBLISHED["lg_m1h"][0], lg_m0star=PUBLISHED["lg_m0star"][0],
+        beta=PUBLISHED["beta"][0], delta=PUBLISHED["delta"][0], gamma=PUBLISHED["gamma"][0]))
+    axD.plot(mh, mstar_pub, "--", color="C0", lw=1.2, label="ZM15 published")
+    axD.set_xlabel(r"$\log_{10}(M_h/[M_\odot h^{-1}])$")
+    axD.set_ylabel(r"$\log_{10}(M_*/M_\odot)$")
+    axD.set_title("Stellar-to-halo mass relation")
+    axD.legend(fontsize=8)
+
+    chi2 = map_result.get("chi2", 0); ndof = map_result.get("ndof", 1)
+    fig.suptitle(
+        f"ZM15 iHOD joint fit — BGS LS10   "
+        f"$\\chi^2/\\mathrm{{dof}}={chi2:.0f}/{ndof}={chi2/max(ndof,1):.2f}$",
+        fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    out = os.path.join(out_dir, "zm15_montage.pdf")
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  → {out}")
+
+
+def plot_all(bins, predictor, theta_cosmo, h, pi_max_h, map_result, obs_smf,
+             out_dir, surveys, z_eff):
+    """Generate the full ZM15-style figure set from a MAP result."""
+    plot_map(bins, predictor, theta_cosmo, h, pi_max_h, map_result, out_dir, surveys)
+    plot_hod_shmr(bins, map_result, out_dir=out_dir, z_eff=z_eff)
+    plot_smf(bins, predictor, theta_cosmo, h, map_result, obs_smf, out_dir)
+    plot_satellite_fraction(predictor, theta_cosmo, map_result, out_dir, z_eff=z_eff)
+    plot_montage(bins, predictor, theta_cosmo, h, pi_max_h, map_result, obs_smf,
+                 out_dir, surveys)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -791,6 +1118,13 @@ def main():
     p.add_argument("--pi-max-mpc", type=float, default=100.0,
                    help="wp pi_max in physical Mpc (sum_stat value; converted to Mpc/h)")
     p.add_argument("--hmf-backend", default="tinker08")
+    p.add_argument("--smf-file", default=None,
+                   help="Observed SMF file (sum_stat joint *_smf_* HDF5) used only "
+                        "for comparison (NOT fitted). Default: auto-discover the "
+                        "widest-coverage BGS_Mstar* file under --smf-data-dir.")
+    p.add_argument("--smf-data-dir", default=os.path.expanduser(
+        "~/software/sum_stat/data"),
+        help="Root searched for an observed SMF file when --smf-file is omitted")
     p.add_argument("--ng-frac-err-floor", type=float, default=0.05,
                    help="Minimum fractional error on n_g (default 0.05)")
     p.add_argument("--gaussian-prior", action="store_true",
@@ -832,6 +1166,20 @@ def main():
         bins, predictor, theta_cosmo, h=h, z=args.z_eff,
         pi_max_h=args.pi_max_mpc * h, gaussian_prior=args.gaussian_prior)
 
+    # Observed SMF (independent — NOT part of the fit), loaded for comparison.
+    smf_file = args.smf_file or _discover_smf_file(args.smf_data_dir)
+    obs_smf = None
+    if smf_file and os.path.exists(smf_file):
+        try:
+            obs_smf = load_observed_smf(smf_file, z_fallback=args.z_eff)
+            print(f"Observed SMF (not fitted): {os.path.basename(smf_file)}  "
+                  f"({len(obs_smf['log10mstar'])} pts, z={obs_smf['z']:.3f})")
+        except Exception as exc:
+            print(f"  [warn] could not load observed SMF from {smf_file}: {exc}")
+    else:
+        print(f"  [warn] no observed SMF file found under {args.smf_data_dir}"
+              f"/BGS_Mstar*/*joint_smf*.h5 — SMF panels will be model-only")
+
     map_json = os.path.join(args.out_dir, "map_result.json")
     map_result = None
 
@@ -842,11 +1190,10 @@ def main():
         with open(map_json) as fh:
             map_result = json.load(fh)
         print(f"Loaded MAP result: chi2/dof={map_result['chi2_per_dof']:.3f}")
-        plot_map(bins, predictor, theta_cosmo, h,
-                 pi_max_h=args.pi_max_mpc * h,
-                 map_result=map_result, out_dir=args.out_dir,
-                 surveys=args.surveys)
-        plot_hod_shmr(bins, map_result, out_dir=args.out_dir, z_eff=args.z_eff)
+        plot_all(bins, predictor, theta_cosmo, h,
+                 pi_max_h=args.pi_max_mpc * h, map_result=map_result,
+                 obs_smf=obs_smf, out_dir=args.out_dir,
+                 surveys=args.surveys, z_eff=args.z_eff)
         print(f"\nAll done in {(time.time() - t0) / 60:.1f} min.")
         return
 
@@ -862,11 +1209,10 @@ def main():
             pub = PUBLISHED[name][0]
             print(f"{name:14s} {map_result['params'][name]:10.4f} {pub:12.4f}")
         print(f"MAP result -> {map_json}")
-        plot_map(bins, predictor, theta_cosmo, h,
-                 pi_max_h=args.pi_max_mpc * h,
-                 map_result=map_result, out_dir=args.out_dir,
-                 surveys=args.surveys)
-        plot_hod_shmr(bins, map_result, out_dir=args.out_dir, z_eff=args.z_eff)
+        plot_all(bins, predictor, theta_cosmo, h,
+                 pi_max_h=args.pi_max_mpc * h, map_result=map_result,
+                 obs_smf=obs_smf, out_dir=args.out_dir,
+                 surveys=args.surveys, z_eff=args.z_eff)
 
     if args.mode in ("mcmc", "both"):
         chain = os.path.join(args.out_dir, "flatchain.npz")
