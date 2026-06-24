@@ -20,7 +20,7 @@
 
 #OAR -n bgs_zm15_joint_mcmc
 #OAR --project PROJECTNAME
-#OAR -l /nodes=1/core=8,walltime=04:00:00
+#OAR -l /nodes=1/core=16,walltime=10:00:00
 #OAR --stdout oarsub/logs/%jobid%.bgs_zm15_joint_mcmc.out
 #OAR --stderr oarsub/logs/%jobid%.bgs_zm15_joint_mcmc.err
 # --- auto-resubmit alternative (CiGri/besteffort): the resumable chain makes
@@ -38,8 +38,17 @@ OUT_DIR="results/bgs_zm15_joint_wp_ngal"              # repo-relative
 
 # --- environment ------------------------------------------------------------
 # GRICAD provides conda via /applis; activate the project env.
-source /applis/environments/conda.sh
-conda activate "${CONDA_ENV}"
+export MAMBA_EXE='/home/comparaj/miniforge3/bin/mamba';
+export MAMBA_ROOT_PREFIX='/home/comparaj/miniforge3';
+__mamba_setup="$("$MAMBA_EXE" shell hook --shell bash --root-prefix "$MAMBA_ROOT_PREFIX" 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__mamba_setup"
+else
+    alias mamba="$MAMBA_EXE"  # Fallback on help from mamba activate
+fi
+unset __mamba_setup
+# source /applis/environments/conda.sh
+mamba activate "${CONDA_ENV}"
 
 # emcee is serial; let JAX/XLA + BLAS use the allocated cores for the per-step
 # halo-model linear algebra.
