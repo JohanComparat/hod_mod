@@ -464,65 +464,6 @@ def eisenstein_hu_pk_nowiggle(k: jnp.ndarray, theta: dict) -> jnp.ndarray:
     return pk / pk0
 
 
-class ClassLinearPowerSpectrum:
-    """Linear P(k, z) computed with CLASS (Blas, Lesgourgues & Tram 2011).
-
-    CLASS is called at each ``pk_linear`` call; the result is interpolated onto
-    the requested k grid.  Supports CPL dark energy via ``w0``/``wa`` keys.
-
-    Parameter convention is identical to ``LinearPowerSpectrum`` (CAMB).
-    """
-
-    def __init__(self):
-        try:
-            import classy  # noqa: F401
-        except ImportError as e:
-            raise ImportError("classy not installed — pip install classy") from e
-
-    def pk_linear(self, k: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
-        """Linear P(k) [(Mpc/h)^3] at redshift z via CLASS.
-
-        Parameters
-        ----------
-        k : array_like, h/Mpc
-        z : float
-        theta : dict — keys: h, Omega_b, Omega_cdm, n_s, ln10^{10}A_s,
-                        w0 (default -1), wa (default 0)
-        """
-        import classy
-        h     = float(theta["h"])
-        lnAs  = float(theta["ln10^{10}A_s"])
-        w0    = float(theta.get("w0", -1.0))
-        wa    = float(theta.get("wa", 0.0))
-
-        params = {
-            "h":                 h,
-            "omega_b":           float(theta["Omega_b"]) * h ** 2,
-            "omega_cdm":         float(theta["Omega_cdm"]) * h ** 2,
-            "n_s":               float(theta["n_s"]),
-            "A_s":               np.exp(lnAs) * 1e-10,
-            "output":            "mPk",
-            "P_k_max_h/Mpc":     float(np.max(np.asarray(k))) * 1.1,
-            "z_max_pk":          max(float(z) + 0.01, 0.01),
-        }
-        # CPL dark energy: use fluid model
-        if w0 != -1.0 or wa != 0.0:
-            params["Omega_Lambda"] = 0
-            params["w0_fld"]       = w0
-            params["wa_fld"]       = wa
-
-        cosmo = classy.Class()
-        cosmo.set(params)
-        cosmo.compute()
-
-        k_np = np.asarray(k)
-        # CLASS pk() returns (Mpc/h)^3 when k is in h/Mpc
-        pk_arr = np.array([cosmo.pk_lin(ki * h, float(z)) * h ** 3 for ki in k_np])
-        cosmo.struct_cleanup()
-        cosmo.empty()
-        return jnp.asarray(pk_arr)
-
-
 class CsstLinearPowerSpectrum:
     """Linear P(k, z) via the CSST CEmulator (Chen+2025, v2.0).
 
