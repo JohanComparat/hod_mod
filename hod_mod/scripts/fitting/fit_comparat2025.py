@@ -558,26 +558,36 @@ class _Infrastructure:
         self.cross._agn_has_hod = True
 
     def _gas_variants(self, gas_build: dict):
-        """Build a DPM **density** variant with the requested density overrides.
+        """Build the full DPM stack (density, pressure, metallicity, APEC cooling)
+        with the requested ``gas_build`` overrides applied.
 
-        Returns ``(dp, None, None, None)`` so the cross-spectra uses the robust,
-        tested density-only X-ray emissivity path (:meth:`GasDensityDPM.emissivity_uk`,
-        :math:`\\varepsilon \\propto n_e^2`).  The density-profile shape parameters
-        (``alpha_out``/``alpha_in``/``alpha_tr``/``ne_03``/``gamma``) reshape
-        :math:`w_\\theta` through this path.
-
-        .. note::
-           The full APEC path (``emissivity_full_uk`` with pressure + metallicity +
-           cooling) — which is what would make the **pressure/temperature/metallicity**
-           parameters take effect — currently produces a non-finite
-           :math:`C_\\ell^{gX}` from a downstream normalisation issue, so it is **not**
-           activated here.  Consequently the pressure/metallicity entries of the
-           ``gas-temp``/``gas-full`` presets are inert (flat directions) until that
-           path is fixed; only the density parameters are live.
+        Activating the full APEC emissivity path (vs the default density-only
+        ``emissivity_uk``) is what makes the pressure / temperature / metallicity
+        parameters meaningful; the overall normalisation difference is absorbed by
+        the free ``log10_A_gas`` amplitude (the cross-spectra divides the full-APEC
+        emissivity by Λ_ref to stay on the n_e²-scale and avoid float32 underflow —
+        see ``HaloModelCrossSpectra._pk_tables_gX``).  The cooling table (~10 s) is
+        built once and cached on the infrastructure.
         """
-        from hod_mod.scripts.validate_gas_profiles import _make_density_variant
+        from hod_mod.scripts.validate_gas_profiles import (
+            _make_density_variant, _make_pressure_variant,
+        )
+        from hod_mod.cosmology.gas_profiles import MetallicityProfileDPM, _gnfw_f_params
+        from hod_mod.cosmology import ApecCoolingTable
+
+        if self._cooling_fn is None:
+            print("  building ApecCoolingTable (full-DPM emissivity) ...", flush=True)
+            self._cooling_fn = ApecCoolingTable(emin=0.5, emax=2.0)
+
         dp = _make_density_variant(model=2, **gas_build.get("density", {}))
-        return dp, None, None, None
+        pp = _make_pressure_variant(model=2, **gas_build.get("pressure", {}))
+        mp = MetallicityProfileDPM()
+        for k, v in gas_build.get("metal", {}).items():
+            setattr(mp, f"_{k}", float(v))             # e.g. _Z_03
+        x_ref = 0.3 * mp._C_DPM
+        mp._Z0 = mp._Z_03 / float(_gnfw_f_params(x_ref, mp._ALPHA_IN,
+                                                  mp._ALPHA_TR, mp._ALPHA_OUT))
+        return dp, pp, mp, self._cooling_fn
 
     def use_agn_override(self, label: str, agn_build: dict) -> None:
         """Attach a per-call HODAgnModel rebuilt with occupation overrides.
@@ -823,6 +833,21 @@ def _predict_shape(
         if agn_build:
             infra.use_agn_for(label)   # restore the base AGN model
     print(f"  [{label}] angular_cl_gX: {time.time()-t0:.1f}s", flush=True)
+
+    # The full-APEC emissivity has a tiny k ≳ 150 h/Mpc tail that can still go
+    # non-finite in float32 through the Limber/PSF stage (far beyond any fitted
+    # angular scale).  Zero those C_ℓ bins so a single high-ℓ NaN does not poison
+    # the Hankel transform of every θ.  (No-op for the density-only path.)
+    n_bad_cl = 0
+    for _ck, _cv in list(cl_components.items()):
+        _a   = np.asarray(_cv, dtype=float)
+        _bad = ~np.isfinite(_a)
+        if _bad.any():
+            n_bad_cl += int(_bad.sum())
+            cl_components[_ck] = np.where(_bad, 0.0, _a)
+    if n_bad_cl:
+        print(f"  [{label}] sanitised {n_bad_cl} non-finite high-k C_ell bins",
+              flush=True)
 
     data_d = load_data(label)
     theta  = data_d["theta_rad"]
@@ -2227,7 +2252,9 @@ def plot_gas_diagnostics(
     ax.set_xlabel(r"$M_{500c}$ [$M_\odot$]")
     ax.set_ylabel(r"$L_X$ (0.5–2 keV) [erg s$^{-1}$]")
     ax.set_title(f"{label}: $L_X$–$M_{{500c}}$ (MAP)")
-    ax.set_xlim(1e11, 3e15); ax.set_ylim(1e38, 1e47)
+    # Tight y-range (was 1e38–1e47, 9 decades, which hid a ~0.5–1 dex model
+    # cluster-Lx deficit visible in the Lx–kT panel) so the same deficit shows here.
+    ax.set_xlim(1e11, 3e15); ax.set_ylim(1e40, 1e46)
     ax.legend(fontsize=6.5, ncol=2); ax.grid(True, alpha=0.2)
 
     ax = axes[0, 1]

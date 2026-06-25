@@ -336,7 +336,7 @@ def build_predictor(hmf_backend: str):
 
 class JointZM15:
     def __init__(self, bins, predictor, theta_cosmo, h, z, pi_max_h,
-                 gaussian_prior=False):
+                 gaussian_prior=False, fit_esd=True):
         import jax.numpy as jnp
         self._jnp        = jnp
         self.bins        = bins
@@ -346,6 +346,9 @@ class JointZM15:
         self.z           = z
         self.pi_max_h    = pi_max_h
         self.gauss       = gaussian_prior
+        # When False, ESD/ΔΣ is loaded (for plotting) but excluded from the
+        # likelihood.  Threshold samples (no ``max`` key) use cumulative HOD.
+        self.fit_esd     = fit_esd
         self.bounds      = [FREE_PARAMS[p][0] for p in FREE_NAMES]
         self.x0          = np.array([FREE_PARAMS[p][1] for p in FREE_NAMES])
 
@@ -369,9 +372,12 @@ class JointZM15:
         z   = b.get("z") or self.z          # per-bin effective redshift
         p = dict(zip(FREE_NAMES, theta))
         p["log10m_star_thresh"] = b["thresh"]
-        p["log10m_star_max"]    = b["max"]
+        # Bin samples carry an upper edge (bin HOD); threshold samples leave
+        # ``max`` as None so nc_ns / n_gal return the cumulative N(M*>thresh).
+        if b.get("max") is not None:
+            p["log10m_star_max"] = b["max"]
 
-        n_surv = len(b["surveys"])
+        n_surv = len(b["surveys"]) if self.fit_esd else 0
         _bad = {"wp": self._PENALTY, "ds": n_surv * self._PENALTY,
                 "ng": self._PENALTY, "total": (2 + n_surv) * self._PENALTY}
 
@@ -386,18 +392,19 @@ class JointZM15:
         chi2_wp = float(r @ b["icov_wp"] @ r)
 
         chi2_ds = 0.0
-        for (R, ds_obs, icov_ds) in b["surveys"].values():
-            try:
-                ds_pred = np.asarray(self.predictor.delta_sigma(
-                    jnp.array(R), z, self.theta_cosmo, p)) / self.h
-            except Exception:
-                chi2_ds += self._PENALTY
-                continue
-            if not np.all(np.isfinite(ds_pred)):
-                chi2_ds += self._PENALTY
-                continue
-            rd = ds_pred - ds_obs
-            chi2_ds += float(rd @ icov_ds @ rd)
+        if self.fit_esd:
+            for (R, ds_obs, icov_ds) in b["surveys"].values():
+                try:
+                    ds_pred = np.asarray(self.predictor.delta_sigma(
+                        jnp.array(R), z, self.theta_cosmo, p)) / self.h
+                except Exception:
+                    chi2_ds += self._PENALTY
+                    continue
+                if not np.all(np.isfinite(ds_pred)):
+                    chi2_ds += self._PENALTY
+                    continue
+                rd = ds_pred - ds_obs
+                chi2_ds += float(rd @ icov_ds @ rd)
 
         try:
             ng_pred = float(self.predictor.n_gal(z, self.theta_cosmo, p))
@@ -427,7 +434,8 @@ class JointZM15:
         n = 0
         for b in self.bins:
             n += len(b["rp"]) + 1               # wp + n_g
-            n += sum(len(v[0]) for v in b["surveys"].values())
+            if self.fit_esd:
+                n += sum(len(v[0]) for v in b["surveys"].values())
         return n
 
     # -- MAP ------------------------------------------------------------
@@ -563,7 +571,8 @@ def plot_map(bins, predictor, theta_cosmo, h, pi_max_h, map_result, out_dir,
         z     = b.get("z") or 0.13
         p     = dict(params)
         p["log10m_star_thresh"] = b["thresh"]
-        p["log10m_star_max"]    = b["max"]
+        if b.get("max") is not None:
+            p["log10m_star_max"] = b["max"]
         chi2_info = per_bin.get(label, {})
 
         # --- wp ---
@@ -581,8 +590,10 @@ def plot_map(bins, predictor, theta_cosmo, h, pi_max_h, map_result, out_dir,
                     zorder=2, label="data")
         ax.plot(rp, wp_mod, "-", lw=2, color="C0", zorder=3, label="MAP")
         ax.set_xscale("log"); ax.set_yscale("log")
+        mlabel = (f"$M_*\\in[{b['thresh']},{b['max']}]$"
+                  if b.get("max") is not None else f"$M_*>{b['thresh']:g}$")
         ax.set_title(
-            f"$M_*\\in[{b['thresh']},{b['max']}]$\n"
+            f"{mlabel}\n"
             f"$\\chi^2_{{wp}}={chi2_info.get('wp', 0):.0f}$",
             fontsize=8,
         )
@@ -910,6 +921,8 @@ def plot_smf(bins, predictor, theta_cosmo, h, map_result, obs_smf, out_dir):
     # model per fit-bin points: n_gal(bin) / Δlog10M*
     mb, phib = [], []
     for b in bins:
+        if b.get("max") is None:
+            continue                 # threshold sample: no bin width → skip point
         p = dict(params)
         p["log10m_star_thresh"] = b["thresh"]
         p["log10m_star_max"]    = b["max"]
@@ -1005,7 +1018,8 @@ def plot_montage(bins, predictor, theta_cosmo, h, pi_max_h, map_result, obs_smf,
         z = b.get("z") or 0.13
         p = dict(params)
         p["log10m_star_thresh"] = b["thresh"]
-        p["log10m_star_max"]    = b["max"]
+        if b.get("max") is not None:
+            p["log10m_star_max"] = b["max"]
         rp     = b["rp"]
         wp_err = np.sqrt(np.diag(np.linalg.inv(b["icov_wp"])))
         try:
@@ -1027,7 +1041,8 @@ def plot_montage(bins, predictor, theta_cosmo, h, pi_max_h, map_result, obs_smf,
             z = b.get("z") or 0.13
             p = dict(params)
             p["log10m_star_thresh"] = b["thresh"]
-            p["log10m_star_max"]    = b["max"]
+            if b.get("max") is not None:
+                p["log10m_star_max"] = b["max"]
             R, ds_obs, icov = b["surveys"][ref]
             ds_err = np.sqrt(np.diag(np.linalg.inv(icov)))
             try:

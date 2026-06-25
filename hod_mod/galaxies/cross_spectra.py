@@ -50,6 +50,18 @@ _MPC_CM = 3.0857e24
 _ARCSEC_TO_RAD = float(jnp.pi) / (180.0 * 3600.0)
 
 
+def _safe_log(P, floor: float = 1e-60):
+    """``log(max(P, floor))`` with non-finite ``P`` floored instead of propagated.
+
+    The full-APEC gas emissivity has a tiny high-k tail (k ≳ 150 h/Mpc) that can
+    underflow float32 to NaN/inf inside the halo-model integrals.  Those k are far
+    beyond any fitted angular scale, so we floor them to ``floor`` (≈ zero power)
+    rather than let a single NaN poison the whole Limber/Hankel transform.
+    """
+    P = jnp.nan_to_num(P, nan=0.0, posinf=0.0, neginf=0.0)
+    return jnp.log(jnp.maximum(P, floor))
+
+
 def psf_window_ell(ell_arr: np.ndarray, fwhm_arcsec: float = 30.0) -> np.ndarray:
     """Gaussian PSF window function B_ℓ = exp(−ℓ² σ² / 2).
 
@@ -508,6 +520,14 @@ class HaloModelCrossSpectra:
             and self._mp is not None
             and self._cooling_fn is not None
         )
+        # Λ_ref: cooling-function value at (1 keV, 0.3 Z⊙) when the APEC table is
+        # set, else the legacy power-law reference.  Used to put the full-APEC gas
+        # emissivity AND the AGN luminosity on the same n_e²-scale convention.
+        if self._cooling_fn is not None:
+            lambda_ref = float(self._cooling_fn(np.array([1.0]), np.array([0.3]))[0])
+        else:
+            lambda_ref = 3e-23   # legacy power-law default
+
         if _has_full:
             X_uk = self._dp.emissivity_full_uk(
                 k_arr               = sc["k_np"],
@@ -519,6 +539,13 @@ class HaloModelCrossSpectra:
                 metallicity_profile = self._mp,
                 cooling_fn          = self._cooling_fn,
             )
+            # emissivity_full_uk carries Λ(T,Z) (~1e-24), so it is ~Λ_ref smaller
+            # than the n_e²-scale emissivity_uk and underflows float32 in the
+            # integrals below.  Divide by Λ_ref to land in the same
+            # (Mpc/h)³ cm⁻⁶ convention as emissivity_uk / the AGN term; the
+            # Λ(T,Z)/Λ_ref ratio keeps the temperature/metallicity dependence and
+            # the overall amplitude is absorbed by the free A_gas.
+            X_uk = np.asarray(X_uk) / lambda_ref
         else:
             X_uk = self._density_uk_cached(z, theta_cosmo, sc, emissivity=True)   # (Nk, NM)
 
@@ -598,11 +625,7 @@ class HaloModelCrossSpectra:
             # deprecated plain-emissivity path we use the old power-law reference.
             h_val = float(theta_cosmo.get("h", 0.6736))
             mpc_cm_h = _MPC_CM / h_val          # cm per (Mpc/h)
-            if self._cooling_fn is not None:
-                lambda_ref = float(self._cooling_fn(np.array([1.0]), np.array([0.3]))[0])
-            else:
-                lambda_ref = 3e-23   # legacy power-law default
-            agn_conv = 1e43 / (lambda_ref * mpc_cm_h ** 3)
+            agn_conv = 1e43 / (lambda_ref * mpc_cm_h ** 3)   # lambda_ref hoisted above
             P_gX_agn = P_gX_agn_raw * agn_conv
         else:
             P_gX_agn = jnp.zeros_like(P_gX_gas)
@@ -612,13 +635,13 @@ class HaloModelCrossSpectra:
         log_k = jnp.log(jnp.asarray(sc["k_np"]))
         return {
             "log_k":          log_k,
-            "log_pgX":        jnp.log(jnp.maximum(P_gX,         1e-60)),
-            "log_pgX_1h":     jnp.log(jnp.maximum(P_gX_1h,      1e-60)),
-            "log_pgX_1h_cen": jnp.log(jnp.maximum(P_gX_1h_cen,  1e-60)),
-            "log_pgX_1h_sat": jnp.log(jnp.maximum(P_gX_1h_sat,  1e-60)),
-            "log_pgX_2h":     jnp.log(jnp.maximum(P_gX_2h,      1e-60)),
-            "log_pgX_gas":    jnp.log(jnp.maximum(P_gX_gas,      1e-60)),
-            "log_pgX_agn":    jnp.log(jnp.maximum(P_gX_agn,      1e-60)),
+            "log_pgX":        _safe_log(P_gX),
+            "log_pgX_1h":     _safe_log(P_gX_1h),
+            "log_pgX_1h_cen": _safe_log(P_gX_1h_cen),
+            "log_pgX_1h_sat": _safe_log(P_gX_1h_sat),
+            "log_pgX_2h":     _safe_log(P_gX_2h),
+            "log_pgX_gas":    _safe_log(P_gX_gas),
+            "log_pgX_agn":    _safe_log(P_gX_agn),
             "n_gal":          n_gal,
             "b_eff":          b_eff,
         }
@@ -662,6 +685,13 @@ class HaloModelCrossSpectra:
             and self._mp is not None
             and self._cooling_fn is not None
         )
+        # Λ_ref puts the full-APEC gas emissivity and the AGN luminosity on the
+        # same n_e²-scale convention (see _pk_tables_gX).
+        if self._cooling_fn is not None:
+            lambda_ref = float(self._cooling_fn(np.array([1.0]), np.array([0.3]))[0])
+        else:
+            lambda_ref = 3e-23
+
         if _has_full:
             X_uk = self._dp.emissivity_full_uk(
                 k_arr               = sc["k_np"],
@@ -673,6 +703,9 @@ class HaloModelCrossSpectra:
                 metallicity_profile = self._mp,
                 cooling_fn          = self._cooling_fn,
             )
+            # Normalise to the n_e²-scale so the squared gas×gas term does not
+            # underflow float32 (see _pk_tables_gX); retains Λ(T,Z)/Λ_ref.
+            X_uk = np.asarray(X_uk) / lambda_ref
         else:
             X_uk = self._density_uk_cached(z, theta_cosmo, sc, emissivity=True)
 
@@ -699,11 +732,7 @@ class HaloModelCrossSpectra:
             )  # (Nk, NM), in L_X/1e43
             h_val = float(theta_cosmo.get("h", 0.6736))
             mpc_cm_h = _MPC_CM / h_val
-            if self._cooling_fn is not None:
-                lambda_ref = float(self._cooling_fn(np.array([1.0]), np.array([0.3]))[0])
-            else:
-                lambda_ref = 3e-23
-            agn_conv = 1e43 / (lambda_ref * mpc_cm_h ** 3)
+            agn_conv = 1e43 / (lambda_ref * mpc_cm_h ** 3)   # lambda_ref hoisted above
             X_uk_agn_j = X_uk_agn_raw * agn_conv   # same units as X_uk_j (per object if HOD)
         else:
             X_uk_agn_j = jnp.zeros_like(X_uk_j)
@@ -750,12 +779,12 @@ class HaloModelCrossSpectra:
         log_k = jnp.log(jnp.asarray(sc["k_np"]))
         return {
             "log_k":            log_k,
-            "log_pXX":          jnp.log(jnp.maximum(P_XX,              1e-120)),
-            "log_pXX_gas_gas":  jnp.log(jnp.maximum(P_XX_1h_gas_gas + P_XX_2h_gas_gas, 1e-120)),
-            "log_pXX_cross":    jnp.log(jnp.maximum(P_XX_1h_cross   + P_XX_2h_cross,   1e-120)),
-            "log_pXX_agn_agn":  jnp.log(jnp.maximum(P_XX_1h_agn_agn + P_XX_2h_agn_agn, 1e-120)),
-            "log_pXX_2h":       jnp.log(jnp.maximum(P_XX_2h,          1e-120)),
-            "log_pXX_1h":       jnp.log(jnp.maximum(P_XX_1h,          1e-120)),
+            "log_pXX":          _safe_log(P_XX,              1e-120),
+            "log_pXX_gas_gas":  _safe_log(P_XX_1h_gas_gas + P_XX_2h_gas_gas, 1e-120),
+            "log_pXX_cross":    _safe_log(P_XX_1h_cross   + P_XX_2h_cross,   1e-120),
+            "log_pXX_agn_agn":  _safe_log(P_XX_1h_agn_agn + P_XX_2h_agn_agn, 1e-120),
+            "log_pXX_2h":       _safe_log(P_XX_2h,          1e-120),
+            "log_pXX_1h":       _safe_log(P_XX_1h,          1e-120),
         }
 
     # ------------------------------------------------------------------
