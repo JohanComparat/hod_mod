@@ -99,6 +99,46 @@ done
 | Script | Cluster | What it does |
 | --- | --- | --- |
 | `fit_bgs_zm15_joint_mcmc.sh` | Dahu (CPU) | ZM15 joint `wp + n_gal` MCMC (M\* > 10¹⁰ bins), `rp ∈ [0.5, 20]`, 32 walkers × (500 burn-in + 2000 steps). Resumable. |
+| `fit_comparat2025_gas_shape.sh` | Dahu (CPU) | Comparat+2025 fixed-ZM15 **MAP**, S1, `--free-params gas-shape` (gas density α-slopes). |
+| `fit_comparat2025_gas_temp.sh`  | Dahu (CPU) | …`gas-temp` (+ γ; pressure/T params inert, see below). |
+| `fit_comparat2025_gas_full.sh`  | Dahu (CPU) | …`gas-full` (all density params; pressure/metallicity inert). |
+| `fit_comparat2025_agn_occ.sh`   | Dahu (CPU) | …`agn-occ`, `--agn-model hod` (HOD-AGN occupation). |
+| `fit_comparat2025_agn_lum.sh`   | Dahu (CPU) | …`agn-lum`, `--agn-model ham` (luminosity overrides; degenerate). |
+
+### `fit_comparat2025_*.sh` — fixed-ZM15 X-ray MAP presets
+
+Five MAP fits of the Comparat+2025 model to the S1 (M\* > 10¹⁰) galaxy × eROSITA
+`w_θ` cross-correlation, with the ZM15 galaxy connection held fixed
+(`--fix-zm15`, from `results/bgs_zm15_joint_wp_ngal/map_result.json`). Each frees a
+different gas/AGN `--free-params` preset and writes to its own
+`results/fits/comparat2025_fixedZM15_<preset>/` (`S1_map.json` + figures).
+
+**These are MAP (`scipy` L-BFGS-B) fits — NOT resumable** (no checkpoint, unlike the
+MCMC chain). The walltime must cover the whole optimisation; do **not** use
+`besteffort`/`idempotent` (a kill loses all progress). Sizing comes from the per-eval
+cost, which is dominated by `angular_cl_gX`:
+
+- `agn-lum` has no profile/AGN rebuild → the first JAX trace (~90 s) then ~2 s/eval →
+  **minutes** total (walltime 4 h, generous).
+- `gas-*` rebuild the DPM **density** profile every eval and `agn-occ` rebuilds the
+  HOD-AGN abundance match — ~18 s/eval after a ~120 s first trace (~30 s/eval for
+  `agn-occ`), so MAP runs **a few hours**: walltimes 6 h (`gas-shape`), 10 h
+  (`gas-temp`, `agn-occ`), 18 h (`gas-full`; 14 params with flat inert directions →
+  extra margin). All well under the Dahu 48 h cap.
+
+All use `/nodes=1/core=16`: the optimiser is a single serial process and the cores only
+feed JAX/XLA + BLAS within each likelihood eval (modest arrays), so 16 (half a Dahu node)
+is the sweet spot — more gives little.
+
+> **Caveat — inert parameters.** The likelihood is `w_θ`-only, so amplitude-degenerate
+> parameters sit as flat directions: the `agn-lum` luminosity params (`scatter_lx`,
+> `log10_A_kcorr`, `log10_A_dc`) and the gas **normalisation** `log10_ne_03`. Also, the
+> full-APEC emissivity path (which would make the **pressure/temperature/metallicity**
+> params of `gas-temp`/`gas-full` take effect) currently yields a non-finite `C_ℓ` from a
+> downstream normalisation bug, so those presets run on the robust **density-only** path
+> and their pressure/metallicity entries are inert. Only the **density-profile shape**
+> params (`alpha_out`/`alpha_in`/`alpha_tr` and `beta_gas`/`beta_pressure`) and the
+> `agn-occ` occupation actually move the fit. Smoke-test with `-t devel` first.
 
 ### `fit_bgs_zm15_joint_mcmc.sh`
 
