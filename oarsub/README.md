@@ -105,6 +105,37 @@ done
 | `fit_comparat2025_agn_occ.sh`   | Dahu (CPU) | …`agn-occ`, `--agn-model hod` (HOD-AGN occupation). |
 | `fit_comparat2025_agn_lum.sh`   | Dahu (CPU) | …`agn-lum`, `--agn-model ham` (luminosity overrides; degenerate). |
 
+
+DONE : 
+```bash
+oarsub --project pr-orphans -S ./oarsub/fit_comparat2025_gas_shape.sh
+oarsub --project pr-orphans -S ./oarsub/fit_comparat2025_agn_lum.sh
+oarsub --project pr-orphans -S ./oarsub/fit_comparat2025_agn_occ.sh
+```
+
+
+The 5 scripts (Dahu / CPU)
+Script	preset / model	cores	walltime
+fit_comparat2025_agn_lum.sh	agn-lum / ham	16	4h
+fit_comparat2025_gas_shape.sh	gas-shape / hod	16	6h
+fit_comparat2025_gas_temp.sh	gas-temp / hod	16	10h
+fit_comparat2025_agn_occ.sh	agn-occ / hod	16	10h
+fit_comparat2025_gas_full.sh	gas-full / hod	16	18h
+Each reuses the existing mamba bootstrap + thread/XLA env, runs --sample S1 --fix-zm15 --mode map, writes to its own results/fits/comparat2025_fixedZM15_<preset>/, and is chmod +x. oarsub/README.md updated with the table, sizing, and caveats.
+
+Optimal configuration (decided + measured)
+16 cores / 1 Dahu node: the MAP optimiser is a single serial L-BFGS-B process — cores only feed XLA/BLAS within each eval (modest arrays), so 16 (half a node, low fragmentation) is the sweet spot.
+Walltimes set from a measured per-eval cost (~18s/eval after a ~120s first JIT trace, not the 110s worst case I first feared), with margin since MAP is not resumable (unlike the MCMC jobs — so no besteffort/idempotent). Max Dahu walltime is 48h; all jobs fit comfortably.
+Two issues I found and handled during calibration
+The full-APEC gas path produces NaN. Activating pressure+metallicity+cooling makes the entire C_ℓ^{gX} non-finite (a downstream normalization bug — both emissivity functions are individually finite). That would crash the gas jobs at startup. I switched the gas presets to the robust density-only path (emissivity_uk ∝ n_e², what amps/all use). Verified: gas-shape is finite and α_out reshapes w_θ by 100×. Consequence: the density-profile params (α_out/α_in/α_tr, n_e,0.3, β) are live; the pressure/temperature/metallicity params of gas-temp/gas-full are inert until the full-APEC normalization is fixed (documented in the README). I can fix that path as a follow-up if you want gas-temp/gas-full to exercise the gas thermodynamics.
+
+Walltimes revised down (10/16/40h → 6/10/18h) once the real ~18s/eval cost was measured.
+
+Two heads-ups: I set --project pr-orphans (from your README) — edit if wrong; and the README still contains live OAR_API_TOKEN JWTs committed in git (lines ~36–49) that you should rotate and scrub from history.
+
+Submit with oarsub --project pr-orphans -S ./oarsub/fit_comparat2025_<preset>.sh (smoke-test first with -t devel).
+
+
 ### `fit_comparat2025_*.sh` — fixed-ZM15 X-ray MAP presets
 
 Five MAP fits of the Comparat+2025 model to the S1 (M\* > 10¹⁰) galaxy × eROSITA
