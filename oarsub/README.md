@@ -32,8 +32,7 @@ line in the script, or pass it on the command line:
 
 on bigfoot:
 
-oarsub -T
-OAR_API_TOKEN=***REMOVED-OAR-TOKEN***
+oarsub -T # gives you a token
 
 gridclusters
 8: dahu
@@ -41,12 +40,7 @@ gridclusters
 11: kraken-cpu
 12: kraken-gpu
 
-gridtoken -i 8 -t "***REMOVED-OAR-TOKEN***"
-New token registered.
-
-OAR_API_TOKEN=***REMOVED-OAR-TOKEN***
-
-gridtoken -i 8 -t "***REMOVED-OAR-TOKEN***"
+gridtoken -i 8 -t "<TOKEN>"
 
 ```bash
 oarsub --project pr-orphans -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
