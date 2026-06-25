@@ -82,6 +82,90 @@ python hod_mod/scripts/fitting/run_fit.py \
 Once it finishes, use these parameters as inputs for the cross-correlation fits.
 see below ( and after fixing the AGN model)
 
+
+zumandelbaum2015_sdss
+
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp --sample all --mode map
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp --sample all --mode mcmc
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp --sample all --mode both
+
+# Single sample. DONE
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp --sample M9    --mode map
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp --sample M10   --mode map
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp --sample M10p5 --mode map
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp --sample M11   --mode map
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp --sample M11p5 --mode map
+
+In hod_zumandelbaum2015.rst, the set of equations are suppsed to reflect what is implemented. 
+The written equations are not the same as in the Xu and Mandelbaum 2015 paper. 
+Does it mean that the implementation is not the same as in the paper and needs to be revised ? or does it mean that the documentation needs to be revised ?
+The paper is here : /home/comparat/Documents/bibliography/bibliography/zu-mandelbaum-1505.02781v1.pdf
+
+TODO next :
+
+cd /home/comparat/software/hod_mod
+/home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint \
+    --data-dir /home/comparat/software/sum_stat/data/BGS_Mstar10_massbins \
+    --surveys HSC DES KIDS --mode both \
+    --rp-min 0.1 --rp-max 30 --R-min 0.1 --R-max 30 \
+    --pi-max-mpc 100 --n-walkers 32 --n-burnin 500 --n-steps 2000 \
+    --out-dir results/bgs_zm15_joint --plot-only
+
+cd /home/comparat/software/hod_mod
+
+/home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint \
+    --data-dir /home/comparat/software/sum_stat/data/BGS_Mstar10_massbins \
+    --surveys HSC DES KIDS --mode both \
+    --rp-min 0.1 --rp-max 30 --R-min 0.1 --R-max 30 \
+    --pi-max-mpc 100 --n-walkers 32 --n-burnin 500 --n-steps 2000 \
+    --out-dir results/bgs_zm15_joint
+
+/home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint \
+    --data-dir /home/comparat/software/sum_stat/data/BGS_Mstar10_massbins \
+    --surveys HSC --mode map \
+    --rp-min 0.1 --rp-max 30 --R-min 0.5 --R-max 5 \
+    --pi-max-mpc 100 --n-walkers 32 --n-burnin 500 --n-steps 2000 \
+    --out-dir results/bgs_zm15_joint
+
+# WINNER WP MODEL :
+python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint \
+        --data-dir ~/software/sum_stat/data/BGS_Mstar10_massbins \
+        --rp-min 0.5 --rp-max 20 \
+        --surveys --mode map --out-dir results/bgs_zm15_joint_wp_ngal
+
+python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint \
+        --data-dir ~/software/sum_stat/data/BGS_Mstar10_massbins \
+        --rp-min 0.5 --rp-max 20 --plot-only \
+        --surveys --mode map --out-dir results/bgs_zm15_joint_wp_ngal
+
+# TODO THE FULL FIT ON GRICAD WITH MCMC
+on the dahu machine:
+oarsub --project pr-orphans -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
+
+
+
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp_joint --mode map --no-plot
+# MAP fit for all 5 samples jointly
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp_joint --mode map
+
+# MAP + MCMC
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp_joint --mode both
+
+# Then MCMC from existing MAP result
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp_joint --mode mcmc
+
+# Custom scale cut
+python -m hod_mod.scripts.fitting.fit_bgs_smf_wp_joint --mode map --rp-min 0.1
+
+
+
+
+
+
+
+
+
+
 # Comparat 2025 cross-correlation
 ONGOING :
 
