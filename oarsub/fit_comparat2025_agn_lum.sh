@@ -57,7 +57,7 @@ mkdir -p oarsub/logs "${OUT_DIR}"
 echo "host=$(hostname)  job=${OAR_JOB_ID:-local}  cores=${NCORES}  start=$(date -Is)"
 
 python -m hod_mod.scripts.fitting.fit_comparat2025 \
-    --sample S1 --fix-zm15 --mode map \
+    --sample S1 --fix-zm15 --mode mcmc \
     --free-params agn-lum --agn-model ham \
     --out-dir "${OUT_DIR}"
 
