@@ -30,15 +30,33 @@ improvement — would let 32 walkers use up to 32 cores).
 `--project` is mandatory on GRICAD. Either edit the `#OAR --project PROJECTNAME`
 line in the script, or pass it on the command line:
 
+on bigfoot:
+
+oarsub -T
+OAR_API_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiY29tcGFyYWoiLCJleHAiOjE3ODI5MDk5NTIsImRhdGUiOiIyMDI2LTA2LTI0IDEyOjQ1OjUyIn0.2IFh654D7OFXs6cP6vbG-6j4FAcZmyGb1dYKbgGojsQ
+
+gridclusters
+8: dahu
+9: bigfoot
+11: kraken-cpu
+12: kraken-gpu
+
+gridtoken -i 8 -t "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiY29tcGFyYWoiLCJleHAiOjE3ODI5MDk5NTIsImRhdGUiOiIyMDI2LTA2LTI0IDEyOjQ1OjUyIn0.2IFh654D7OFXs6cP6vbG-6j4FAcZmyGb1dYKbgGojsQ"
+New token registered.
+
+OAR_API_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiY29tcGFyYWoiLCJleHAiOjE3ODI5MTg2MjMsImRhdGUiOiIyMDI2LTA2LTI0IDE1OjEwOjIzIn0.abax6Y6K8J-1YFFbDClvvCmFiqwCpMYnGrdlynvVTi0
+
+gridtoken -i 8 -t "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiY29tcGFyYWoiLCJleHAiOjE3ODI5MTg2MjMsImRhdGUiOiIyMDI2LTA2LTI0IDE1OjEwOjIzIn0.abax6Y6K8J-1YFFbDClvvCmFiqwCpMYnGrdlynvVTi0"
+
 ```bash
-oarsub --project <your-project> -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
+oarsub --project pr-orphans -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
 ```
 
 Quick test on the dev partition (≤ 30 min), then the real run:
 
 ```bash
 oarsub -t devel -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh     # smoke test
-oarsub --project <your-project> -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
+oarsub --project pr-orphans -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
 ```
 
 Monitor / manage:
@@ -71,7 +89,7 @@ so CiGri/OAR can restart it automatically after a kill. A manual loop works too:
 
 ```bash
 until grep -q "done=" oarsub/logs/*.bgs_zm15_joint_mcmc.out 2>/dev/null; do
-    oarsub --project <your-project> -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
+    oarsub --project pr-orphans -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
     sleep <until-this-job-ends>
 done
 ```

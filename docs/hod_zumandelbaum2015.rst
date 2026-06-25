@@ -1593,6 +1593,261 @@ Fixed = hard-coded or calibrated from simulation / external data.
 
 ----
 
+Fixed-ZM15 X-ray fit — AGN + gas model options
+------------------------------------------------
+
+The galaxy sector (ZM15 iHOD) and the X-ray sector (gas + AGN) can be **fit
+separately**.  Rather than floating the 8 galaxy+X-ray parameters jointly
+against :math:`w_\theta + w_p + \Phi(M_*)` (previous section), the
+stellar–halo connection is taken as *already determined* by the dedicated
+:math:`w_p + \bar n_g` joint fit
+(:mod:`hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint`), held **fixed**,
+and only the X-ray/gas/AGN parameters are fit against the galaxy × eROSITA
+cross-correlation :math:`w_\theta(\theta)`.  This is enabled by
+``fit_comparat2025 --fix-zm15`` and isolates what the X-ray data constrain,
+free of the galaxy–X-ray parameter degeneracies.
+
+.. rubric:: Fixed galaxy parameters — :math:`w_p + \bar n_g` joint MAP fit
+
+Source: ``results/bgs_zm15_joint_wp_ngal/map_result.json``
+(:mod:`hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint`, ``--mode map``,
+8 stellar-mass bins :math:`10.0 \le \log_{10}M_* < 12.0`,
+:math:`w_p(r_p) + \bar n_g`, no lensing).  Joint
+:math:`\chi^2/\mathrm{dof} = 44.03/99 = 0.44`.
+All 13 parameters below are held fixed when running ``--fix-zm15``; the
+stellar-mass threshold :math:`\log_{10}M_{*,\mathrm{th}}` is set per sample
+(10.0 for S1, overridable with ``--zm15-thresh``).
+
+.. list-table:: ZM15 iHOD parameters held fixed in the X-ray fit
+   :header-rows: 1
+   :widths: 24 16 18 42
+
+   * - Parameter
+     - MAP value
+     - ZM15 Table 2
+     - Component / role
+   * - ``lg_m1h``
+     - 11.900
+     - :math:`12.10\pm0.17`
+     - SHMR pivot halo mass
+   * - ``lg_m0star``
+     - 10.367
+     - :math:`10.31\pm0.10`
+     - SHMR pivot stellar mass
+   * - ``beta``
+     - 0.426
+     - :math:`0.33\pm0.21`
+     - low-mass SHMR slope
+   * - ``delta``
+     - 0.616
+     - :math:`0.42\pm0.04`
+     - high-mass SHMR transition exponent
+   * - ``gamma``
+     - 1.686
+     - :math:`1.21\pm0.20`
+     - high-mass SHMR slope
+   * - ``sigma_lnmstar``
+     - 0.823
+     - :math:`0.50\pm0.04`
+     - scatter in :math:`\ln M_*` at fixed :math:`M_h`
+   * - ``eta``
+     - −0.227
+     - :math:`-0.04\pm0.02`
+     - mass-dependent scatter slope
+   * - ``fc``
+     - 0.754
+     - :math:`0.86\pm0.14`
+     - central completeness fraction
+   * - ``bsat``
+     - 17.544
+     - :math:`8.98\pm1.18`
+     - satellite halo-mass normalisation
+   * - ``beta_sat``
+     - 0.493
+     - —
+     - satellite mass-scaling slope
+   * - ``bcut``
+     - 9.634
+     - —
+     - cut-off normalisation
+   * - ``beta_cut``
+     - 0.820
+     - —
+     - cut-off mass-scaling slope
+   * - ``alpha_sat``
+     - 1.250
+     - —
+     - satellite occupation slope
+
+.. rubric:: AGN + gas model — free-parameter options
+
+With ZM15 fixed, the X-ray sector is fit against :math:`w_\theta`
+**alone** (:math:`w_p` and :math:`\Phi(M_*)` no longer depend on any free
+parameter, so they are shown as fixed-prediction diagnostic overlays).  The
+free X-ray/gas/AGN parameters are selected with ``--free-params``:
+
+.. list-table:: ``--free-params`` presets
+   :header-rows: 1
+   :widths: 13 4 41 42
+
+   * - Preset
+     - N
+     - Free parameters
+     - Notes
+   * - ``amps``
+     - 2
+     - :math:`\log_{10}A_\mathrm{gas},\ \log_{10}A_\mathrm{AGN}`
+     - gas slopes fixed (:math:`\beta_\mathrm{gas}=0.25,\ \beta_P=0.86`)
+   * - ``gas``
+     - 3
+     - :math:`\log_{10}A_\mathrm{gas},\ \beta_\mathrm{gas},\ \beta_P`
+     - AGN amplitude fixed
+   * - ``all`` (default)
+     - 4
+     - :math:`\log_{10}A_\mathrm{gas},\ \beta_\mathrm{gas},\ \beta_P,\ \log_{10}A_\mathrm{AGN}`
+     - amplitude + mass-tilt model (cheap)
+   * - ``gas-shape``
+     - 6
+     - ``all`` + :math:`\alpha_\mathrm{out}^{n_e},\ \alpha_\mathrm{out}^{P}`
+     - DPM profile shapes; rebuilds the gas profiles per eval (slow)
+   * - ``gas-temp``
+     - 8
+     - ``gas-shape`` + :math:`\log_{10}P_{0.3},\ \gamma_n`
+     - + temperature (:math:`T=P/n_e`) and redshift evolution
+   * - ``gas-full``
+     - 14
+     - ``gas-temp`` + :math:`\log_{10}n_{e,0.3},\ \alpha_\mathrm{in/tr}^{n_e,P},\ Z_0`
+     - every DPM gas parameter
+   * - ``agn-models``
+     - 4
+     - :math:`\log_{10}A_\mathrm{gas},\ \beta_\mathrm{gas},\ \beta_P,\ \log_{10}A_\mathrm{AGN}`
+     - = ``all``; run under ``--agn-model hod|ham|xray`` to compare models
+   * - ``agn-lum``
+     - 7
+     - ``agn-models`` + :math:`\sigma_{L_X},\ \log_{10}A_\mathrm{kcorr},\ \log_{10}A_\mathrm{dc}`
+     - HamAGNModel luminosity overrides (needs ``--agn-model ham``)
+   * - ``agn-occ``
+     - 8
+     - ``agn-models`` + :math:`f_\mathrm{inc},\ \log_{10}M_\mathrm{min},\ \sigma_{\log M},\ \alpha`
+     - HODAgnModel occupation (needs ``--agn-model hod``)
+
+An explicit subset of registry names may also be passed, e.g.
+``--free-params log10_A_gas beta_gas alpha_out_gas``.
+
+.. admonition:: Cost and identifiability (w_θ-only fit)
+   :class: note
+
+   The ``gas-*`` and ``agn-occ`` presets rebuild the DPM gas profiles / AGN
+   abundance-match **per likelihood evaluation** (seconds each); the ``gas-*``
+   presets additionally switch on the full APEC emissivity path
+   (:math:`\varepsilon = n_e^2\,\Lambda(T,Z)`) so the pressure/temperature/
+   metallicity parameters take effect.  Because the likelihood is :math:`w_\theta`
+   **only**, the *shape* parameters (gas :math:`\alpha`/:math:`\beta` slopes, and
+   the AGN-HOD occupation in ``agn-occ``) reshape the prediction, but the
+   *normalisation* parameters (:math:`n_{e,0.3}`) and the ``agn-lum`` AGN-luminosity
+   parameters are **degenerate** with :math:`\log_{10}A_\mathrm{gas}/\log_{10}A_\mathrm{AGN}`
+   — they run as flat directions and stay near their seeds.  They are exposed for
+   forward-modelling, priors and a future multi-probe (X-ray luminosity) fit.
+
+.. rubric:: AGN + gas model — component choices
+
+.. list-table:: AGN component (``--agn-model``)
+   :header-rows: 1
+   :widths: 14 26 60
+
+   * - Option
+     - Class
+     - Behaviour
+   * - ``hod`` (default)
+     - :class:`~hod_mod.galaxies.agn_hod.HODAgnModel`
+     - Physically-predicted, occupation-weighted AGN cross-power
+       :math:`C_\ell^{gX,\mathrm{agn}}` (PSF-convolved);
+       :math:`\log_{10}A_\mathrm{AGN}` is a *fudge factor* on this amplitude.
+       Per-sample duty cycle ``--agn-finc`` (default 0.01).
+   * - ``ham``
+     - :class:`~hod_mod.galaxies.agn_ham.HamAGNModel`
+     - Free-amplitude King PSF point source
+       (:math:`\theta_c = 8.64''`); :math:`\log_{10}A_\mathrm{AGN}` sets the
+       whole AGN flux scale.  (HamAGNModel's HAM precompute is incompatible with
+       the CSST emulator HMF, so it falls back to its own Tinker08 HMF.)
+   * - ``xray``
+     - :class:`~hod_mod.galaxies.agn.XrayAGNModel`
+     - Parametric :math:`L_X(M_*)` point source (Girelli+2020 SHMR + a
+       hard-band :math:`L_X`–:math:`M_*` polynomial); King-PSF template like ``ham``.
+
+The **gas** component is the DPM model-2 stack in every case
+(:class:`~hod_mod.cosmology.gas_profiles.GasDensityDPM` +
+``PressureProfileDPM`` + ``MetallicityProfileDPM`` +
+:class:`~hod_mod.cosmology.gas_profiles.ApecCoolingTable`).  By default only the
+:math:`\beta_\mathrm{gas}`/:math:`\beta_P` mass-slope tilts (Step 3 above) are
+free; the ``gas-shape``/``gas-temp``/``gas-full`` presets additionally expose the
+gNFW profile shapes, normalisations and metallicity (see the preset table above).
+
+.. rubric:: Running the fixed-ZM15 fit
+
+.. code-block:: bash
+
+   # full gas + AGN X-ray model (4 free params), S1 = M* > 10
+   JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_comparat2025 \
+       --sample S1 --fix-zm15 --mode map --free-params all
+
+   # two amplitudes only (gas slopes fixed)
+   JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_comparat2025 \
+       --sample S1 --fix-zm15 --mode map --free-params amps
+
+   # richer DPM gas profile (slow: full APEC path, profile rebuild per eval)
+   JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_comparat2025 \
+       --sample S1 --fix-zm15 --mode map --free-params gas-shape \
+       --out-dir results/fits/comparat2025_fixedZM15_gas-shape
+
+   # compare AGN models at fixed gas (amplitude-only AGN)
+   JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_comparat2025 \
+       --sample S1 --fix-zm15 --mode map --free-params agn-models --agn-model xray \
+       --out-dir results/fits/comparat2025_fixedZM15_agn-models_xray
+
+Results (MAP json + best-fit / diagnostics / gas-diagnostics figures) are
+written to ``results/fits/comparat2025_fixedZM15/`` (overridable per run with
+``--out-dir``) — separate from the joint-fit ``results/fits/comparat2025/`` so
+neither clobbers the other.
+
+.. admonition:: Diagnostic SMF/n_gal units (h³)
+   :class: note
+
+   The ``_diagnostics.pdf`` stellar-mass-function and :math:`\bar n_g` panels
+   compare the model (native :math:`(\mathrm{Mpc}/h)^{-3}`) against the sum_stat
+   SMF.  The raw HDF5 ``phi`` is in physical :math:`\mathrm{Mpc}^{-3}`, so
+   ``load_smf_data`` divides it by :math:`h^3` (as
+   :meth:`~hod_mod.data_io.sum_stat_reader.SumStatReader.smf` does) before
+   plotting — without this the panels read :math:`\sim h^{-3}\approx3.2\times` too
+   high.  With the fixed ZM15 parameters the model then reproduces the SMF and
+   :math:`\bar n_g` (ratio :math:`\approx1`); only the high-mass tail
+   (:math:`\log_{10}M_*\gtrsim11.5`) is over-predicted, the known iHOD limitation.
+
+.. list-table:: S1 fixed-ZM15 MAP result (``--free-params all``, :math:`w_\theta` only)
+   :header-rows: 1
+   :widths: 30 16 54
+
+   * - Parameter
+     - MAP
+     - Note
+   * - ``log10_A_gas``
+     - 3.871
+     - gas emissivity amplitude
+   * - ``beta_gas``
+     - 0.250
+     - stayed at the DPM/GAS.py seed (degenerate with :math:`A_\mathrm{gas}` over the fitted :math:`\theta` range)
+   * - ``beta_pressure``
+     - 0.860
+     - stayed at seed (same degeneracy)
+   * - ``log10_A_AGN``
+     - 8.116
+     - HOD-AGN cross-power fudge factor
+   * - :math:`\chi^2/\mathrm{dof}`
+     - 6.51
+     - 31 :math:`w_\theta` points − 4 params = 27 dof; ZM15 fixed from the binned :math:`w_p+\bar n_g` fit (not re-tuned to the S1 threshold sample)
+
+----
+
 BGS LS10 MAP results — samples S1–S3
 --------------------------------------
 

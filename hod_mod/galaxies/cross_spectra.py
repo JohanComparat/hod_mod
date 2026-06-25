@@ -474,6 +474,7 @@ class HaloModelCrossSpectra:
         hod_params: dict,
         beta_gas: float | None = None,
         beta_pressure: float | None = None,
+        agn_kwargs: dict | None = None,
     ) -> dict:
         """Compute P_{g,X}(k) via the halo model.
 
@@ -559,7 +560,8 @@ class HaloModelCrossSpectra:
         # AGN contribution: point source (flat in k)
         if self._agn is not None:
             X_uk_agn_j = jnp.asarray(
-                self._agn.agn_emissivity_uk(sc["k_np"], m_np, z, theta_cosmo)
+                self._agn.agn_emissivity_uk(sc["k_np"], m_np, z, theta_cosmo,
+                                            **(agn_kwargs or {}))
             )  # (Nk, NM), in L_X/1e43 [dimensionless normalized luminosity]
 
             if self._agn_has_hod:
@@ -922,6 +924,7 @@ class HaloModelCrossSpectra:
         n_workers: int = -1,
         beta_gas: float | None = None,
         beta_pressure: float | None = None,
+        agn_kwargs: dict | None = None,
     ) -> "np.ndarray | dict":
         """Angular cross-power spectrum C_ℓ^{g,X} via the Limber approximation.
 
@@ -996,6 +999,7 @@ class HaloModelCrossSpectra:
                 zi, theta_cosmo, hod_params,
                 beta_gas=beta_gas,
                 beta_pressure=beta_pressure,
+                agn_kwargs=agn_kwargs,
             )
 
         if _nw == 1 or nz == 1:

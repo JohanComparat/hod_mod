@@ -29,6 +29,17 @@ pip install hod-mod
 For development, create and activate the conda environment then install in editable mode:
 
 ```bash
+# Download the installer (Linux x86_64)
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+
+# Run the installer (follow prompts, accept defaults)
+bash Miniforge3-Linux-x86_64.sh
+
+# Reload shell
+source ~/.bashrc
+```
+
+```bash
 mamba env create -f environment.yml
 mamba activate hod_mod
 pip install -e .
