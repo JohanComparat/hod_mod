@@ -32,8 +32,7 @@ line in the script, or pass it on the command line:
 
 on bigfoot:
 
-oarsub -T
-OAR_API_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiY29tcGFyYWoiLCJleHAiOjE3ODI5MDk5NTIsImRhdGUiOiIyMDI2LTA2LTI0IDEyOjQ1OjUyIn0.2IFh654D7OFXs6cP6vbG-6j4FAcZmyGb1dYKbgGojsQ
+oarsub -T # gives you a token
 
 gridclusters
 8: dahu
@@ -41,12 +40,7 @@ gridclusters
 11: kraken-cpu
 12: kraken-gpu
 
-gridtoken -i 8 -t "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiY29tcGFyYWoiLCJleHAiOjE3ODI5MDk5NTIsImRhdGUiOiIyMDI2LTA2LTI0IDEyOjQ1OjUyIn0.2IFh654D7OFXs6cP6vbG-6j4FAcZmyGb1dYKbgGojsQ"
-New token registered.
-
-OAR_API_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiY29tcGFyYWoiLCJleHAiOjE3ODI5MTg2MjMsImRhdGUiOiIyMDI2LTA2LTI0IDE1OjEwOjIzIn0.abax6Y6K8J-1YFFbDClvvCmFiqwCpMYnGrdlynvVTi0
-
-gridtoken -i 8 -t "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiY29tcGFyYWoiLCJleHAiOjE3ODI5MTg2MjMsImRhdGUiOiIyMDI2LTA2LTI0IDE1OjEwOjIzIn0.abax6Y6K8J-1YFFbDClvvCmFiqwCpMYnGrdlynvVTi0"
+gridtoken -i 8 -t "<TOKEN>"
 
 ```bash
 oarsub --project pr-orphans -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
