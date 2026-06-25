@@ -6,12 +6,11 @@
 # benefit.  This is a MAP (scipy L-BFGS-B) fit and is **NOT resumable** (unlike
 # the MCMC jobs), so the walltime must cover the whole optimisation.
 #
-# gas-full frees the most gas parameters (every live density-profile parameter);
-# the DPM gas profile is rebuilt per likelihood evaluation (~18 s/eval after the
+# gas-full frees every DPM gas parameter (density + pressure + metallicity); the
+# full DPM gas stack is rebuilt per likelihood evaluation (~25-40 s/eval after the
 # ~120 s first JAX trace), so a 14-parameter MAP runs a few hours — walltime 18 h
-# leaves margin (flat inert directions can slow convergence).  See oarsub/README.md.
-# NOTE: pressure/metallicity parameters are currently inert (see README) — only
-# the density-profile parameters are live.
+# leaves margin (the w_θ-degenerate log10_ne_03 + amplitude can slow convergence).
+# See oarsub/README.md.  Density, pressure and metallicity params all reshape w_θ.
 #
 # Submit:  oarsub --project pr-orphans -S ./oarsub/fit_comparat2025_gas_full.sh
 # Smoke:   oarsub -t devel -S ./oarsub/fit_comparat2025_gas_full.sh    (<=30 min)
