@@ -66,7 +66,7 @@ guix time-machine -C channels.scm -- shell --container --network -m manifest.scm
 # 2. Create a virtualenv (lives in the repo, reused across sessions).
 #    Delete any existing one first — a venv is bound to the exact Guix profile, so a
 #    stale .venv-guix from another revision/Python version will break.
-rm -rf .venv-guix
+# rm -rf .venv-guix
 python -m venv .venv-guix
 source .venv-guix/bin/activate
 
