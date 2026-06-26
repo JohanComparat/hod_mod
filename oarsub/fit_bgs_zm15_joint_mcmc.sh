@@ -20,7 +20,7 @@
 
 #OAR -n bgs_zm15_joint_mcmc
 #OAR --project PROJECTNAME
-#OAR -l /nodes=4/core=64,walltime=40:00:00
+#OAR -l /nodes=1/core=16,walltime=24:00:00
 #OAR --stdout oarsub/logs/%jobid%.bgs_zm15_joint_mcmc.out
 #OAR --stderr oarsub/logs/%jobid%.bgs_zm15_joint_mcmc.err
 # --- auto-resubmit alternative (CiGri/besteffort): the resumable chain makes
