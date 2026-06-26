@@ -142,6 +142,55 @@ python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint \
 on the dahu machine:
 oarsub --project pr-orphans -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
 
+# Attempt to fit for smaller scales :
+python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint \
+        --data-dir ~/software/sum_stat/data/BGS_Mstar10_massbins \
+        --rp-min 0.2 --rp-max 20 \
+        --surveys --mode map --out-dir results/bgs_zm15_joint_wp_ngal_rpmin0p02
+# interesting, but fails at high mass.
+
+# attempt to do the thresholds samples
+LD_LIBRARY_PATH=$PROF/lib JAX_PLATFORMS=cpu python -m \
+  hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_thresh_joint \
+  --data-dir ~/software/sum_stat/data --mode map --surveys HSC DES KIDS
+  # wp + n(>thr)
+  # add: --surveys HSC DES KIDS         (ESD in plots only)
+  # add: --surveys HSC DES KIDS --fit-esd   (ESD also fit)
+# It does not work well. Fair enough.
+
+
+On LAPTOP :
+# Fast (amplitudes / tilts only — minutes each):
+
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode mcmc --free-params amps --agn-model hod --out-dir results/fits/comparat2025_fixedZM15_amps
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode mcmc --free-params gas --agn-model hod --out-dir results/fits/comparat2025_fixedZM15_gas
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode mcmc --free-params all --agn-model hod --out-dir results/fits/comparat2025_fixedZM15_all
+
+# AGN model comparison (amplitude-only AGN — minutes each):
+
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode mcmc --free-params agn-models --agn-model hod --out-dir results/fits/comparat2025_fixedZM15_agn-models_hod
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode mcmc --free-params agn-models --agn-model ham --out-dir results/fits/comparat2025_fixedZM15_agn-models_ham
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode mcmc --free-params agn-models --agn-model xray --out-dir results/fits/comparat2025_fixedZM15_agn-models_xray
+
+# On DAHU gricad :
+
+# Slow (gas-profile rebuild + full APEC, ~90 s/eval → expect 30 min–several hours each):
+
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode map --free-params gas-shape --agn-model hod --out-dir results/fits/comparat2025_fixedZM15_gas-shape
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode map --free-params gas-temp --agn-model hod --out-dir results/fits/comparat2025_fixedZM15_gas-temp
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode map --free-params gas-full --agn-model hod --out-dir results/fits/comparat2025_fixedZM15_gas-full
+
+# Slow (AGN occupation rebuild ~per eval) / inert-but-runs:
+
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode map --free-params agn-occ --agn-model hod --out-dir results/fits/comparat2025_fixedZM15_agn-occ
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode map --free-params agn-lum --agn-model ham --out-dir results/fits/comparat2025_fixedZM15_agn-lum
+
+
+
+
+
+
+
 
 
 python -m hod_mod.scripts.fitting.fit_bgs_smf_wp_joint --mode map --no-plot
@@ -196,7 +245,17 @@ There is a problem with the AGN component of the fit.
 
 Full joint fit:
 
-python -m hod_mod.scripts.fitting.fit_joint_lsdr10 --sample S1 --mode map
+python -m hod_mod.scripts.fitting.fit_joint_lsdr10 --sample S1 --mode map --fix-zm15
+
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python \
+  -m hod_mod.scripts.fitting.fit_comparat2025 \
+  --sample S1 --fix-zm15 --mode map --free-params amps \
+  --out-dir results/fits/comparat2025_fixedZM15_amps
+
+JAX_PLATFORMS=cpu /home/comparat/mamba/envs/hod_mod/bin/python \
+  -m hod_mod.scripts.fitting.fit_comparat2025 \
+  --sample S1 --fix-zm15 --mode map --free-params all \
+  --out-dir results/fits/comparat2025_fixedZM15_all
 
 
 
