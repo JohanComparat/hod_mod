@@ -75,12 +75,12 @@ The 1-halo term is identical across all runs.
      - Notes
    * - ``hmcode``
      - CAMB + HMcode-2020 (`arXiv:2009.01858 <https://arxiv.org/abs/2009.01858>`_)
-       via :class:`~hod_mod.cosmology.nonlinear.HALOFITSpectrum`
+       via :class:`~hod_mod.core.nonlinear.HALOFITSpectrum`
      - No — CAMB boundary
-     - Cached in :class:`~hod_mod.cosmology.nonlinear.CachedPkNonlinear`
+     - Cached in :class:`~hod_mod.core.nonlinear.CachedPkNonlinear`
    * - ``aletheia``
      - Aletheia neural-network emulator
-       via :class:`~hod_mod.cosmology.nonlinear.NonLinearPowerSpectrum`
+       via :class:`~hod_mod.core.nonlinear.NonLinearPowerSpectrum`
      - Yes — full JAX trace via :meth:`pk_nonlinear_jax`
      - Valid :math:`k \in [0.006,\,2.0]\,h\,{\rm Mpc}^{-1}`; extrapolated outside
 
@@ -623,7 +623,7 @@ Path Forward
 ------------
 
 1. **Diagnose Aletheia extrapolation** — compare
-   :meth:`~hod_mod.cosmology.nonlinear.NonLinearPowerSpectrum.pk_nonlinear_jax`
+   :meth:`~hod_mod.core.nonlinear.NonLinearPowerSpectrum.pk_nonlinear_jax`
    output against HMcode at :math:`z=0.115` to identify whether the failure
    is in the emulator body or in the boost-ratio extrapolation beyond
    :math:`k=2\,h\,{\rm Mpc}^{-1}`.

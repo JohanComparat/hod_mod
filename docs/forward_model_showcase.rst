@@ -7,7 +7,7 @@ using the Tinker+2008 HMF (`arXiv:0803.2706 <https://arxiv.org/abs/0803.2706>`_)
 the More+2015 HOD (`arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_),
 the **beyond-linear halo bias** correction of Mead & Verde 2021
 (`arXiv:2011.08858 <https://arxiv.org/abs/2011.08858>`_, implemented in
-:class:`~hod_mod.cosmology.beyond_linear_bias.BeyondLinearBiasMead21`),
+:class:`~hod_mod.core.beyond_linear_bias.BeyondLinearBiasMead21`),
 and the NLA intrinsic-alignment model
 (`arXiv:0705.0166 <https://arxiv.org/abs/0705.0166>`_).
 
@@ -202,13 +202,13 @@ ZM16Q = ZuMandelbaum16Quenching.
      - ✓
 
 The cosmological steps shared by all models are:
-:class:`~hod_mod.cosmology.power_spectrum.LinearPowerSpectrum` ``.pk_linear()`` (CAMB) →
-:class:`~hod_mod.cosmology.halo_mass_function.HaloMassFunction` ``.dndm()`` / ``.bias()`` →
-:class:`~hod_mod.cosmology.beyond_linear_bias.BeyondLinearBiasMead21` (beyond-linear :math:`\beta^{\rm NL}`) →
-:class:`~hod_mod.cosmology.halo_profiles.HaloProfile` ``.concentration()`` / ``nfw_uk()`` / ``einasto_uk()`` →
-:mod:`hod_mod.galaxies.hod` ``.nc_ns()`` →
-:meth:`~hod_mod.galaxies.clustering.FullHaloModelPrediction.wp` /
-:meth:`~hod_mod.galaxies.clustering.FullHaloModelPrediction.delta_sigma`.
+:class:`~hod_mod.core.power_spectrum.LinearPowerSpectrum` ``.pk_linear()`` (CAMB) →
+:class:`~hod_mod.core.halo_mass_function.HaloMassFunction` ``.dndm()`` / ``.bias()`` →
+:class:`~hod_mod.core.beyond_linear_bias.BeyondLinearBiasMead21` (beyond-linear :math:`\beta^{\rm NL}`) →
+:class:`~hod_mod.core.halo_profiles.HaloProfile` ``.concentration()`` / ``nfw_uk()`` / ``einasto_uk()`` →
+:mod:`hod_mod.connection.hod` ``.nc_ns()`` →
+:meth:`~hod_mod.observables.clustering.FullHaloModelPrediction.wp` /
+:meth:`~hod_mod.observables.clustering.FullHaloModelPrediction.delta_sigma`.
 
 ----
 
@@ -257,13 +257,13 @@ On scales :math:`k \gtrsim 0.1\,h\,{\rm Mpc}^{-1}` gravitational collapse drives
 the power spectrum above the linear prediction.
 The ratio :math:`P_{\rm nl}/P_{\rm lin}` captures the 1-halo boost, mode coupling,
 and quasi-linear BAO damping.  The 1-halo + 2-halo decomposition in
-:class:`~hod_mod.galaxies.clustering.FullHaloModelPrediction` uses
+:class:`~hod_mod.observables.clustering.FullHaloModelPrediction` uses
 :math:`P_{\rm lin}` for the 2-halo term and mass-integrated NFW profiles for the
 1-halo term — the total galaxy power spectrum does **not** directly use
 :math:`P_{\rm nl}`, but it is available for diagnostic comparisons and as an
 optional non-linear 2-halo term (``nl_2halo=True``).
 
-Four backends are implemented in :mod:`hod_mod.cosmology.nonlinear`:
+Four backends are implemented in :mod:`hod_mod.core.nonlinear`:
 
 .. list-table:: Non-linear P(k) backends
    :header-rows: 1
@@ -273,23 +273,23 @@ Four backends are implemented in :mod:`hod_mod.cosmology.nonlinear`:
      - Reference
      - Valid range
      - Notes
-   * - :class:`~hod_mod.cosmology.nonlinear.NonLinearPowerSpectrum`
+   * - :class:`~hod_mod.core.nonlinear.NonLinearPowerSpectrum`
        ``(backend='aletheia')``
      - Sanchez 2025 (`arXiv:2511.13826 <https://arxiv.org/abs/2511.13826>`_)
      - :math:`k \in [0.006, 2]\,{\rm Mpc}^{-1}`
      - Emulator; JAX-native ``pk_nonlinear_jax()`` available for autodiff
-   * - :class:`~hod_mod.cosmology.nonlinear.NonLinearPowerSpectrum`
+   * - :class:`~hod_mod.core.nonlinear.NonLinearPowerSpectrum`
        ``(backend='csst')``
      - Chen et al. 2025 CEmulator v2.0
      - :math:`k \in [0.005, 10]\,h\,{\rm Mpc}^{-1}`,  :math:`z \in [0, 3]`
      - Requires ``CEmulator`` package; supports CPL dark energy and :math:`m_\nu`
-   * - :class:`~hod_mod.cosmology.nonlinear.HALOFITSpectrum`
+   * - :class:`~hod_mod.core.nonlinear.HALOFITSpectrum`
        ``(halofit_version='mead2020')``
      - Mead et al. 2020 (`arXiv:2009.01858 <https://arxiv.org/abs/2009.01858>`_)
      - :math:`k \in [10^{-4}, 20]\,h\,{\rm Mpc}^{-1}`
      - CAMB HMcode-2020 (default); also ``'takahashi'``, ``'original'``,
        ``'mead2020_feedback'``
-   * - :class:`~hod_mod.cosmology.nonlinear.WHMSpectrum`
+   * - :class:`~hod_mod.core.nonlinear.WHMSpectrum`
        ``(whm_version='brieden2023')``
      - Brieden et al. 2025 (`arXiv:2508.10902 <https://arxiv.org/abs/2508.10902>`_)
      - :math:`k \in [10^{-2}, 10]\,h\,{\rm Mpc}^{-1}`
@@ -298,9 +298,9 @@ Four backends are implemented in :mod:`hod_mod.cosmology.nonlinear`:
        ``brieden2023_halo``, ``brieden2023_fila``, ``brieden2023_sheet``
 
 All backends share the same interface and can be wrapped with
-:class:`~hod_mod.cosmology.nonlinear.CachedPkNonlinear` for MCMC hot loops::
+:class:`~hod_mod.core.nonlinear.CachedPkNonlinear` for MCMC hot loops::
 
-    from hod_mod.cosmology.nonlinear import HALOFITSpectrum, WHMSpectrum, CachedPkNonlinear
+    from hod_mod.core.nonlinear import HALOFITSpectrum, WHMSpectrum, CachedPkNonlinear
 
     # Standard CAMB HMcode-2020
     pk_nl = CachedPkNonlinear(HALOFITSpectrum(halofit_version="mead2020"))
@@ -335,7 +335,7 @@ Brieden et al. 2025 WHM (`arXiv:2508.10902 <https://arxiv.org/abs/2508.10902>`_)
 --------------------------------------
 
 The comoving number density of halos per unit mass interval is computed by
-:meth:`~hod_mod.cosmology.halo_mass_function.HaloMassFunction.dndm`:
+:meth:`~hod_mod.core.halo_mass_function.HaloMassFunction.dndm`:
 
 .. math::
 
@@ -346,7 +346,7 @@ The comoving number density of halos per unit mass interval is computed by
 
 where :math:`\sigma^2(M)` is the variance of the linear density field smoothed
 on scale :math:`R = (3M/4\pi\bar{\rho}_m)^{1/3}`, evaluated by
-:meth:`~hod_mod.cosmology.halo_mass_function.HaloMassFunction.sigma`.
+:meth:`~hod_mod.core.halo_mass_function.HaloMassFunction.sigma`.
 The multiplicity function :math:`f(\sigma)` follows Tinker et al. 2008
 (calibrated to :math:`\Delta=200m`):
 
@@ -356,16 +356,16 @@ The multiplicity function :math:`f(\sigma)` follows Tinker et al. 2008
                \exp\!\left(-\frac{c}{\sigma^2}\right)
 
 The large-scale linear bias :math:`b(M)` is returned by
-:meth:`~hod_mod.cosmology.halo_mass_function.HaloMassFunction.bias`
+:meth:`~hod_mod.core.halo_mass_function.HaloMassFunction.bias`
 using the peak-background split (Tinker et al. 2010,
 `arXiv:1001.3162 <https://arxiv.org/abs/1001.3162>`_).
 
 **Class:**
-:class:`~hod_mod.cosmology.halo_mass_function.HaloMassFunction`
-(``hod_mod/cosmology/halo_mass_function.py``)::
+:class:`~hod_mod.core.halo_mass_function.HaloMassFunction`
+(``hod_mod/core/halo_mass_function.py``)::
 
-    from hod_mod.cosmology import HaloMassFunction
-    from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum, rho_critical_0
+    from hod_mod.core import HaloMassFunction
+    from hod_mod.core.power_spectrum import LinearPowerSpectrum, rho_critical_0
 
     pklin  = LinearPowerSpectrum()
     rho_m  = rho_critical_0() * theta["Omega_m"]
@@ -375,11 +375,11 @@ using the peak-background split (Tinker et al. 2010,
     bias   = hmf.bias(m_h, z, theta)   # dimensionless large-scale bias
     sigma  = hmf.sigma(m_h, z, theta)  # RMS density fluctuation σ(M,z)
 
-:class:`~hod_mod.cosmology.halo_mass_function.HaloMassFunction` is constructed
+:class:`~hod_mod.core.halo_mass_function.HaloMassFunction` is constructed
 with the ``model`` keyword selecting the multiplicity function.  The 17
 implemented models are listed in the table below.
 
-.. list-table:: HMF multiplicity functions in :mod:`hod_mod.cosmology.halo_mass_function`
+.. list-table:: HMF multiplicity functions in :mod:`hod_mod.core.halo_mass_function`
    :header-rows: 1
    :widths: 30 35 35
 
@@ -387,55 +387,55 @@ implemented models are listed in the table below.
      - Function
      - Reference
    * - ``'tinker08'`` (library default; fitting pipelines use ``'csst'`` instead, see :doc:`cosmology`)
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_tinker08`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_tinker08`
      - Tinker et al. 2008 (`arXiv:0803.2706 <https://arxiv.org/abs/0803.2706>`_)
    * - ``'press74'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_press74`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_press74`
      - Press & Schechter 1974 (ApJ 187, 425)
    * - ``'sheth99'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_sheth99`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_sheth99`
      - Sheth & Tormen 1999 (`arXiv:astro-ph/9901122 <https://arxiv.org/abs/astro-ph/9901122>`_)
    * - ``'jenkins01'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_jenkins01`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_jenkins01`
      - Jenkins et al. 2001 (`arXiv:astro-ph/0005260 <https://arxiv.org/abs/astro-ph/0005260>`_)
    * - ``'warren06'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_warren06`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_warren06`
      - Warren et al. 2006 (`arXiv:astro-ph/0506395 <https://arxiv.org/abs/astro-ph/0506395>`_)
    * - ``'bhattacharya11'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_bhattacharya11`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_bhattacharya11`
      - Bhattacharya et al. 2011 (`arXiv:1005.2239 <https://arxiv.org/abs/1005.2239>`_)
    * - ``'crocce10'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_crocce10`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_crocce10`
      - Crocce et al. 2010 (`arXiv:0907.0019 <https://arxiv.org/abs/0907.0019>`_)
    * - ``'courtin11'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_courtin11`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_courtin11`
      - Courtin et al. 2011 (`arXiv:1001.3425 <https://arxiv.org/abs/1001.3425>`_)
    * - ``'angulo12'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_angulo12`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_angulo12`
      - Angulo et al. 2012 (`arXiv:1203.3216 <https://arxiv.org/abs/1203.3216>`_)
    * - ``'watson13'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_watson13`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_watson13`
      - Watson et al. 2013 (`arXiv:1212.0095 <https://arxiv.org/abs/1212.0095>`_)
    * - ``'bocquet16'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_bocquet16`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_bocquet16`
      - Bocquet et al. 2016 (`arXiv:1502.07357 <https://arxiv.org/abs/1502.07357>`_)
    * - ``'despali16'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_despali16`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_despali16`
      - Despali et al. 2016 (`arXiv:1507.05627 <https://arxiv.org/abs/1507.05627>`_)
    * - ``'rodriguezpuebla16'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_rodriguezpuebla16`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_rodriguezpuebla16`
      - Rodríguez-Puebla et al. 2016 (`arXiv:1602.04813 <https://arxiv.org/abs/1602.04813>`_)
    * - ``'comparat17'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_comparat17`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_comparat17`
      - Comparat et al. 2017 (`arXiv:1702.01628 <https://arxiv.org/abs/1702.01628>`_)
    * - ``'seppi20'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_seppi20`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_seppi20`
      - Seppi et al. 2020 (`arXiv:2006.00818 <https://arxiv.org/abs/2006.00818>`_)
    * - ``'yung24'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_yung24`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_yung24`
      - Yung et al. 2024
    * - ``'yung25'``
-     - :func:`~hod_mod.cosmology.halo_mass_function.fsigma_yung25`
+     - :func:`~hod_mod.core.halo_mass_function.fsigma_yung25`
      - Yung et al. 2025
 
 Figures generated by ``hod_mod/scripts/cosmology/plot_hmf_bias.py``.
@@ -448,19 +448,19 @@ Figures generated by ``hod_mod/scripts/cosmology/plot_hmf_bias.py``.
    :width: 90%
    :align: center
 
-   :meth:`~hod_mod.cosmology.halo_mass_function.HaloMassFunction.dndm`
-   and :meth:`~hod_mod.cosmology.halo_mass_function.HaloMassFunction.bias`
+   :meth:`~hod_mod.core.halo_mass_function.HaloMassFunction.dndm`
+   and :meth:`~hod_mod.core.halo_mass_function.HaloMassFunction.bias`
    at :math:`z=0.14` with :math:`\pm 3\sigma` S8 variation (Tinker+2008/2010).
 
 ``hod_mod`` implements 17 analytic multiplicity functions
-(``fsigma_*`` in :mod:`hod_mod.cosmology.halo_mass_function`);
+(``fsigma_*`` in :mod:`hod_mod.core.halo_mass_function`);
 the figure below compares six.
 
 .. figure:: _images/fig02a_hmf_models.png
    :width: 90%
    :align: center
 
-   :func:`~hod_mod.cosmology.halo_mass_function.fsigma_tinker08` (fiducial)
+   :func:`~hod_mod.core.halo_mass_function.fsigma_tinker08` (fiducial)
    vs five alternative multiplicity functions: Press+1974, Sheth+1999,
    Warren+2006, Bocquet+2016, Watson+2013.
    Bottom panel shows ratio to Tinker+2008.
@@ -470,7 +470,7 @@ the figure below compares six.
    :align: center
 
    Redshift evolution of
-   :meth:`~hod_mod.cosmology.halo_mass_function.HaloMassFunction.bias`
+   :meth:`~hod_mod.core.halo_mass_function.HaloMassFunction.bias`
    (Tinker+2010 peak-background split) at :math:`z = 0, 0.14, 0.5, 1.0`.
    Bottom panel shows ratio to :math:`z=0.14`.
 
@@ -535,13 +535,13 @@ mass-function weights onto the 8-bin :math:`\nu` grid and contracting with the
 cached :math:`(N_k \times 8 \times 8)` :math:`\beta^{\rm NL}` table — only an
 :math:`\mathcal{O}(N_k \times N_M \times 8)` projection per HOD evaluation
 is required (see
-:class:`~hod_mod.cosmology.beyond_linear_bias.BeyondLinearBiasMead21`).
+:class:`~hod_mod.core.beyond_linear_bias.BeyondLinearBiasMead21`).
 
 **BNL is the fiducial prescription** for the two-halo term in all
 ``hod_mod`` HOD models.  Usage::
 
-    from hod_mod.cosmology import BeyondLinearBiasMead21
-    from hod_mod.galaxies.clustering import FullHaloModelPrediction
+    from hod_mod.core import BeyondLinearBiasMead21
+    from hod_mod.observables.clustering import FullHaloModelPrediction
 
     bnl = BeyondLinearBiasMead21()        # loads bundled MDR1 z=0 tables
     pred = FullHaloModelPrediction(pk_lin, hod, hp, bnl_model=bnl)
@@ -645,7 +645,7 @@ evaluated numerically:
 where :math:`j_0(x) = \sin(x)/x`.
 
 Both profiles use the same Diemer & Joyce 2019 concentration–mass relation and
-are available in :class:`~hod_mod.galaxies.clustering.FullHaloModelPrediction`
+are available in :class:`~hod_mod.observables.clustering.FullHaloModelPrediction`
 via ``profile="nfw"`` (default) or ``profile="einasto"``.
 
 **References:** Navarro, Frenk & White 1997 (`arXiv:astro-ph/9611107
@@ -841,7 +841,7 @@ is >95% complete above the stellar mass threshold, `arXiv:2512.15960
 
 .. _hod_models_table:
 
-.. list-table:: HOD models implemented in :mod:`hod_mod.galaxies.hod`
+.. list-table:: HOD models implemented in :mod:`hod_mod.connection.hod`
    :header-rows: 1
    :widths: 26 20 8 14 32
 
@@ -1012,7 +1012,7 @@ via the Ogata (2005) Hankel transform.  The power spectrum decomposes into:
                   \langle N\rangle(M)
 
 where :math:`\Delta I_{\rm gg}^{\rm BNL}(k)` is the beyond-linear bias correction
-from :class:`~hod_mod.cosmology.beyond_linear_bias.BeyondLinearBiasMead21`
+from :class:`~hod_mod.core.beyond_linear_bias.BeyondLinearBiasMead21`
 (see :ref:`section 4 <beyond-linear-halo-bias>` for the full formula).
 The BNL term boosts the 2-halo power at :math:`k \sim 0.05{-}0.8\,h\,{\rm Mpc}^{-1}`;
 it vanishes at large scales (:math:`k < 6\times10^{-3}\,h\,{\rm Mpc}^{-1}`).
@@ -1195,17 +1195,17 @@ Both signals are benchmarked against the eROSITA × Legacy Survey measurements o
 Implementation classes
 ~~~~~~~~~~~~~~~~~~~~~~
 
-* :class:`~hod_mod.cosmology.gas_profiles.PressureProfileA10` — A10 gNFW
+* :class:`~hod_mod.gas.PressureProfileA10` — A10 gNFW
   pressure profile; computes :math:`P_e(r|M,z)` [keV/cm³] and
   :math:`\tilde{y}(k|M,z)` [(Mpc/h)²].
-* :class:`~hod_mod.cosmology.gas_profiles.GasDensityDPM` — DPM electron density
+* :class:`~hod_mod.gas.GasDensityDPM` — DPM electron density
   profile; computes :math:`n_e(r|M,z)` [cm⁻³],
   :math:`\tilde{n}_e(k|M,z)` [(Mpc/h)³ cm⁻³],
   and :math:`\tilde\varepsilon(k|M,z)` [(Mpc/h)³ cm⁻⁶].
-* :func:`~hod_mod.cosmology.gas_profiles.m200_to_m500c` — NFW bisection to
+* :func:`~hod_mod.gas.m200_to_m500c` — NFW bisection to
   convert M\ :sub:`200m` → M\ :sub:`500c`.
-* :class:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra` — wraps an
-  existing :class:`~hod_mod.galaxies.clustering.FullHaloModelPrediction` and
+* :class:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra` — wraps an
+  existing :class:`~hod_mod.observables.clustering.FullHaloModelPrediction` and
   reuses its static cache to compute 1-halo + 2-halo cross-spectra and all
   projected observables.
 
@@ -1292,7 +1292,7 @@ Dirac delta function, giving a **flat Fourier transform**
 
 The mean soft-band (0.5–2 keV) luminosity per halo is computed via
 abundance-matching against the Aird+2015 LADE hard XLF
-(see :doc:`galaxies` § HAM AGN Model and :class:`~hod_mod.galaxies.agn_ham.HamAGNModel`):
+(see :doc:`galaxies` § HAM AGN Model and :class:`~hod_mod.agn.ham.HamAGNModel`):
 
 1. At each :math:`(M_h, z)` the cumulative AGN number density from the
    Aird+2015 LADE hard XLF is matched to the cumulative galaxy number density
@@ -1302,10 +1302,10 @@ abundance-matching against the Aird+2015 LADE hard XLF
    :math:`(z, \log N_H)` (Comparat+2019 obscuration fractions).
 
 The AGN component is added via the ``agn_model`` keyword of
-:class:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra`::
+:class:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra`::
 
-    from hod_mod.galaxies.agn_ham import HamAGNModel
-    from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
+    from hod_mod.agn.ham import HamAGNModel
+    from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 
     agn   = HamAGNModel(xlf="aird15")
     cross = HaloModelCrossSpectra(fhmp, density_profile=dp, agn_model=agn)
@@ -1390,4 +1390,4 @@ Key references for this showcase:
 * Pandey et al. 2025 (`arXiv:2506.07432 <https://arxiv.org/abs/2506.07432>`_) — DES × ACT DR6 lensing × tSZ
 * Comparat et al. 2019 (`arXiv:1901.10866 <https://arxiv.org/abs/1901.10866>`_) — AGN X-ray luminosity–stellar mass abundance matching framework
 * Hasinger, Miyaji & Schmidt 2005 (`arXiv:astro-ph/0506118 <https://arxiv.org/abs/astro-ph/0506118>`_) — LDDE soft XLF used to calibrate :math:`a`, :math:`b`, and the duty cycle evolution
-* Girelli et al. 2020 (`arXiv:2007.06220 <https://arxiv.org/abs/2007.06220>`_) — stellar-to-halo mass relation (SHMR) used by :class:`~hod_mod.galaxies.agn.XrayAGNModel`
+* Girelli et al. 2020 (`arXiv:2007.06220 <https://arxiv.org/abs/2007.06220>`_) — stellar-to-halo mass relation (SHMR) used by :class:`~hod_mod.agn.xray.XrayAGNModel`

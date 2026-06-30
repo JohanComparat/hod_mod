@@ -5,12 +5,12 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from hod_mod.cosmology.nonlinear import HALOFITSpectrum, CachedPkNonlinear
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.galaxies.hod import MoreHODModel
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
+from hod_mod.core.nonlinear import HALOFITSpectrum, CachedPkNonlinear
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.connection.hod import MoreHODModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
 
 
 _THETA = LinearPowerSpectrum.default_cosmology()

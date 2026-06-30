@@ -55,9 +55,9 @@ Cosmology demos
 ``hod_mod/scripts/cosmology/plot_nonlinear_power_spectrum.py``
     Generates ``docs/_images/fig01b_nonlinear_power_spectrum.png`` comparing all
     available non-linear P(k) backends:
-    :class:`~hod_mod.cosmology.nonlinear.NonLinearPowerSpectrum` (Aletheia),
-    :class:`~hod_mod.cosmology.nonlinear.HALOFITSpectrum` (HMcode-2020, Takahashi+2012),
-    and :class:`~hod_mod.cosmology.nonlinear.WHMSpectrum` (WHM, when WHM-CAMB is installed).
+    :class:`~hod_mod.core.nonlinear.NonLinearPowerSpectrum` (Aletheia),
+    :class:`~hod_mod.core.nonlinear.HALOFITSpectrum` (HMcode-2020, Takahashi+2012),
+    and :class:`~hod_mod.core.nonlinear.WHMSpectrum` (WHM, when WHM-CAMB is installed).
     **Runtime**: 1–3 min (two CAMB runs + Aletheia).
     Run as: ``JAX_PLATFORMS=cpu python -m hod_mod.scripts.cosmology.plot_nonlinear_power_spectrum``
 
@@ -65,7 +65,7 @@ Cosmology demos
     Generates three HMF/bias documentation figures:
     ``fig02_hmf.png`` (fiducial dn/dM and b(M) with ±3σ S8 variation),
     ``fig02a_hmf_models.png`` (six multiplicity-function models via
-    ``fsigma_*`` functions in :mod:`hod_mod.cosmology.halo_mass_function`),
+    ``fsigma_*`` functions in :mod:`hod_mod.core.halo_mass_function`),
     ``fig02b_bias_models.png`` (Tinker+2010 bias redshift evolution).
     **Runtime**: < 60 s.
     Run as: ``JAX_PLATFORMS=cpu python -m hod_mod.scripts.cosmology.plot_hmf_bias``
@@ -97,7 +97,7 @@ Galaxy / HOD demos
     **Runtime**: 1–2 min.
 
 ``scripts/galaxies/plot_agn_ham_model.py``
-    Verification script for :class:`~hod_mod.galaxies.agn_ham.HamAGNModel`.
+    Verification script for :class:`~hod_mod.agn.ham.HamAGNModel`.
     Generates four figures: the HAM luminosity mapping
     (:math:`\log L_X^{\rm hard}` vs. :math:`\log M_h` and :math:`\log M_*`),
     the hard XLF check (HAM prediction vs. Aird+2015 / Ueda+2014 references),

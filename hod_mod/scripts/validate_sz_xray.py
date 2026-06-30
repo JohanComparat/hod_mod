@@ -30,14 +30,14 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from hod_mod.cosmology import PressureProfileA10, GasDensityDPM
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.cosmology.gas_profiles import _RHO_CRIT0
-from hod_mod.galaxies.hod import MoreHODModel
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
-from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
+from hod_mod.gas import PressureProfileA10, GasDensityDPM
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.gas import _RHO_CRIT0
+from hod_mod.connection.hod import MoreHODModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
+from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 
 # ---------------------------------------------------------------------------
 # Output directory
@@ -94,7 +94,7 @@ def fig_pressure_profile():
     ez2        = _OM * (1.0 + _Z)**3 + (1.0 - _OM)
     rho_crit_z = _RHO_CRIT0 * ez2 / (1.0 + _Z)**3
 
-    from hod_mod.cosmology.gas_profiles import m200_to_m500c
+    from hod_mod.gas import m200_to_m500c
     m500_arr, r500_arr = m200_to_m500c(_MASS_ARR, _C200_ARR, _R200_ARR, rho_crit_z)
 
     fig, ax = plt.subplots(figsize=(6, 4))
@@ -126,7 +126,7 @@ def fig_pressure_uk():
 
     ez2        = _OM * (1.0 + _Z)**3 + (1.0 - _OM)
     rho_crit_z = _RHO_CRIT0 * ez2 / (1.0 + _Z)**3
-    from hod_mod.cosmology.gas_profiles import m200_to_m500c
+    from hod_mod.gas import m200_to_m500c
     m500_arr, r500_arr = m200_to_m500c(_MASS_ARR, _C200_ARR, _R200_ARR, rho_crit_z)
 
     uk = pp.pressure_uk(k, _MASS_ARR, _R200_ARR, _C200_ARR, _Z, _THETA)   # (Nk, NM)

@@ -315,7 +315,7 @@ data for both observables.  The iHOD model (solid blue) fits by construction; th
 cHOD model (dashed orange) uses the published SHMR parameters with satellite parameters
 fixed at iHOD values.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_sdss/comparison_ihod_chod_wp_ds.png
+.. figure:: _images/benchmarks__zumandelbaum2015_sdss__comparison_ihod_chod_wp_ds.png
    :width: 95%
    :alt: ZM15 iHOD vs cHOD comparison for wp and DeltaSigma
 
@@ -386,13 +386,13 @@ high-mass parameters :math:`\delta` and :math:`\gamma` run to their prior bounds
 threshold sample carries no leverage on them. This is expected and motivates the joint
 multi-sample fit.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_sdss/benchmark_zumandelbaum2015_wp.png
+.. figure:: _images/benchmarks__zumandelbaum2015_sdss__benchmark_zumandelbaum2015_wp.png
    :width: 80%
    :alt: ZM15 MAP best-fit wp vs data
 
    MAP best-fit :math:`w_p(r_p)` vs. SDSS DR7 data (top) and residuals (bottom).
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_sdss/benchmark_zumandelbaum2015_ds.png
+.. figure:: _images/benchmarks__zumandelbaum2015_sdss__benchmark_zumandelbaum2015_ds.png
    :width: 80%
    :alt: ZM15 MAP best-fit DeltaSigma vs data
 

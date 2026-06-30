@@ -4,15 +4,15 @@ import pytest
 import numpy as np
 import jax.numpy as jnp
 
-from hod_mod.galaxies.hod import (
+from hod_mod.connection.hod import (
     Leauthaud12HODModel,
     _mh_from_mstar_leauthaud12,
     _mstar_from_mh_leauthaud12,
     n_cen_leauthaud12,
     n_sat_leauthaud12,
 )
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
 
 
 _THETA = LinearPowerSpectrum.default_cosmology()

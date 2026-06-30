@@ -43,18 +43,18 @@ def R_arr():
 
 class TestLinearGrowthFactor:
     def test_z0_is_one(self):
-        from hod_mod.galaxies.intrinsic_alignment import _linear_growth_factor
+        from hod_mod.observables.intrinsic_alignment import _linear_growth_factor
         assert _linear_growth_factor(0.0, 0.31) == pytest.approx(1.0, rel=1e-6)
 
     def test_decreases_with_z(self):
-        from hod_mod.galaxies.intrinsic_alignment import _linear_growth_factor
+        from hod_mod.observables.intrinsic_alignment import _linear_growth_factor
         D0 = _linear_growth_factor(0.0, 0.31)
         D1 = _linear_growth_factor(1.0, 0.31)
         D3 = _linear_growth_factor(3.0, 0.31)
         assert D0 > D1 > D3 > 0
 
     def test_physical_range(self):
-        from hod_mod.galaxies.intrinsic_alignment import _linear_growth_factor
+        from hod_mod.observables.intrinsic_alignment import _linear_growth_factor
         for z in [0.0, 0.3, 0.5, 1.0, 2.0]:
             D = _linear_growth_factor(z, 0.31)
             assert 0.0 < D <= 1.0
@@ -67,7 +67,7 @@ class TestLinearGrowthFactor:
 class TestNLAModel:
     @pytest.fixture(scope="class")
     def nla(self):
-        from hod_mod.galaxies.intrinsic_alignment import NLAModel
+        from hod_mod.observables.intrinsic_alignment import NLAModel
         return NLAModel(_mock_pk_nl)
 
     def test_zero_amplitude_gives_zero(self, nla, theta, R_arr):
@@ -92,7 +92,7 @@ class TestNLAModel:
 
     def test_redshift_scaling(self, nla, theta, R_arr):
         """ΔΣ_IA(z) ∝ (1+z)^η / D(z)^2 — ratio of two redshifts matches."""
-        from hod_mod.galaxies.intrinsic_alignment import _linear_growth_factor
+        from hod_mod.observables.intrinsic_alignment import _linear_growth_factor
         z1, z2 = 0.1, 0.5
         eta = 1.0
         params = {"A_IA": 1.0, "eta_IA": eta}
@@ -108,7 +108,7 @@ class TestNLAModel:
         assert actual_ratio == pytest.approx(expected_ratio, rel=5e-3)
 
     def test_default_params(self):
-        from hod_mod.galaxies.intrinsic_alignment import NLAModel
+        from hod_mod.observables.intrinsic_alignment import NLAModel
         p = NLAModel.default_params()
         assert p["A_IA"] == 0.0 and p["eta_IA"] == 0.0
 
@@ -124,12 +124,12 @@ class TestNLAModel:
 class TestTATTModel:
     @pytest.fixture(scope="class")
     def tatt(self):
-        from hod_mod.galaxies.intrinsic_alignment import TATTModel
+        from hod_mod.observables.intrinsic_alignment import TATTModel
         return TATTModel(_mock_pk_nl)
 
     @pytest.fixture(scope="class")
     def nla(self):
-        from hod_mod.galaxies.intrinsic_alignment import NLAModel
+        from hod_mod.observables.intrinsic_alignment import NLAModel
         return NLAModel(_mock_pk_nl)
 
     def test_zero_params_gives_zero(self, tatt, theta, R_arr):
@@ -160,7 +160,7 @@ class TestTATTModel:
         assert np.all(ds_bta < ds_none)
 
     def test_default_params(self):
-        from hod_mod.galaxies.intrinsic_alignment import TATTModel
+        from hod_mod.observables.intrinsic_alignment import TATTModel
         p = TATTModel.default_params()
         assert p["a_TA"] == 0.0 and p["b_TA"] == 0.0 and p["eta_TA"] == 0.0
 
@@ -172,12 +172,12 @@ class TestTATTModel:
 class TestDeltaSigmaWithIA:
     @pytest.fixture(scope="class")
     def pred_and_nla(self):
-        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-        from hod_mod.cosmology.halo_mass_function import make_hmf
-        from hod_mod.cosmology.halo_profiles import HaloProfile
-        from hod_mod.galaxies.hod import HODModel
-        from hod_mod.galaxies.clustering import FullHaloModelPrediction
-        from hod_mod.galaxies.intrinsic_alignment import NLAModel
+        from hod_mod.core.power_spectrum import LinearPowerSpectrum
+        from hod_mod.core.halo_mass_function import make_hmf
+        from hod_mod.core.halo_profiles import HaloProfile
+        from hod_mod.connection.hod import HODModel
+        from hod_mod.observables.clustering import FullHaloModelPrediction
+        from hod_mod.observables.intrinsic_alignment import NLAModel
 
         pk_lin = LinearPowerSpectrum()
         theta = pk_lin.default_cosmology()
@@ -237,12 +237,12 @@ class TestMdefConsistency:
 
     @pytest.fixture(scope="class")
     def theta(self):
-        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+        from hod_mod.core.power_spectrum import LinearPowerSpectrum
         return LinearPowerSpectrum.default_cosmology()
 
     def test_200c_and_200m_give_different_rs(self, colossus_cosmo, theta):
         """mdef='200c' and '200m' produce different r_s at the same mass."""
-        from hod_mod.cosmology.halo_profiles import HaloProfile
+        from hod_mod.core.halo_profiles import HaloProfile
         hp_m = HaloProfile(colossus_cosmo, mdef="200m")
         hp_c = HaloProfile(colossus_cosmo, mdef="200c")
         m = jnp.array([1e14])
@@ -252,7 +252,7 @@ class TestMdefConsistency:
 
     def test_200m_rho_ref_z_independent(self, colossus_cosmo, theta):
         """_mdef_delta_rho('200m') returns the same rho_ref at all z."""
-        from hod_mod.cosmology.halo_profiles import HaloProfile
+        from hod_mod.core.halo_profiles import HaloProfile
         hp = HaloProfile(colossus_cosmo, mdef="200m")
         _, rho0 = hp._mdef_delta_rho(0.0, theta)
         _, rho1 = hp._mdef_delta_rho(1.0, theta)
@@ -260,7 +260,7 @@ class TestMdefConsistency:
 
     def test_200c_rho_ref_increases_with_z(self, colossus_cosmo, theta):
         """_mdef_delta_rho('200c') comoving ρ_crit(z) decreases with z in comoving coords."""
-        from hod_mod.cosmology.halo_profiles import HaloProfile
+        from hod_mod.core.halo_profiles import HaloProfile
         hp = HaloProfile(colossus_cosmo, mdef="200c")
         _, rho0 = hp._mdef_delta_rho(0.0, theta)
         _, rho1 = hp._mdef_delta_rho(1.0, theta)
@@ -271,14 +271,14 @@ class TestMdefConsistency:
 
     def test_vir_delta_in_physical_range(self, colossus_cosmo, theta):
         """Bryan & Norman virial overdensity ≈ 102 at z=0 for Ω_m=0.31 (ΛCDM, not EdS)."""
-        from hod_mod.cosmology.halo_profiles import HaloProfile
+        from hod_mod.core.halo_profiles import HaloProfile
         hp = HaloProfile(colossus_cosmo, mdef="vir")
         delta, _ = hp._mdef_delta_rho(0.0, theta)
         # EdS gives 18π² ≈ 178; ΛCDM with Ω_m=0.31 gives ≈102 (dark energy reduces binding)
         assert 50.0 < delta < 200.0
 
     def test_unknown_mdef_raises(self, colossus_cosmo, theta):
-        from hod_mod.cosmology.halo_profiles import HaloProfile
+        from hod_mod.core.halo_profiles import HaloProfile
         hp = HaloProfile(colossus_cosmo, mdef="500c")
         with pytest.raises(ValueError):
             hp._mdef_delta_rho(0.0, theta)
@@ -291,7 +291,7 @@ class TestMdefConsistency:
 class TestPkLinearSplit:
     @pytest.fixture(scope="class")
     def pk_lin(self):
-        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+        from hod_mod.core.power_spectrum import LinearPowerSpectrum
         return LinearPowerSpectrum()
 
     @pytest.fixture(scope="class")

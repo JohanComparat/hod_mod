@@ -1,8 +1,8 @@
 """run_fit_More15.py — Fit the More+2015 HOD model to wp(rp), ΔΣ(R), or both.
 
-Wraps the validated :class:`~hod_mod.fitting.hod_wp.WpFitter`,
-:class:`~hod_mod.fitting.hod_wp.JointFitter`, and
-:class:`~hod_mod.fitting.hod_wp.DeltaSigmaFitter` classes.
+Wraps the validated :class:`~hod_mod.fitting.WpFitter`,
+:class:`~hod_mod.fitting.JointFitter`, and
+:class:`~hod_mod.fitting.DeltaSigmaFitter` classes.
 The probe mode (wp-only, ESD-only, or joint wp+ESD) is inferred automatically
 from the YAML configuration: include a ``data:`` section for wp, and/or a
 ``joint:`` / ``ds:`` section for ΔΣ.

@@ -31,14 +31,15 @@ _REPO_ROOT = os.path.abspath(
 )
 sys.path.insert(0, _REPO_ROOT)
 
-from hod_mod.fitting.hod_wp import (
+from hod_mod.paths import results_root
+from hod_mod.fitting import (
     JointFitter,
     _CachedPkLinear,
     _assemble_hod_params,
     load_config,
 )
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.fitting.hod_wp import HOD_MODELS
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.fitting import HOD_MODELS
 from hod_mod.scripts.benchmarks.benchmark_plots import (
     _COL_DATA, _COL_MAP, _COL_PUB,
     _PARAM_LATEX,
@@ -79,8 +80,8 @@ PUBLISHED_COSMO = {"Omega_m": 0.303, "S8": 0.793}
 HOD_PARAM_NAMES = ["log10mmin", "sigma_logm", "log10m0", "log10m1",
                    "alpha", "f_Gamma", "A_cen", "A_sat"]
 
-OUTPUT_DIR = os.path.join(_REPO_ROOT,
-                          "results/benchmarks/lange2025/all_samples_hsc_wp/")
+OUTPUT_DIR = os.path.join(results_root(),
+                          "benchmarks/lange2025/all_samples_hsc_wp/")
 
 
 # ---------------------------------------------------------------------------

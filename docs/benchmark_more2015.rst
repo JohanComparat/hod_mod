@@ -9,7 +9,7 @@ BOSS CMASS z\ :sub:`eff` = 0.52.
 
 All variants fit :math:`w_p(r_p)` and :math:`\Delta\Sigma(R)` jointly using the
 beyond-linear halo bias correction
-(:class:`~hod_mod.cosmology.beyond_linear_bias.BeyondLinearBiasMead21`).
+(:class:`~hod_mod.core.beyond_linear_bias.BeyondLinearBiasMead21`).
 See :ref:`benchmarks` for the summary table.
 
 ----
@@ -84,14 +84,14 @@ Derived quantities (at MCMC median):
      - 13.54
      - :math:`\log_{10}(M_\odot/h)`
 
-.. figure:: ../results/benchmarks/more2015_logM11_12/benchmark_more2015_logM11_12_combined.png
+.. figure:: _images/benchmarks__more2015_logM11_12__benchmark_more2015_logM11_12_combined.png
    :width: 90%
    :alt: more2015_logM11_12 combined
 
    MAP :math:`w_p(r_p)` (top) and :math:`\Delta\Sigma(R)` (middle) vs BOSS CMASS
    logM*>11.1 data, with residuals.
 
-.. figure:: ../results/benchmarks/more2015_logM11_12/benchmark_more2015_logM11_12_hod.png
+.. figure:: _images/benchmarks__more2015_logM11_12__benchmark_more2015_logM11_12_hod.png
    :width: 70%
    :alt: more2015_logM11_12 HOD
 
@@ -100,7 +100,7 @@ Derived quantities (at MCMC median):
    Dashed lines + shaded bands: MCMC median and 16th–84th percentile posterior.
    Orange: published More+2015 parameters.
 
-.. figure:: ../results/benchmarks/more2015_logM11_12/benchmark_more2015_logM11_12_corner.png
+.. figure:: _images/benchmarks__more2015_logM11_12__benchmark_more2015_logM11_12_corner.png
    :width: 90%
    :alt: more2015_logM11_12 corner
 
@@ -178,20 +178,20 @@ Derived quantities (at MCMC median):
      - 13.69
      - :math:`\log_{10}(M_\odot/h)`
 
-.. figure:: ../results/benchmarks/more2015_logM11p3_12/benchmark_more2015_logM11p3_12_combined.png
+.. figure:: _images/benchmarks__more2015_logM11p3_12__benchmark_more2015_logM11p3_12_combined.png
    :width: 90%
    :alt: more2015_logM11p3_12 combined
 
    MAP :math:`w_p(r_p)` and :math:`\Delta\Sigma(R)` vs BOSS CMASS logM*>11.3 data.
 
-.. figure:: ../results/benchmarks/more2015_logM11p3_12/benchmark_more2015_logM11p3_12_hod.png
+.. figure:: _images/benchmarks__more2015_logM11p3_12__benchmark_more2015_logM11p3_12_hod.png
    :width: 70%
    :alt: more2015_logM11p3_12 HOD
 
    HOD occupation functions vs halo mass.  Solid: MAP.
    Dashed + shaded: MCMC median and 16th–84th percentile.  Orange: published values.
 
-.. figure:: ../results/benchmarks/more2015_logM11p3_12/benchmark_more2015_logM11p3_12_corner.png
+.. figure:: _images/benchmarks__more2015_logM11p3_12__benchmark_more2015_logM11p3_12_corner.png
    :width: 90%
    :alt: more2015_logM11p3_12 corner
 
@@ -270,20 +270,20 @@ Derived quantities (at MCMC median):
      - 13.75
      - :math:`\log_{10}(M_\odot/h)`
 
-.. figure:: ../results/benchmarks/more2015_logM11p4_12/benchmark_more2015_logM11p4_12_combined.png
+.. figure:: _images/benchmarks__more2015_logM11p4_12__benchmark_more2015_logM11p4_12_combined.png
    :width: 90%
    :alt: more2015_logM11p4_12 combined
 
    MAP :math:`w_p(r_p)` and :math:`\Delta\Sigma(R)` vs BOSS CMASS logM*>11.4 data.
 
-.. figure:: ../results/benchmarks/more2015_logM11p4_12/benchmark_more2015_logM11p4_12_hod.png
+.. figure:: _images/benchmarks__more2015_logM11p4_12__benchmark_more2015_logM11p4_12_hod.png
    :width: 70%
    :alt: more2015_logM11p4_12 HOD
 
    HOD occupation functions vs halo mass.  Solid: MAP.
    Dashed + shaded: MCMC median and 16th–84th percentile.  Orange: published values.
 
-.. figure:: ../results/benchmarks/more2015_logM11p4_12/benchmark_more2015_logM11p4_12_corner.png
+.. figure:: _images/benchmarks__more2015_logM11p4_12__benchmark_more2015_logM11p4_12_corner.png
    :width: 90%
    :alt: more2015_logM11p4_12 corner
 
@@ -349,14 +349,14 @@ The free-cosmology MAP recovers :math:`S_8 = 0.813` (0.34σ from Planck 2018) an
 HOD mass parameters agree within 0.9σ.  The ``alpha`` offset is the same
 Nelder-Mead satellite-slope degeneracy seen in the fixed-cosmology fits.
 
-.. figure:: ../results/benchmarks/more2015_logM11_12_freecosmo/benchmark_more2015_logM11_12_freecosmo_combined.png
+.. figure:: _images/benchmarks__more2015_logM11_12_freecosmo__benchmark_more2015_logM11_12_freecosmo_combined.png
    :width: 90%
    :alt: more2015_logM11_12_freecosmo combined
 
    MAP :math:`w_p(r_p)` and :math:`\Delta\Sigma(R)` vs BOSS CMASS logM*>11.1 data
    (free :math:`\Omega_m`, :math:`S_8` cosmology).
 
-.. figure:: ../results/benchmarks/more2015_logM11_12_freecosmo/benchmark_more2015_logM11_12_freecosmo_hod.png
+.. figure:: _images/benchmarks__more2015_logM11_12_freecosmo__benchmark_more2015_logM11_12_freecosmo_hod.png
    :width: 70%
    :alt: more2015_logM11_12_freecosmo HOD
 

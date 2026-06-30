@@ -18,6 +18,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from hod_mod.paths import results_root
 
 _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -28,9 +29,9 @@ sys.path.insert(0, _REPO_ROOT)
 # Paths and constants
 # ---------------------------------------------------------------------------
 
-CHAIN_FILE  = os.path.join(_REPO_ROOT, "results/more2015_cmass/flatchain.npz")
+CHAIN_FILE  = os.path.join(results_root(), "more2015_cmass/flatchain.npz")
 CONFIG_FILE = os.path.join(_REPO_ROOT, "configs/benchmarks/benchmark_more2015.yml")
-OUT_DIR     = os.path.join(_REPO_ROOT, "results/benchmarks/more2015_cmass")
+OUT_DIR     = os.path.join(results_root(), "benchmarks/more2015_cmass")
 
 FIXED_PARAMS = {"alpha_inc": 1.0, "log10m_inc": 13.0}
 

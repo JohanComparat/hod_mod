@@ -80,7 +80,7 @@ def run_mcmc(fitter: WpFitter, map_result: dict | None = None) -> dict:
     for i, name in enumerate(fitter.config.free_params):
         print(f"  {name:20s} = {med[i]:.4f} + {hi[i]-med[i]:.4f} - {med[i]-lo[i]:.4f}")
 
-    from hod_mod.fitting.hod_wp import _assemble_hod_params
+    from hod_mod.fitting import _assemble_hod_params
     med_params = _assemble_hod_params(
         med, fitter.config.free_params,
         {k: v for k, v in fitter.config.param_init.items()

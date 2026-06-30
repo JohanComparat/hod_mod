@@ -1,0 +1,20 @@
+# Keeps the repo clean: run `pre-commit install` once after cloning.
+# See docs/data_hosting.rst — generated results live outside the repo
+# (hod_mod.paths.results_root / $HOD_MOD_RESULTS) and on Zenodo.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=2000']        # reject any staged blob > 2 MB
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: no-results-dir
+        name: block files under results/
+        entry: "results/ is generated output — never commit it (see docs/data_hosting.rst)"
+        language: fail
+        files: '^results/'

@@ -80,19 +80,20 @@ from astropy.cosmology import FlatLambdaCDM
 # --------------------------------------------------------------------------
 # hod_mod imports
 # --------------------------------------------------------------------------
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf, _BACKENDS, _EMULATOR_BACKENDS
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.cosmology import GasDensityDPM
-from hod_mod.galaxies.hod import (
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf, _BACKENDS, _EMULATOR_BACKENDS
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.gas import GasDensityDPM
+from hod_mod.connection.hod import (
     ZuMandelbaum15HODModel, n_cen_thresh_zu15, n_sat_thresh_zu15,
 )
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
-from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
-from hod_mod.galaxies.agn_ham import HamAGNModel
-from hod_mod.galaxies.agn_hod import HODAgnModel
-from hod_mod.galaxies.agn import XrayAGNModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
+from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+from hod_mod.agn.ham import HamAGNModel
+from hod_mod.agn.hod import HODAgnModel
+from hod_mod.agn.xray import XrayAGNModel
 from hod_mod.data_io.sum_stat_reader import SumStatReader
+from hod_mod.paths import results_root
 
 # Enable JAX XLA compilation cache. The angular_cl_gX JIT traces in Python
 # (~200s) but the XLA compilation step is fast (<1s on CPU). Lower the
@@ -117,7 +118,7 @@ _GAL_DIR = Path(os.path.expanduser(
     "~/data/zenodo/LSDR10_GALxEVT/Galaxy_samples/data_and_randoms"
 ))
 _SUM_STAT_DIR = Path(os.path.expanduser("~/software/sum_stat/data"))
-_RESULTS_DIR  = Path(__file__).parents[3] / "results" / "fits" / "comparat2025"
+_RESULTS_DIR  = results_root() / "fits" / "comparat2025"
 
 # sum_stat subdirectory per sample (only samples with BGS data)
 _SUM_STAT_DIRS: dict[str, str] = {
@@ -268,6 +269,11 @@ def load_data(label: str) -> dict:
         wtheta       = np.array(d["wtheta"],      dtype=float),
         wtheta_err   = np.array(d["wtheta_err"],  dtype=float),
         R_kpc        = np.array(d["theta"] * d["convert_theta_to_kpc"], dtype=float),
+        # S^R_X (random x events) background surface brightness [erg kpc^-2 s^-1];
+        # constant per sample.  Converts w(theta) -> physical: S_X = (1+w) * S^R_X
+        # (DP83).  Used as the absolute normalisation when folding the true ECF.
+        beckground   = np.array(d["beckground"],  dtype=float),
+        R_to_kpc     = np.array(d["convert_theta_to_kpc"], dtype=float),
     )
 
 
@@ -475,7 +481,7 @@ def _make_bnl():
     ``FullHaloModelPrediction(bnl_model=...)``.
     """
     try:
-        from hod_mod.cosmology.beyond_linear_bias import BeyondLinearBiasMead21
+        from hod_mod.core.beyond_linear_bias import BeyondLinearBiasMead21
         return BeyondLinearBiasMead21()
     except Exception as exc:  # missing data table, etc.
         print(f"  WARNING: BeyondLinearBiasMead21 unavailable ({exc}); "
@@ -527,7 +533,32 @@ class _Infrastructure:
         self.cross = HaloModelCrossSpectra(
             self.fhmp, density_profile=self.dp, agn_model=self.agn
         )
+        self._ecf_fixed = None
         print(f"  done in {time.time() - t0:.1f}s", flush=True)
+
+    def enable_ecf(self, sample: str):
+        """Fold the true per-component eROSITA ECF (TM0 survey ARF+RMF) into the
+        cross-power as **tabulated band averages**: a per-halo gas weight
+        ``ECF_gas(kT(M))`` (kT from the Lovisari+2020 kT-M500c relation) and the
+        AGN ECF_AGN(Γ=1.9).  Returns ``ecf_fixed`` (for K_abs).
+        """
+        import numpy as np
+        from hod_mod.gas import load_ecf_tables
+        from hod_mod.scripts import validate_gas_profiles as vgp
+        gas_of_T, ecf_agn, ecf_fixed = load_ecf_tables(sample)
+        z = float(SAMPLES[sample]["zmean"])
+
+        def ecf_gas_of_mass(m200_h):                # m200 [Msun/h] -> ECF_gas(kT(M))
+            m200_h = np.asarray(m200_h, dtype=float)
+            r200 = vgp._r200(m200_h, z); c200 = vgp._c200_approx(m200_h)
+            m500_h, _ = vgp.m200_to_m500c(m200_h, c200, r200, vgp._rho_crit_z(z))
+            kT = vgp._lovisari20_kt(m500_h / vgp._H, z=z)
+            return np.asarray(gas_of_T(kT), dtype=float)
+
+        self.cross._ecf_gas_table = ecf_gas_of_mass
+        self.cross._ecf_agn = ecf_agn
+        self._ecf_fixed = ecf_fixed
+        return ecf_fixed
 
     def use_agn_for(self, label: str) -> None:
         """Attach the AGN model appropriate for sample *label* to ``self.cross``.
@@ -543,17 +574,30 @@ class _Infrastructure:
             return
         if label not in self._agn_by_sample:
             s = SAMPLES[label]
-            print(f"  [{label}] building HODAgnModel (f_inc={self.agn_finc:g}, "
-                  f"z_mean={s['zmean']:.3f}) ...", flush=True)
-            self._agn_by_sample[label] = HODAgnModel(
-                pk_lin=self.pk_lin,
-                theta_cosmo=_THETA_COSMO,
-                hmf=self.hmf,                 # reuse the fit's (CSST) HMF for consistency
-                z_mean=s["zmean"],
-                z_max=s["zmax"],
-                hod_params={"f_inc": self.agn_finc},
-                xlf="aird15",
-            )
+            if self.agn_model_choice == "duty_cycle":
+                # Lau+2025 model: ZuMandelbaum15 occupation (from the wp+ngal MAP
+                # fit) × a free duty cycle, with the W_AGN(z) X-ray kernel
+                # (Eq. A9).  The duty cycle is threaded per-call via
+                # agn_kwargs={"log10DC": ...}, so the model holds only a default.
+                from hod_mod.agn.duty_cycle import DutyCycleAGNModel
+                print(f"  [{label}] building DutyCycleAGNModel "
+                      f"(z_mean={s['zmean']:.3f}) ...", flush=True)
+                self._agn_by_sample[label] = DutyCycleAGNModel(
+                    sample=label, theta_cosmo=_THETA_COSMO, hmf=self.hmf,
+                    log10DC=getattr(self, "dc_log10DC", -2.0),
+                )
+            else:
+                print(f"  [{label}] building HODAgnModel (f_inc={self.agn_finc:g}, "
+                      f"z_mean={s['zmean']:.3f}) ...", flush=True)
+                self._agn_by_sample[label] = HODAgnModel(
+                    pk_lin=self.pk_lin,
+                    theta_cosmo=_THETA_COSMO,
+                    hmf=self.hmf,                 # reuse the fit's (CSST) HMF for consistency
+                    z_mean=s["zmean"],
+                    z_max=s["zmax"],
+                    hod_params={"f_inc": self.agn_finc},
+                    xlf="aird15",
+                )
         self.cross._agn = self._agn_by_sample[label]
         self.cross._agn_has_hod = True
 
@@ -572,8 +616,8 @@ class _Infrastructure:
         from hod_mod.scripts.validate_gas_profiles import (
             _make_density_variant, _make_pressure_variant,
         )
-        from hod_mod.cosmology.gas_profiles import MetallicityProfileDPM, _gnfw_f_params
-        from hod_mod.cosmology import ApecCoolingTable
+        from hod_mod.gas import MetallicityProfileDPM, _gnfw_f_params
+        from hod_mod.gas import ApecCoolingTable
 
         if self._cooling_fn is None:
             print("  building ApecCoolingTable (full-DPM emissivity) ...", flush=True)
@@ -851,9 +895,12 @@ def _predict_shape(
 
     data_d = load_data(label)
     theta  = data_d["theta_rad"]
-    if infra.agn_model_choice == "hod":
+    if infra.agn_model_choice in ("hod", "duty_cycle"):
         # Physically-predicted, occupation-weighted AGN cross-power (PSF-convolved
-        # inside angular_cl_gX). log10_A_AGN is a fudge factor on this amplitude.
+        # inside angular_cl_gX).  For "hod", log10_A_AGN is a fudge factor on this
+        # amplitude; for "duty_cycle" the amplitude is the duty cycle, threaded via
+        # agn_kwargs={"log10DC": ...} into the AGN emissivity (so the template
+        # returned here is already DC-scaled).
         agn_shape = _hankel(np.asarray(cl_components["agn"], dtype=float), theta)
     else:
         # Legacy: AGN as a pure free-amplitude King PSF point source.
@@ -1773,7 +1820,7 @@ def _load_mcmc_lg_m1h(label: str, out_dir: Path) -> np.ndarray | None:
 
 def _shmr_zu15(log10mh_grid: np.ndarray, hp: dict) -> np.ndarray:
     """Mean ZM15 SHMR log10(M*/[Msun/h]) at fixed log10(Mh/[Msun/h])."""
-    from hod_mod.galaxies.hod import _mstar_from_mh_zu15
+    from hod_mod.connection.hod import _mstar_from_mh_zu15
     return np.asarray(_mstar_from_mh_zu15(
         log10mh_grid, hp["lg_m1h"], hp["lg_m0star"], hp["beta"], hp["delta"], hp["gamma"],
     ))
@@ -1804,7 +1851,7 @@ def plot_diagnostics(
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from hod_mod.galaxies import sham
+    from hod_mod.connection import sham
 
     infra.use_agn_for(label)   # attach per-sample AGN before the direct angular_cl_XX call
 
@@ -2533,7 +2580,7 @@ def _parse_args():
     p.add_argument("--add-syst", type=float, default=None, metavar="PCT",
                    help="Systematic floor as a percentage, e.g. 5 for 5%%. "
                         "Overrides --f-sys when specified.")
-    p.add_argument("--agn-model", choices=["hod", "ham", "xray"], default="hod",
+    p.add_argument("--agn-model", choices=["hod", "ham", "xray", "duty_cycle"], default="hod",
                    help="AGN component: 'hod' (HODAgnModel — physically-predicted "
                         "cross-power, log10_A_AGN is a fudge factor; default), "
                         "'ham' (free-amplitude King PSF, HamAGNModel), or "
@@ -2583,7 +2630,7 @@ def _parse_args():
                         "Msun/h and is silently extrapolated below that, so "
                         "it is not recommended for low log10m_star_thresh "
                         "samples such as S1 (see AemulusNuHaloMassFunction "
-                        "docstring in hod_mod.cosmology.halo_mass_function).")
+                        "docstring in hod_mod.core.halo_mass_function).")
     return p.parse_args()
 
 

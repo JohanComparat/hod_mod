@@ -30,13 +30,13 @@ import jax.numpy as jnp
 
 # sys.path.insert removed — hod_mod is installed
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
-from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.observables.clustering import FullHaloModelPrediction
+from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid
 from hod_mod.data_io.sum_stat_reader import SumStatReader
-from hod_mod.galaxies.hod import (
+from hod_mod.connection.hod import (
     _mstar_from_mh_zu15,
     shmr_zacharegkas25,
     _mean_stellar_mass_c_vanuitert16,

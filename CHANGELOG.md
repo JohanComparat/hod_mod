@@ -2,6 +2,124 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.0] — 2026-06-30
+
+A structural refactor that reorganises the package **by observable pipeline**
+(galaxy clustering + lensing, galaxy × X-ray, galaxy × thermal SZ) on top of a shared
+core, instead of by ingredient type (`cosmology/` vs `galaxies/`). This is a
+**clean break**: internal import paths change and there are no compatibility shims.
+The top-level public API (symbol names such as `MoreHODModel`,
+`FullHaloModelPrediction`, `FitConfig`) is preserved via re-exports from
+``hod_mod/__init__.py``.
+
+### Breaking changes — module move map
+
+| Old import path | New import path |
+|---|---|
+| `hod_mod.cosmology.*` | `hod_mod.core.*` |
+| `hod_mod.cosmology.gas_profiles` | `hod_mod.gas.{pressure,density,cooling,metallicity,conversions}` |
+| `hod_mod.cosmology.erosita_response` | `hod_mod.gas.erosita_response` |
+| `hod_mod.galaxies.hod` | `hod_mod.connection.hod.{base,more15,zumandelbaum15,…}` |
+| `hod_mod.galaxies.{clf,sham}` | `hod_mod.connection.{clf,sham}` |
+| `hod_mod.galaxies.agn*` | `hod_mod.agn.{xray,ham,hod,duty_cycle}` |
+| `hod_mod.galaxies.clustering` | `hod_mod.observables.clustering` |
+| `hod_mod.galaxies.cross_spectra` | `hod_mod.observables.cross_spectra` |
+| `hod_mod.galaxies.cross_clustering` | `hod_mod.observables.cross_clustering` |
+| `hod_mod.galaxies.intrinsic_alignment` | `hod_mod.observables.intrinsic_alignment` |
+| `hod_mod.galaxies.baryon_fraction` | `hod_mod.observables.baryon_fraction` |
+| `hod_mod.fitting.hod_wp` | `hod_mod.fitting.{config,models,fitters}` |
+
+### Added
+
+- `hod_mod/observables/` — the thin top layer mirroring the three observable
+  pipelines; `cross_spectra` is the shared galaxy × tSZ and galaxy × X-ray engine.
+- `hod_mod/cli/` — a single consolidated CLI front door (`python -m hod_mod <cmd>`
+  and the `hod-mod` console entry point) whose subcommands (`fit`, `fit-cross`,
+  `fit-joint`, `benchmark`, `predict`, `validate <target>`) delegate to the existing
+  scripts. `hod-mod fit` is the recommended config-driven fitter, superseding the
+  near-duplicate `fit_hod_wp` / `run_fit` / `run_fit_More15` drivers (which remain
+  runnable). The ~50 scripts were not physically relocated.
+- Galaxy × thermal SZ promoted to a first-class, documented pipeline (`pipeline_gal_tsz`
+  doc page + worked example) built on the existing, already-tested
+  `HaloModelCrossSpectra` (`P_{g,y}`, `projected_gy`, `angular_cl_gy`).
+
+### Changed
+
+- Three oversized modules were split along their natural class/function boundaries:
+  `hod.py` (2321 lines → `connection/hod/` family package: `base`, `more15`,
+  `zumandelbaum15`, `guo`, `kravtsov04`, `zacharegkas25`, `vanuitert16`,
+  `leauthaud12`, `lange25`), `fitting/hod_wp.py` → `fitting/{models,config,fitters}.py`,
+  and `gas_profiles.py` → `gas/{conversions,pressure,density,cooling,metallicity}.py`.
+  `cross_spectra.py` is kept whole as the shared cross-correlation engine.
+  `observables/clustering.py` is **deliberately not split** in this release: it is the
+  critical wp/ΔΣ prediction path (with the assembly-bias fix and numpy static caches),
+  it can only be regression-verified through CAMB, and it is already cleanly isolated
+  behind `hod_mod.observables`.
+- `m200_to_m500c` (NFW M₂₀₀→M₅₀₀c) re-implemented as a vectorised, jittable JAX
+  bisection, replacing the per-halo `scipy.optimize.brentq` Python loop (matches the
+  former result to 2e-7). The differentiable forward model (HOD occupation, distances,
+  power spectrum, halo-profile FTs) is already pure-JAX. The MAP optimiser keeps
+  `scipy.optimize` (gradient-free Powell/Nelder-Mead): its objective runs through CAMB
+  and the numpy MCMC caches and is not differentiable end-to-end, so a jaxopt/optax
+  swap would require a CAMB-free differentiable forward model (out of scope here).
+- Documentation toctree reorganised to mirror the package: User Guide → Pipelines
+  (Clustering & Lensing, Galaxy × X-ray, Galaxy × tSZ) → Benchmarks → API Reference.
+
+### Fixed (galaxy × X-ray angular spectra)
+
+Exposed while raising test coverage of `observables/cross_spectra.py`:
+
+- **Threaded-JAX segfault.** `angular_cl_gX` / `angular_cl_XX` defaulted to
+  `n_workers=-1`, dispatching the per-redshift `_pk_tables_gX` build across
+  `os.cpu_count()` Python threads. Concurrent JAX *compilation* from threads crashes
+  the interpreter. Now **serial by default** (`n_workers=1`); the opt-in threaded path
+  (`n_workers>1`) does a serial warm-up compile first.
+- **float32 NaN.** The `_safe_log` floor `1e-60` (and the XX block's explicit `1e-120`)
+  underflows float32 to 0, so an all-zero field (e.g. the AGN leg when no AGN model is
+  configured) gives `log(0)=-inf`; a constant `-inf` table then makes `jnp.interp`
+  compute `(-inf)-(-inf)=NaN`, poisoning the whole Limber integral. Floor raised to a
+  float32-safe `1e-30`. `angular_cl_gX` now returns finite, positive spectra.
+
+### Tests and documentation
+
+- Test suite updated to the new layout (all imports rewritten) and extended with new
+  modules covering both the refactored code and previously-untested integration paths:
+  `test_public_api` (clean-break contract), `test_cli`, `test_jax_conversions`,
+  `test_config_loading` (joint/ds/fits/cosmology branches + esd reader),
+  `test_power_spectrum_extra` (EH no-wiggle), `test_refactor_coverage` (baryon-fraction
+  models, Lange+2025 assembly bias, eROSITA `ecf_*`, `ApecCoolingTable`, bwpd reader,
+  `python -m hod_mod`), and CAMB-heavy `slow` suites: `test_fitter_integration`
+  (`WpFitter.map_fit`/`sample`, `DeltaSigmaFitter`, `JointFitter`),
+  `test_clustering_prediction` (ΔΣ split/components, baryon, einasto, `n_gal`),
+  `test_agn_ham` (HAM abundance matching, both XLFs), and the `cross_spectra` X-ray
+  angular spectra (serial==threaded regression). Heavy tests are marked `@pytest.mark.slow`
+  so plain `pytest` stays fast; CI runs `pytest -m ""`.
+- Fixed a pre-existing test bug (`test_emissivity_uk_scaled_by_boost`: its `_THETA`
+  lacked `Omega_b`/`n_s`).
+- Full-suite coverage rose from ~77% to **85%** (852 tests pass). Notable per-module
+  gains: `gas/erosita_response` 22→83%, `gas/cooling` 45→94%, `agn/ham` 41→88%,
+  `fitting/config` 58→98%, `observables/cross_spectra` 64→87%, `fitting/fitters`
+  57→74%, with `connection/hod/lange25`, `observables/baryon_fraction` and
+  `cross_clustering` at 100%. A `fail_under = 82` floor was added to
+  `[tool.coverage.report]` to prevent silent regression.
+- Documentation revised to match the refactor: the architecture tree, prose
+  file-paths, and code examples now reference the new packages (all 24 example
+  imports execute). All 154 documentation links were HTTP-verified; **three wrong
+  references were corrected** (Ueda+2014 `1402.7902`→`1402.1836`; Zu & Mandelbaum 2015
+  `1407.8741`→`1505.02781`; and the Ogata J₀ DOI `10.1145/1141885.1141895`, which
+  actually resolved to an unrelated linear-algebra paper, → the real PRIMS DOI
+  `10.2977/prims/1145474602`).
+
+### Housekeeping
+
+- Added `hod_mod.data.erosita` (`*.npz`) to wheel `package-data` (the DR1 response
+  and ECF tables were previously unpackaged).
+- Removed the one-shot scratch script `_refactor_hod.py` and the empty
+  `data/to_deprecate/` directory.
+- `.gitignore`: the stray `hod_mod/results/` output tree, the 365 MB untracked
+  `apec_v*.fits` tables (downloaded on demand by `soxs`), and the optional vendored
+  `WHM/` CAMB fork are now ignored.
+
 ## [0.0.5] — 2026-06-24
 
 ### Added

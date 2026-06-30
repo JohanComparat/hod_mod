@@ -38,6 +38,8 @@ dependencies:
     - colossus
     # MCMC sampling
     - emcee
+    # On-demand Zenodo data fetcher (benchmark data + curated results)
+    - pooch
     # Non-linear P(k) emulator — Aletheia (Sanchez 2025, arXiv:2511.13826)
     - AletheiaCosmo
     # Boltzmann solver — CLASS (Lesgourgues 2011)

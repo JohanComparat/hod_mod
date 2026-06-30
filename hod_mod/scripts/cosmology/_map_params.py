@@ -10,8 +10,8 @@ import json
 import os
 from pathlib import Path
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.galaxies.hod import (
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.connection.hod import (
     HODModel,
     Kravtsov04HODModel,
     MoreHODModel,
@@ -22,6 +22,7 @@ from hod_mod.galaxies.hod import (
     ZuMandelbaum15HODModel,
     Leauthaud12HODModel,
 )
+from hod_mod.paths import results_root
 
 _DEFAULT_THETA = LinearPowerSpectrum.default_cosmology()
 
@@ -38,7 +39,7 @@ _MODEL_CLASS = {
     "leauthaud12":     Leauthaud12HODModel,
 }
 
-_RESULTS_ROOT = Path(__file__).parents[4] / "results" / "bgs_multiprobe"
+_RESULTS_ROOT = results_root() / "bgs_multiprobe"
 
 
 def load_map_params(key: str) -> tuple[dict, dict]:
@@ -56,7 +57,7 @@ def load_map_params(key: str) -> tuple[dict, dict]:
     -------
     theta : dict
         Cosmological parameter dict (same schema as
-        :meth:`~hod_mod.cosmology.power_spectrum.LinearPowerSpectrum.default_cosmology`).
+        :meth:`~hod_mod.core.power_spectrum.LinearPowerSpectrum.default_cosmology`).
     hod_params : dict
         HOD parameter dict (same schema as the model's ``default_params()``).
     """

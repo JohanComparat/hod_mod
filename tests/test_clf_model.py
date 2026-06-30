@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 import jax.numpy as jnp
 
-from hod_mod.galaxies.clf import (
+from hod_mod.connection.clf import (
     log10_lc,
     clf_central_mean,
     phi_sat_cacciato09,
@@ -16,8 +16,8 @@ from hod_mod.galaxies.clf import (
     VanDenBosch13CLFModel,
     BASILISKCLFModel,
 )
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
 
 
 _THETA = LinearPowerSpectrum.default_cosmology()

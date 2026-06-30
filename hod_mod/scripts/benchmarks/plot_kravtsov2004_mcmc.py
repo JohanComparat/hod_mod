@@ -17,6 +17,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from hod_mod.paths import results_root
 
 _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,9 +28,9 @@ sys.path.insert(0, _REPO_ROOT)
 # Paths
 # ---------------------------------------------------------------------------
 
-CHAIN_FILE  = os.path.join(_REPO_ROOT, "results/benchmarks/kravtsov2004_cmass/flatchain.npz")
+CHAIN_FILE  = os.path.join(results_root(), "benchmarks/kravtsov2004_cmass/flatchain.npz")
 CONFIG_FILE = os.path.join(_REPO_ROOT, "configs/benchmarks/benchmark_kravtsov2004.yml")
-OUT_DIR     = os.path.join(_REPO_ROOT, "results/benchmarks/kravtsov2004_cmass")
+OUT_DIR     = os.path.join(results_root(), "benchmarks/kravtsov2004_cmass")
 
 MAP_PARAMS = {
     "log10mmin":  13.193282137252126,
@@ -50,7 +51,7 @@ PARAM_LABELS = {
 N_SAMPLES_WP = 400   # chain draws used for the wp uncertainty band
 RNG_SEED     = 42
 
-MORE2015_CHAIN_FILE  = os.path.join(_REPO_ROOT, "results/more2015_cmass/flatchain.npz")
+MORE2015_CHAIN_FILE  = os.path.join(results_root(), "more2015_cmass/flatchain.npz")
 MORE2015_CONFIG_FILE = os.path.join(_REPO_ROOT, "configs/benchmarks/benchmark_more2015.yml")
 
 MORE2015_MAP_PARAMS = {

@@ -22,12 +22,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from hod_mod.cosmology import BeyondLinearBiasMead21
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.galaxies.hod import MoreHODModel
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
+from hod_mod.core import BeyondLinearBiasMead21
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.connection.hod import MoreHODModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
 
 # ---------------------------------------------------------------------------
 # Output directory

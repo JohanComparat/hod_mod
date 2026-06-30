@@ -1,7 +1,7 @@
 Cosmology Module
 ================
 
-The ``hod_mod.cosmology`` sub-package computes the fundamental cosmological
+The ``hod_mod.core`` sub-package computes the fundamental cosmological
 quantities that drive the forward model: the matter power spectrum, the halo mass
 function, halo density profiles, and geometric distances.
 
@@ -10,7 +10,7 @@ function, halo density profiles, and geometric distances.
 Distances and Volumes
 ---------------------
 
-(`hod_mod.cosmology.distances`)
+(`hod_mod.core.distances`)
 
 The comoving distance to redshift :math:`z` is
 
@@ -29,7 +29,7 @@ The comoving volume element per steradian is
 
    \frac{dV}{dz\,d\Omega} = \frac{c}{H_0} \frac{\chi^2(z)}{E(z)}.
 
-.. automodule:: hod_mod.cosmology.distances
+.. automodule:: hod_mod.core.distances
    :members:
    :undoc-members:
 
@@ -38,7 +38,7 @@ The comoving volume element per steradian is
 Linear Power Spectrum
 ---------------------
 
-(`hod_mod.cosmology.power_spectrum`)
+(`hod_mod.core.power_spectrum`)
 
 The dimensionless power spectrum is
 
@@ -79,7 +79,7 @@ Linear growth is encoded as :math:`P(k,z) = D^2(z) P(k,0)` with the growth facto
    D(z) = \frac{5\Omega_m}{2} H(z) / H_0
    \int_z^\infty \frac{(1+z')}{[H(z')/H_0]^3}\,dz'.
 
-.. automodule:: hod_mod.cosmology.power_spectrum
+.. automodule:: hod_mod.core.power_spectrum
    :members:
    :undoc-members:
 
@@ -88,14 +88,14 @@ Linear growth is encoded as :math:`P(k,z) = D^2(z) P(k,0)` with the growth facto
 Non-linear Power Spectrum
 --------------------------
 
-(`hod_mod.cosmology.nonlinear`)
+(`hod_mod.core.nonlinear`)
 
 The non-linear power spectrum :math:`P_{\rm nl}(k,z)` is computed by the
 Aletheia emulator (`Contreras et al. 2023 <https://arxiv.org/abs/2305.00015>`_) [Aletheia2025]_,
 a neural-network emulator trained on a suite of N-body simulations spanning a wide
 cosmological parameter space including massive neutrinos and dynamical dark energy.
 
-.. automodule:: hod_mod.cosmology.nonlinear
+.. automodule:: hod_mod.core.nonlinear
    :members:
    :undoc-members:
 
@@ -104,7 +104,7 @@ cosmological parameter space including massive neutrinos and dynamical dark ener
 Halo Mass Function
 ------------------
 
-(`hod_mod.cosmology.halo_mass_function`)
+(`hod_mod.core.halo_mass_function`)
 
 The comoving number density of halos per unit logarithmic mass is
 
@@ -187,7 +187,7 @@ used as a pipeline baseline: it is only calibrated for
 :math:`M \geq 10^{13}\,M_\odot/h`, so HOD samples with non-negligible
 occupation below that mass (e.g. low stellar-mass-threshold samples) get
 silently extrapolated, dominating the integrated predictions with
-unreliable values (see :class:`~hod_mod.cosmology.halo_mass_function.AemulusNuHaloMassFunction`).
+unreliable values (see :class:`~hod_mod.core.halo_mass_function.AemulusNuHaloMassFunction`).
 Literature-validation scripts (``validate_*.py``, ``configs/benchmarks/*.yml``)
 intentionally stay on ``"tinker08"`` to match the HMF used by the papers
 they reproduce.
@@ -202,7 +202,7 @@ they reproduce.
      - Calibration range
      - Extra dependency
    * - ``"csst"``
-     - :class:`~hod_mod.cosmology.halo_mass_function.CsstHaloMassFunction`
+     - :class:`~hod_mod.core.halo_mass_function.CsstHaloMassFunction`
      - [ChenCSST2025]_
        (`SCPMA 2025 <https://ui.adsabs.harvard.edu/abs/2025SCPMA..6809513C>`_)
      - :math:`M \in [10^{10},10^{16}]\,M_\odot/h`,
@@ -210,7 +210,7 @@ they reproduce.
        :math:`\Omega_m,h,n_s,A_s,w_0,w_a,m_\nu,\Omega_b`
      - ``pip install git+https://github.com/czymh/csstemu``
    * - ``"aemulusnu"``
-     - :class:`~hod_mod.cosmology.halo_mass_function.AemulusNuHaloMassFunction`
+     - :class:`~hod_mod.core.halo_mass_function.AemulusNuHaloMassFunction`
      - [ShenAemulus2025]_
        (`JCAP 2025 <https://arxiv.org/abs/2410.00913>`_)
      - :math:`M \geq 10^{13}\,M_\odot/h`,
@@ -225,8 +225,8 @@ are patched automatically at import time by ``halo_mass_function.py``
 
 **Usage**::
 
-    from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-    from hod_mod.cosmology.halo_mass_function import make_hmf
+    from hod_mod.core.power_spectrum import LinearPowerSpectrum
+    from hod_mod.core.halo_mass_function import make_hmf
 
     pk  = LinearPowerSpectrum()
 
@@ -244,7 +244,7 @@ are patched automatically at import time by ``halo_mass_function.py``
     dn  = hmf.dndm(m_grid, z, theta)   # [h^4 Mpc^{-3} (M_sun/h)^{-1}]
     b   = hmf.bias(m_grid, z, theta)   # Tinker 2010 (all backends)
 
-.. automodule:: hod_mod.cosmology.halo_mass_function
+.. automodule:: hod_mod.core.halo_mass_function
    :members:
    :undoc-members:
 
@@ -253,7 +253,7 @@ are patched automatically at import time by ``halo_mass_function.py``
 Halo Profiles
 -------------
 
-(`hod_mod.cosmology.halo_profiles`)
+(`hod_mod.core.halo_profiles`)
 
 **NFW profile**
 
@@ -326,7 +326,7 @@ and the excess surface density (the weak-lensing observable) is
 
 where Ci and Si are the cosine and sine integrals.
 
-.. automodule:: hod_mod.cosmology.halo_profiles
+.. automodule:: hod_mod.core.halo_profiles
    :members:
    :undoc-members:
 
@@ -335,7 +335,7 @@ where Ci and Si are the cosine and sine integrals.
 Gas Profiles
 ------------
 
-(`hod_mod.cosmology.gas_profiles`)
+(`hod_mod.gas`)
 
 Two parametric halo gas profiles are provided for computing galaxy ×
 tSZ (thermal Sunyaev-Zel'dovich Compton-:math:`y`) and galaxy × soft X-ray
@@ -349,7 +349,7 @@ M\ :sub:`200` → M\ :sub:`500c` conversion
 Both the A10 pressure profile and the DPM density profile use overdensity
 :math:`\Delta = 500c`.  The static halo model cache stores halo masses and
 radii at :math:`\Delta = 200m`.  The helper function
-:func:`~hod_mod.cosmology.gas_profiles.m200_to_m500c` performs the
+:func:`~hod_mod.gas.m200_to_m500c` performs the
 conversion analytically using the NFW enclosed-mass formula
 (`Navarro, Frenk & White 1997 <https://arxiv.org/abs/astro-ph/9611107>`_):
 
@@ -440,7 +440,7 @@ The X-ray emissivity Fourier transform per halo is
 
 with :math:`r_{\rm max} = 3\,R_{200}` and 200 GL nodes.
 
-.. automodule:: hod_mod.cosmology.gas_profiles
+.. automodule:: hod_mod.gas
    :members:
    :undoc-members:
 
@@ -449,7 +449,7 @@ with :math:`r_{\rm max} = 3\,R_{200}` and 200 GL nodes.
 Matter Power Spectrum (Halo Model)
 -----------------------------------
 
-(`hod_mod.cosmology.halo_model`)
+(`hod_mod.core.halo_model`)
 
 The 1-halo + 2-halo decomposition of the nonlinear matter power spectrum is
 (`Cooray & Sheth 2002 <https://ui.adsabs.harvard.edu/abs/2002PhR...372....1C>`_) [CooraySheth2002]_:
@@ -473,7 +473,7 @@ The 2-halo term (pairs in different halos) dominates at large scales:
    P^{2h}_{\rm mm}(k) = P_{\rm lin}(k)
    \left[\int \frac{dn}{dM} b(M)\,\frac{M}{\bar{\rho}_m}\, u(k|M)\,dM\right]^2
 
-.. automodule:: hod_mod.cosmology.halo_model
+.. automodule:: hod_mod.core.halo_model
    :members:
    :undoc-members:
 

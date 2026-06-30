@@ -3,13 +3,13 @@
 import numpy as np
 import pytest
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.cosmology.gas_profiles import PressureProfileA10, GasDensityDPM
-from hod_mod.galaxies.hod import MoreHODModel
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
-from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.gas import PressureProfileA10, GasDensityDPM
+from hod_mod.connection.hod import MoreHODModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
+from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 
 _THETA = LinearPowerSpectrum.default_cosmology()
 _Z     = 0.3
@@ -224,3 +224,46 @@ class TestAngularPowerSpectrumGY:
         nz_g  = np.exp(-0.5 * ((z_arr - 0.35) / 0.04)**2)
         cl_gy = cross_gy.angular_cl_gy(ell, z_arr, nz_g, _THETA, hod_params)
         assert np.all(np.isfinite(cl_gy))
+
+
+@pytest.mark.slow
+class TestAngularPowerSpectrumGX:
+    """Galaxy × soft-X-ray angular cross-spectrum (Limber). Serial by default;
+    the threaded path (n_workers>1) must agree after the warm-up fix, and the
+    result must be finite (regression for the float32 _safe_log floor bug)."""
+
+    _ELL = np.logspace(2, 3.5, 5)
+    _Z   = np.linspace(0.25, 0.45, 4)
+    _NZ  = np.exp(-0.5 * ((np.linspace(0.25, 0.45, 4) - 0.35) / 0.05) ** 2)
+
+    def test_cl_gX_finite_positive(self, cross_gX, hod_params):
+        cl = cross_gX.angular_cl_gX(self._ELL, self._Z, self._NZ, _THETA, hod_params)
+        assert cl.shape == (5,)
+        assert np.all(np.isfinite(cl)) and np.all(cl > 0)
+
+    def test_cl_gX_serial_equals_threaded(self, cross_gX, hod_params):
+        serial   = np.asarray(cross_gX.angular_cl_gX(self._ELL, self._Z, self._NZ,
+                                                     _THETA, hod_params, n_workers=1))
+        threaded = np.asarray(cross_gX.angular_cl_gX(self._ELL, self._Z, self._NZ,
+                                                     _THETA, hod_params, n_workers=2))
+        assert np.all(np.isfinite(threaded))
+        assert np.allclose(serial, threaded, rtol=1e-6)
+
+    def test_cl_gX_psf_suppresses_small_scales(self, cross_gX, hod_params):
+        raw = np.asarray(cross_gX.angular_cl_gX(self._ELL, self._Z, self._NZ, _THETA, hod_params))
+        psf = np.asarray(cross_gX.angular_cl_gX(self._ELL, self._Z, self._NZ, _THETA, hod_params,
+                                                psf_fwhm_arcsec=30.0))
+        assert np.all(psf <= raw + 1e-30) and psf[-1] < raw[-1]
+
+
+@pytest.mark.slow
+class TestAngularPowerSpectrumXX:
+    """X-ray × X-ray angular auto-spectrum (no galaxy occupation)."""
+
+    def test_cl_XX_finite_positive(self, cross_gX):
+        ell  = np.logspace(1, 3.5, 6)
+        z    = np.linspace(0.2, 0.5, 5)
+        nz_X = np.exp(-0.5 * ((z - 0.3) / 0.06) ** 2)
+        cl_XX = cross_gX.angular_cl_XX(ell, z, nz_X, _THETA)
+        assert cl_XX.shape == (6,)
+        assert np.all(np.isfinite(cl_XX)) and np.all(cl_XX > 0)

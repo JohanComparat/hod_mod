@@ -1,15 +1,15 @@
-"""Tests for hod_mod.cosmology.gas_profiles (Arnaud+2010, DPM Oppenheimer+2025)."""
+"""Tests for hod_mod.gas (Arnaud+2010, DPM Oppenheimer+2025)."""
 
 import numpy as np
 import pytest
 
-from hod_mod.cosmology.gas_profiles import (
+from hod_mod.gas import (
     PressureProfileA10,
     GasDensityDPM,
     m200_to_m500c,
     _RHO_CRIT0,
 )
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
 
 _THETA = LinearPowerSpectrum.default_cosmology()
 _Z     = 0.3

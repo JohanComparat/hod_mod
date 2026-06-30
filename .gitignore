@@ -12,9 +12,8 @@ build/
 wheels/
 sdist/
 
-# Virtual environments
-.venv/
-.venv-guix/
+# Virtual environments (any .venv* — local venvs are never committed)
+.venv*/
 venv/
 env/
 
@@ -39,11 +38,22 @@ docs/_build/
 .idea/
 .vscode/
 
-# Generated results (figures, chains, fits)
-# results/
+# Generated results live OUTSIDE the repo (hod_mod.paths.results_root; default
+# ~/.local/share/hod_mod/results, override with $HOD_MOD_RESULTS). Curated results
+# are archived on Zenodo and read back via hod_mod.data_io.fetch. Never track an
+# in-repo results/ — guard against accidental re-accumulation:
+/results/
+hod_mod/results/
+
+# Large external data not tracked in-repo
+# APEC line/coco tables; soxs downloads these on demand
+apec_v*.fits
+# optional WHM-CAMB fork, installed via pip (see WHMSpectrum)
+/WHM/
 
 # Scratch / refactor files
 _refactor_*.py
+prompts.txt
 
 # Coverage reports
 .coverage.*
@@ -56,3 +66,4 @@ coverage.xml
 # macOS
 __MACOSX/
 oarsub/logs/
+hod_mod/data/xray_bands/

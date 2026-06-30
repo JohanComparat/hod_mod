@@ -18,15 +18,16 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from hod_mod.paths import results_root
 
 _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 sys.path.insert(0, _REPO_ROOT)
 
-CHAIN_FILE  = os.path.join(_REPO_ROOT, "results/benchmarks/zumandelbaum2015_sdss/flatchain.npz")
+CHAIN_FILE  = os.path.join(results_root(), "benchmarks/zumandelbaum2015_sdss/flatchain.npz")
 CONFIG_FILE = os.path.join(_REPO_ROOT, "configs/benchmarks/benchmark_zumandelbaum2015.yml")
-OUT_DIR     = os.path.join(_REPO_ROOT, "results/benchmarks/zumandelbaum2015_sdss")
+OUT_DIR     = os.path.join(results_root(), "benchmarks/zumandelbaum2015_sdss")
 
 # Fixed params (not sampled in MCMC)
 FIXED_PARAMS = {
