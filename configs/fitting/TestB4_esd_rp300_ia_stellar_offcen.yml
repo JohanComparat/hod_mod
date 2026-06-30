@@ -1,0 +1,36 @@
+# Test B4 — ESD-only, More+2015 + IA + stellar + off-centering, R > 0.3 Mpc/h
+# Full 1-halo ESD coverage; off-centering smooths the profile inner peak
+# n_free = 9: log10mmin, sigma_logm, log10m1, alpha, kappa,
+#             A_IA, log10_M_star_cen, f_off, sigma_off
+#
+# python hod_mod/scripts/fitting/run_fit.py configs/fitting/TestB4_esd_rp300_ia_stellar_offcen.yml --map-only
+
+description: "Test B4 — ESD-only More+2015 9-param R>0.3 Mpc/h (+ IA + stellar + offcen)"
+
+data:
+  mstar_lo:   10.0
+  mstar_hi:   12.0
+  probes:     [esd_hsc]
+  rp_min_wp:  0.3          # not used for ESD-only fit; sets rp-tag in dir name
+  rp_min_hsc: 0.3
+  rp_max_esd: 10.0
+  esd_sn_min: 5.0
+  pi_max:     100.0
+
+model:
+  hod_model:           more2015
+  profile:             nfw
+  use_bnl:             true
+  use_ia:              true
+  use_offcentering:    true
+  use_baryon_fraction: false
+  use_stellar_mass:    true
+  use_incompleteness:  false
+  use_free_cosmo:      false
+  use_full_cov:        false
+
+fitting:
+  method: map
+
+output:
+  base_dir: results/bgs_comparat2025

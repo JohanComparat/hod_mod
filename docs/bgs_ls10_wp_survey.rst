@@ -299,12 +299,12 @@ Two models were not functional prior to this survey:
 * **vanuitert16** and **zacharegkas25**: their ``__init__`` methods stored
   ``self._hmf = hmf`` but not ``self._bias = hmf.bias``.
   ``FullHaloModelPrediction`` calls ``hod._bias(m, z, theta_cosmo)`` directly
-  (line 697 of ``hod_mod/galaxies/clustering.py``), so the missing attribute
+  (in ``hod_mod/observables/clustering.py``), so the missing attribute
   caused an ``AttributeError`` at runtime, leaving the optimizer without valid
   evaluations and returning :math:`\chi^2 = \infty`.
 
   Fix: added ``self._bias = hmf.bias`` to both ``__init__`` methods in
-  ``hod_mod/galaxies/hod.py``.
+  ``hod_mod/connection/hod/``.
 
   **Status:** fixed; results for both models are fully included in the table above.
 

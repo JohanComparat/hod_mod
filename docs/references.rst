@@ -144,7 +144,7 @@ HOD Models
 
 The halo occupation distribution (HOD) connects galaxies to dark matter halos.
 These references cover the foundational formalism through the models implemented
-in ``hod_mod/galaxies/hod.py``.
+in ``hod_mod/connection/hod/``.
 
 .. [BerlindWeinberg2002] Berlind A.A. & Weinberg D.H. 2002, ApJ 575, 587.
    Foundational HOD formalism paper; introduced the conditional probability of
@@ -205,7 +205,7 @@ Stellar-to-Halo Mass Relations and SHAM
 -----------------------------------------
 
 Empirical and simulation-based constraints on how stellar mass maps to halo mass,
-used in SHAM models (``hod_mod/galaxies/sham.py``).
+used in SHAM models (``hod_mod/connection/sham.py``).
 
 .. [Moster2013] Moster B.P., Naab T. & White S.D.M. 2013, MNRAS 428, 3121.
    Empirical SMHM relation via abundance matching across redshifts;
@@ -409,14 +409,14 @@ benchmarks for galaxy × tSZ and galaxy × soft X-ray cross-correlations.
    Universal pressure profile of galaxy clusters from the REXCESS sample
    (generalised NFW; Table 1: P₀=8.403, c₅₀₀=1.177, γ=0.3081, α=1.0510,
    β=5.4905, α_p=0.12).  Implemented as
-   :class:`~hod_mod.cosmology.gas_profiles.PressureProfileA10`.
+   :class:`~hod_mod.gas.PressureProfileA10`.
    `arXiv:0910.1234 <https://arxiv.org/abs/0910.1234>`_
 
 .. [Oppenheimer2025] Oppenheimer B.D. et al. 2025.
    DPMhalo: parametric electron density profiles for the diffuse gas around
    galaxies; 3 calibrated model variants with mass- and redshift-dependent
    normalisations.  Implemented as
-   :class:`~hod_mod.cosmology.gas_profiles.GasDensityDPM`.
+   :class:`~hod_mod.gas.GasDensityDPM`.
    `arXiv:2505.14782 <https://arxiv.org/abs/2505.14782>`_
 
 .. [Comparat2025] Comparat J. et al. 2025, A&A 697, A173.

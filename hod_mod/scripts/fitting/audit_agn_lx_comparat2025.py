@@ -42,10 +42,10 @@ import json
 import numpy as np
 from scipy.integrate import trapezoid
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.galaxies.hod import ZuMandelbaum15HODModel
-from hod_mod.galaxies.agn_ham import HamAGNModel, _LOG10_LX_MIN_PHYSICAL
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.connection.hod import ZuMandelbaum15HODModel
+from hod_mod.agn.ham import HamAGNModel, _LOG10_LX_MIN_PHYSICAL
 
 from hod_mod.scripts.fitting.fit_comparat2025 import (
     SAMPLES,

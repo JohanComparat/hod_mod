@@ -142,7 +142,7 @@ Usage in fitting scripts:
 .. code-block:: python
 
     from hod_mod.fitting.planck_prior import PLANCK18_MEANS, PLANCK18_SIGMAS
-    from hod_mod.fitting.hod_wp import WpFitConfig, WpFitter
+    from hod_mod.fitting import WpFitConfig, WpFitter
 
     cfg = WpFitConfig(
         ...
@@ -236,7 +236,7 @@ Usage example
 
 .. code-block:: python
 
-    from hod_mod.fitting.hod_wp import WpFitter, load_config
+    from hod_mod.fitting import WpFitter, load_config
 
     cfg    = load_config("configs/hod_fit_more2015_cmass.yml")
     fitter = WpFitter(cfg)
@@ -246,7 +246,7 @@ Usage example
     sampler = fitter.mcmc_fit()         # emcee MCMC posterior
     flat    = sampler.get_chain(flat=True, discard=100, thin=5)
 
-.. automodule:: hod_mod.fitting.hod_wp
+.. automodule:: hod_mod.fitting
    :members:
    :undoc-members:
 

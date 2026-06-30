@@ -33,7 +33,7 @@ def m_grid():
 class TestBaryonFractionSigmoid:
     def test_cluster_limit(self, theta, m_grid):
         """M >> M_pivot → f_b(M) ≈ f_b^cosmic."""
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
+        from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid
         model = BaryonFractionSigmoid()
         params = {"log10_M_pivot": 13.5, "beta_b": 2.0}
         f_b_cosmic = theta["Omega_b"] / theta["Omega_m"]
@@ -43,7 +43,7 @@ class TestBaryonFractionSigmoid:
 
     def test_low_mass_limit(self, theta):
         """M << M_pivot → f_b(M) ≈ 0."""
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
+        from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid
         model = BaryonFractionSigmoid()
         params = {"log10_M_pivot": 13.5, "beta_b": 2.0}
         m_dwarf = jnp.array([1e9])  # << M_pivot
@@ -52,7 +52,7 @@ class TestBaryonFractionSigmoid:
 
     def test_cdm_plus_baryon_sums_to_one(self, theta, m_grid):
         """(1 - f_b(M)) + f_b(M) = 1 exactly."""
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
+        from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid
         model = BaryonFractionSigmoid()
         params = BaryonFractionSigmoid.default_params()
         fb = model(m_grid, theta, params)
@@ -61,7 +61,7 @@ class TestBaryonFractionSigmoid:
 
     def test_monotonically_increasing(self, theta, m_grid):
         """f_b(M) increases with mass (more massive halos retain more gas)."""
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
+        from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid
         model = BaryonFractionSigmoid()
         params = BaryonFractionSigmoid.default_params()
         fb = np.asarray(model(m_grid, theta, params))
@@ -69,7 +69,7 @@ class TestBaryonFractionSigmoid:
 
     def test_bounded_by_cosmic(self, theta, m_grid):
         """f_b(M) ≤ f_b^cosmic at all masses."""
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
+        from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid
         model = BaryonFractionSigmoid()
         params = BaryonFractionSigmoid.default_params()
         fb = np.asarray(model(m_grid, theta, params))
@@ -77,7 +77,7 @@ class TestBaryonFractionSigmoid:
         assert np.all(fb <= f_b_cosmic + 1e-10)
 
     def test_default_params_shape(self):
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
+        from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid
         p = BaryonFractionSigmoid.default_params()
         assert "log10_M_pivot" in p and "beta_b" in p
 
@@ -89,7 +89,7 @@ class TestBaryonFractionSigmoid:
 class TestBaryonFractionPowerLaw:
     def test_zero_slope_is_flat(self, theta, m_grid):
         """alpha_b = 0 → f_b(M) = f_b^cosmic at all masses (when M > M_ref)."""
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionPowerLaw
+        from hod_mod.observables.baryon_fraction import BaryonFractionPowerLaw
         model = BaryonFractionPowerLaw()
         params = {"log10_M_ref": 14.0, "alpha_b": 0.0}
         fb = model(m_grid, theta, params)
@@ -98,7 +98,7 @@ class TestBaryonFractionPowerLaw:
 
     def test_clipped_at_cosmic(self, theta, m_grid):
         """f_b(M) never exceeds f_b^cosmic regardless of alpha_b."""
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionPowerLaw
+        from hod_mod.observables.baryon_fraction import BaryonFractionPowerLaw
         model = BaryonFractionPowerLaw()
         params = {"log10_M_ref": 10.0, "alpha_b": 5.0}  # large slope → clip
         fb = np.asarray(model(m_grid, theta, params))
@@ -107,14 +107,14 @@ class TestBaryonFractionPowerLaw:
 
     def test_non_negative(self, theta, m_grid):
         """f_b(M) ≥ 0 at all masses."""
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionPowerLaw
+        from hod_mod.observables.baryon_fraction import BaryonFractionPowerLaw
         model = BaryonFractionPowerLaw()
         params = BaryonFractionPowerLaw.default_params()
         fb = np.asarray(model(m_grid, theta, params))
         assert np.all(fb >= 0.0)
 
     def test_default_params_shape(self):
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionPowerLaw
+        from hod_mod.observables.baryon_fraction import BaryonFractionPowerLaw
         p = BaryonFractionPowerLaw.default_params()
         assert "log10_M_ref" in p and "alpha_b" in p
 
@@ -125,19 +125,19 @@ class TestBaryonFractionPowerLaw:
 
 class TestMakeBaryonFraction:
     def test_sigmoid(self):
-        from hod_mod.galaxies.baryon_fraction import (
+        from hod_mod.observables.baryon_fraction import (
             make_baryon_fraction, BaryonFractionSigmoid,
         )
         assert isinstance(make_baryon_fraction("sigmoid"), BaryonFractionSigmoid)
 
     def test_powerlaw(self):
-        from hod_mod.galaxies.baryon_fraction import (
+        from hod_mod.observables.baryon_fraction import (
             make_baryon_fraction, BaryonFractionPowerLaw,
         )
         assert isinstance(make_baryon_fraction("powerlaw"), BaryonFractionPowerLaw)
 
     def test_invalid_raises(self):
-        from hod_mod.galaxies.baryon_fraction import make_baryon_fraction
+        from hod_mod.observables.baryon_fraction import make_baryon_fraction
         with pytest.raises(ValueError):
             make_baryon_fraction("unknown_model")
 
@@ -150,11 +150,11 @@ class TestDeltaSigmaSplitConstant:
     @pytest.fixture(scope="class")
     def pred_and_theta(self):
         """Lightweight FullHaloModelPrediction using Tinker08 HMF."""
-        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-        from hod_mod.cosmology.halo_mass_function import make_hmf
-        from hod_mod.cosmology.halo_profiles import HaloProfile
-        from hod_mod.galaxies.hod import HODModel
-        from hod_mod.galaxies.clustering import FullHaloModelPrediction
+        from hod_mod.core.power_spectrum import LinearPowerSpectrum
+        from hod_mod.core.halo_mass_function import make_hmf
+        from hod_mod.core.halo_profiles import HaloProfile
+        from hod_mod.connection.hod import HODModel
+        from hod_mod.observables.clustering import FullHaloModelPrediction
 
         pk_lin = LinearPowerSpectrum()
         theta = pk_lin.default_cosmology()
@@ -206,12 +206,12 @@ class TestDeltaSigmaSplitConstant:
 class TestDeltaSigmaSplitMassDependent:
     @pytest.fixture(scope="class")
     def pred_and_theta(self):
-        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-        from hod_mod.cosmology.halo_mass_function import make_hmf
-        from hod_mod.cosmology.halo_profiles import HaloProfile
-        from hod_mod.galaxies.hod import HODModel
-        from hod_mod.galaxies.clustering import FullHaloModelPrediction
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
+        from hod_mod.core.power_spectrum import LinearPowerSpectrum
+        from hod_mod.core.halo_mass_function import make_hmf
+        from hod_mod.core.halo_profiles import HaloProfile
+        from hod_mod.connection.hod import HODModel
+        from hod_mod.observables.clustering import FullHaloModelPrediction
+        from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid
 
         pk_lin = LinearPowerSpectrum()
         theta = pk_lin.default_cosmology()
@@ -277,12 +277,12 @@ class TestGasProfileSuppression:
 
     @pytest.fixture(scope="class")
     def pred_and_theta(self):
-        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-        from hod_mod.cosmology.halo_mass_function import make_hmf
-        from hod_mod.cosmology.halo_profiles import HaloProfile
-        from hod_mod.galaxies.hod import HODModel
-        from hod_mod.galaxies.clustering import FullHaloModelPrediction
-        from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
+        from hod_mod.core.power_spectrum import LinearPowerSpectrum
+        from hod_mod.core.halo_mass_function import make_hmf
+        from hod_mod.core.halo_profiles import HaloProfile
+        from hod_mod.connection.hod import HODModel
+        from hod_mod.observables.clustering import FullHaloModelPrediction
+        from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid
 
         pk_lin = LinearPowerSpectrum()
         theta = pk_lin.default_cosmology()

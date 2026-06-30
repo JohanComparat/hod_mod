@@ -31,20 +31,21 @@ import numpy as np
 import scipy.optimize as opt
 import jax.numpy as jnp
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.cosmology.nonlinear import (
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.paths import results_root
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.core.nonlinear import (
     CachedPkNonlinear, HALOFITSpectrum, NonLinearPowerSpectrum,
 )
-from hod_mod.galaxies.hod import (
+from hod_mod.connection.hod import (
     HODModel, MoreHODModel,
     Guo18ICSMFModel, Guo19ICSMFModel,
     Zacharegkas25HODModel, VanUitert16CSMFModel,
     ZuMandelbaum15HODModel, Leauthaud12HODModel,
 )
-from hod_mod.galaxies.clf import CLFModel
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
+from hod_mod.connection.clf import CLFModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
 from hod_mod.data_io.sum_stat_reader import SumStatReader
 
 # ---------------------------------------------------------------------------
@@ -353,7 +354,7 @@ def main():
     parser.add_argument("--models", default=None,
                         help="Comma-separated subset of model names to run "
                              "(default: all 9)")
-    parser.add_argument("--output-dir", default="results/bgs_m10_nl_allmodels",
+    parser.add_argument("--output-dir", default=str(results_root() / "bgs_m10_nl_allmodels"),
                         help="Directory for JSON and figure output")
     parser.add_argument("--save", default=None,
                         help="Path for comparison figure (PNG/PDF)")

@@ -1,0 +1,52 @@
+# HOD fit: BGS LS10 Comparat 2025 — Mstar > 10^10 Msun — No scale cuts
+#
+# Data: sum_stat BGS_Mstar10.0 HDF5 joint file (wp + ESD_HSC)
+# Scale cuts: no cuts (rp_min = 1e-3 Mpc/h for both wp and ESD_HSC)
+#
+# Model:
+#   - More+2015 HOD with free incompleteness (alpha_inc, log10m_inc)
+#   - Linear P(k) + beyond-linear halo bias (Mead & Verde 2021)
+#   - Off-centering: f_off, sigma_off (Johnston+2007)
+#   - Intrinsic alignment: NLA A_IA (Bridle & King 2007)
+#   - Baryon fraction gas model: log10_M_pivot, beta_b, log10_eta_min
+#   - Point-mass stellar: log10_M_star_cen
+#   - Fixed Planck 2018 cosmology
+#
+# Usage:
+#   python hod_mod/scripts/fitting/run_fit.py \
+#       configs/fitting/BGS_LS10_Comparat2025_Mstar10_NoScaleCuts.yml
+
+description: "BGS LS10 Comparat 2025 Mstar>1e10 Msun – no scale cuts (rp_min=1e-3 Mpc/h)"
+
+data:
+  mstar_lo:    10.0          # lower stellar mass threshold log10(M*/Msun)
+  mstar_hi:    12.0          # upper stellar mass threshold log10(M*/Msun)
+  probes:      [wp, esd_hsc] # probes to fit
+  rp_min_wp:   1.0e-3        # WP minimum scale [Mpc/h] — effectively no cut
+  rp_max_wp:   50.0          # WP maximum scale [Mpc/h]
+  rp_min_hsc:  1.0e-3        # HSC ESD minimum scale [Mpc/h] — effectively no cut
+  rp_max_esd:  10.0          # ESD maximum scale [Mpc/h]
+  esd_sn_min:  5.0           # minimum S/N per ESD bin
+  pi_max:      100.0         # line-of-sight integration limit [Mpc/h]
+
+model:
+  hod_model:            more2015   # More+2015 MoreHODModel
+  profile:              nfw        # halo density profile
+  use_bnl:              true       # beyond-linear halo bias (Mead & Verde 2021)
+  use_ia:               true       # NLA intrinsic alignment; free param: A_IA
+  use_offcentering:     true       # off-centering; free params: f_off, sigma_off
+  use_baryon_fraction:  true       # CDM+gas ESD split; free params: log10_M_pivot, beta_b, log10_eta_min
+  use_stellar_mass:     true       # point-mass stellar term; free param: log10_M_star_cen
+  use_incompleteness:   true       # free More+2015 incompleteness; free params: alpha_inc, log10m_inc
+  use_free_cosmo:       false      # fixed Planck 2018 cosmology
+  use_full_cov:         false      # diagonal errors only (full cov is ill-conditioned)
+
+fitting:
+  method:     both    # MAP followed by emcee MCMC
+  n_walkers:  64
+  n_steps:    3000
+  n_burnin:   500
+
+output:
+  base_dir:   results/bgs_comparat2025
+  # auto-named subdir: mstar10.0_wp_esd_hsc_more2015_nfw_rp001_stellar_inc

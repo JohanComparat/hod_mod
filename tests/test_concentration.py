@@ -8,7 +8,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from hod_mod.cosmology.concentration import (
+from hod_mod.core.concentration import (
     c_duffy08,
     c_dutton14,
     c_klypin16,
@@ -17,8 +17,8 @@ from hod_mod.cosmology.concentration import (
     _neff_eisenstein_hu,
     ConcentrationModel,
 )
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
 
 
 _PLANCK18 = {

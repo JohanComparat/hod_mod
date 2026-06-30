@@ -83,7 +83,7 @@ Model Verification
 The figure below shows predicted :math:`w_p(r_p)` and :math:`\Delta\Sigma(R)` at the
 **published iHOD Table 2 parameters** versus the digitized data for all bins.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_verification/zm15_verification_all_bins.png
+.. figure:: _images/benchmarks__zumandelbaum2015_verification__zm15_verification_all_bins.png
    :width: 100%
    :alt: ZM15 iHOD model verification — all bins at published parameters
 

@@ -35,9 +35,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from hod_mod.cosmology import GasDensityDPM
-from hod_mod.cosmology.gas_profiles import _RHO_CRIT0
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+from hod_mod.gas import GasDensityDPM
+from hod_mod.gas import _RHO_CRIT0
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
 
 _HERE    = Path(__file__).parent
 _FIG_DIR = _HERE / "figures"

@@ -40,13 +40,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.special import j0
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.cosmology import GasDensityDPM
-from hod_mod.galaxies.hod import ZuMandelbaum15HODModel
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
-from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.gas import GasDensityDPM
+from hod_mod.connection.hod import ZuMandelbaum15HODModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
+from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 
 # eROSITA PSF FWHM [arcsec] — soft X-ray band (0.5–2 keV)
 _EROSITA_PSF_FWHM = 30.0

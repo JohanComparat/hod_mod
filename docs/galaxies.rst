@@ -1,7 +1,7 @@
 Galaxies Module
 ===============
 
-The ``hod_mod.galaxies`` sub-package implements the galaxy–halo connection: how many
+The ``hod_mod.connection`` sub-package implements the galaxy–halo connection: how many
 galaxies of a given type reside in halos of mass :math:`M`, and what clustering and
 lensing signals they produce.
 
@@ -10,7 +10,7 @@ lensing signals they produce.
 HOD Models
 ----------
 
-(`hod_mod.galaxies.hod`)
+(`hod_mod.connection.hod`)
 
 A Halo Occupation Distribution (HOD) specifies the probability :math:`P(N|M)` that a
 halo of mass :math:`M` contains :math:`N` galaxies of a given type.  The mean occupation
@@ -101,7 +101,7 @@ See also: `Zu & Mandelbaum 2016 <https://arxiv.org/abs/1509.06374>`_ [ZuMandelba
 galaxy quenching) and `2017 <https://arxiv.org/abs/1703.09219>`_ (Paper III, red/blue
 fractions).
 
-.. automodule:: hod_mod.galaxies.hod
+.. automodule:: hod_mod.connection.hod
    :members:
    :undoc-members:
    :show-inheritance:
@@ -111,7 +111,7 @@ fractions).
 Stellar-to-Halo Mass Relations
 --------------------------------
 
-(`hod_mod.galaxies.sham`)
+(`hod_mod.connection.sham`)
 
 Sub-halo abundance matching (SHAM) assumes a monotonic mapping between stellar mass
 :math:`M_*` and halo peak circular velocity (or mass) :math:`M_h`.
@@ -149,7 +149,7 @@ fitted a similar double power-law SHMR to COSMOS photometric data up to :math:`z
 with :math:`\log_{10}M_A = B + z\mu`, :math:`A = C(1+z)^\nu`,
 :math:`\gamma = D(1+z)^\eta`, :math:`\beta = Fz + E`.
 
-.. automodule:: hod_mod.galaxies.sham
+.. automodule:: hod_mod.connection.sham
    :members:
    :undoc-members:
 
@@ -158,7 +158,7 @@ with :math:`\log_{10}M_A = B + z\mu`, :math:`A = C(1+z)^\nu`,
 Clustering
 ----------
 
-(`hod_mod.galaxies.clustering`)
+(`hod_mod.observables.clustering`)
 
 Projected correlation function
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -235,13 +235,13 @@ Usage example:
 
 .. code-block:: python
 
-    from hod_mod.galaxies.clustering import FullHaloModelPrediction
+    from hod_mod.observables.clustering import FullHaloModelPrediction
 
     pred = FullHaloModelPrediction(pk_lin, hod, halo_profile, profile='nfw')
     wp   = pred.wp(rp, pi_max=60., z=0.1, theta_cosmo=theta, hod_params=p)
     ds   = pred.delta_sigma(R, z=0.1, theta_cosmo=theta, hod_params=p)
 
-.. automodule:: hod_mod.galaxies.clustering
+.. automodule:: hod_mod.observables.clustering
    :members:
    :undoc-members:
 
@@ -257,12 +257,12 @@ Usage example:
 Baryon Fraction
 ---------------
 
-(`hod_mod.galaxies.baryon_fraction`)
+(`hod_mod.observables.baryon_fraction`)
 
 Mass-dependent baryon fraction and gas concentration models for baryonic
 suppression of the matter power spectrum and halo profiles.
 
-.. automodule:: hod_mod.galaxies.baryon_fraction
+.. automodule:: hod_mod.observables.baryon_fraction
    :members:
    :undoc-members:
 
@@ -271,12 +271,12 @@ suppression of the matter power spectrum and halo profiles.
 Cross-Clustering
 ----------------
 
-(`hod_mod.galaxies.cross_clustering`)
+(`hod_mod.observables.cross_clustering`)
 
 Galaxy–galaxy and galaxy–matter cross-clustering predictions for multi-tracer
 analyses.
 
-.. automodule:: hod_mod.galaxies.cross_clustering
+.. automodule:: hod_mod.observables.cross_clustering
    :members:
    :undoc-members:
 
@@ -285,12 +285,12 @@ analyses.
 Intrinsic Alignments
 --------------------
 
-(`hod_mod.galaxies.intrinsic_alignment`)
+(`hod_mod.observables.intrinsic_alignment`)
 
 Non-linear alignment (NLA) model for intrinsic alignments of galaxy shapes
 with the tidal field, used in joint :math:`w_p + \Delta\Sigma` analyses.
 
-.. automodule:: hod_mod.galaxies.intrinsic_alignment
+.. automodule:: hod_mod.observables.intrinsic_alignment
    :members:
    :undoc-members:
 
@@ -299,17 +299,17 @@ with the tidal field, used in joint :math:`w_p + \Delta\Sigma` analyses.
 Galaxy × Gas Cross-Spectra
 ---------------------------
 
-(`hod_mod.galaxies.cross_spectra`)
+(`hod_mod.observables.cross_spectra`)
 
-:class:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra` computes the
+:class:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra` computes the
 **galaxy × tSZ** and **galaxy × soft X-ray** cross-power spectra within the
-same halo model framework as :class:`~hod_mod.galaxies.clustering.FullHaloModelPrediction`.
+same halo model framework as :class:`~hod_mod.observables.clustering.FullHaloModelPrediction`.
 It wraps an existing ``FullHaloModelPrediction`` instance and reuses its static
 cache (HMF, bias, NFW FT, :math:`P_{\rm lin}`, galaxy HOD integrals) — no
 re-computation of cosmological quantities is required.
 
-Supported gas profiles: :class:`~hod_mod.cosmology.gas_profiles.PressureProfileA10`
-(Arnaud+2010, for tSZ) and :class:`~hod_mod.cosmology.gas_profiles.GasDensityDPM`
+Supported gas profiles: :class:`~hod_mod.gas.PressureProfileA10`
+(Arnaud+2010, for tSZ) and :class:`~hod_mod.gas.GasDensityDPM`
 (Oppenheimer+2025, for X-ray).  See :doc:`cosmology` (§ Gas Profiles) for
 the physical definitions.
 
@@ -367,7 +367,7 @@ is different: expanding the *squared* total emissivity
 :math:`\delta_X = \delta_{\rm gas} + \delta_{\rm agn}` produces a genuine
 1-halo and 2-halo gas×AGN cross-term (AGN embedded in the same hot-gas
 halo, and AGN/gas halos correlated through large-scale structure).
-Computed by :meth:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra._pk_tables_XX`:
+Computed by :meth:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra._pk_tables_XX`:
 
 .. math::
 
@@ -384,7 +384,7 @@ Computed by :meth:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra._pk_tab
 
 so that, written as gas-gas / cross / AGN-AGN components (the
 ``return_components=True`` output of
-:meth:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra.angular_cl_XX`):
+:meth:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra.angular_cl_XX`):
 
 .. math::
 
@@ -404,7 +404,7 @@ applied **before** any gas×AGN product is formed.
 The corresponding angular power spectrum uses the Limber approximation with
 the X-ray window **squared** (both legs of the auto-correlation trace the
 same field), via
-:meth:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra.angular_cl_XX`:
+:meth:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra.angular_cl_XX`:
 
 .. math::
 
@@ -450,8 +450,8 @@ Usage example:
 
 .. code-block:: python
 
-   from hod_mod.cosmology import PressureProfileA10, GasDensityDPM
-   from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
+   from hod_mod.gas import PressureProfileA10, GasDensityDPM
+   from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 
    pp    = PressureProfileA10(r_max_over_r500c=5.0, n_gl=200)
    dp    = GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=200)
@@ -468,14 +468,14 @@ eROSITA PSF window functions
 Two PSF window functions are provided for multiplying :math:`C_\ell^{g,X}` before the
 Hankel transform to :math:`w_\theta(\theta)`:
 
-**Gaussian** (:func:`~hod_mod.galaxies.cross_spectra.psf_window_ell`):
+**Gaussian** (:func:`~hod_mod.observables.cross_spectra.psf_window_ell`):
 
 .. math::
 
    B_\ell^{\rm Gauss} = \exp\!\left(-\tfrac{1}{2}\ell^2\sigma^2\right),
    \qquad \sigma = \frac{\rm FWHM}{2.355}\,[\text{rad}]
 
-**King profile** (:func:`~hod_mod.galaxies.cross_spectra.psf_king_window_ell`) —
+**King profile** (:func:`~hod_mod.observables.cross_spectra.psf_king_window_ell`) —
 the exact analytic Hankel transform of
 :math:`{\rm PSF}(\theta)\propto(1+(\theta/\theta_c)^2)^{-\alpha}`:
 
@@ -520,7 +520,7 @@ Validation figure generated by::
    python -m hod_mod.scripts.galaxies.plot_erosita_psf
    # Output: results/psf/erosita_psf_king_fit.png
 
-.. automodule:: hod_mod.galaxies.cross_spectra
+.. automodule:: hod_mod.observables.cross_spectra
    :members:
    :undoc-members:
 
@@ -529,15 +529,15 @@ Validation figure generated by::
 X-ray AGN Model
 ----------------
 
-(`hod_mod.galaxies.agn`)
+(`hod_mod.agn.xray`)
 
-:class:`~hod_mod.galaxies.agn.XrayAGNModel` models the mean soft X-ray
+:class:`~hod_mod.agn.xray.XrayAGNModel` models the mean soft X-ray
 (0.5–2 keV) AGN luminosity per dark-matter halo via an abundance-matching
 pipeline (Comparat et al. 2019,
 `arXiv:1901.10866 <https://arxiv.org/abs/1901.10866>`_):
 
 1. **SHMR** — maps :math:`M_h` to :math:`\log_{10}M_*` via
-   :func:`~hod_mod.galaxies.sham.smhm_girelli20` (Girelli et al. 2020).
+   :func:`~hod_mod.connection.sham.smhm_girelli20` (Girelli et al. 2020).
    The double power-law relation is:
 
    .. math::
@@ -592,8 +592,8 @@ pipeline (Comparat et al. 2019,
         - —
 
    A variant with 0.2 dex intrinsic scatter in :math:`M_*` is available as
-   ``hod_mod.galaxies.sham._GIRELLI20_SCATTER`` (Table 4 of Girelli+2020;
-   pass ``B=11.83, mu=0.18, ...`` to :func:`~hod_mod.galaxies.sham.smhm_girelli20`).
+   ``hod_mod.connection.sham._GIRELLI20_SCATTER`` (Table 4 of Girelli+2020;
+   pass ``B=11.83, mu=0.18, ...`` to :func:`~hod_mod.connection.sham.smhm_girelli20`).
 
 2. **LX–M* polynomial** — parametric fit to the hard-band (2–10 keV) XLF
    abundance-matching result:
@@ -657,16 +657,16 @@ a delta function and their Fourier transform is flat in :math:`k`:
 
     \tilde{X}^{\rm AGN}(k|M) = \frac{\langle L_X^{\rm soft}(M,z)\rangle}{10^{43}}
 
-This allows :class:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra` to
+This allows :class:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra` to
 include the AGN contribution alongside the thermal gas emission from
-:class:`~hod_mod.cosmology.gas_profiles.GasDensityDPM`.
+:class:`~hod_mod.gas.GasDensityDPM`.
 
 Usage example:
 
 .. code-block:: python
 
    import numpy as np
-   from hod_mod.galaxies.agn import XrayAGNModel
+   from hod_mod.agn.xray import XrayAGNModel
 
    agn = XrayAGNModel()                            # Girelli+2020 SHMR, 0.8 dex scatter
    m_halo = np.logspace(11, 15, 100)               # [Msun/h]
@@ -674,8 +674,8 @@ Usage example:
    log10_lx = agn.mean_agn_log10lx(m_halo, z=0.135)
 
    # Pass to HaloModelCrossSpectra via the agn_model keyword:
-   from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
-   from hod_mod.cosmology import GasDensityDPM
+   from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+   from hod_mod.gas import GasDensityDPM
 
    dp    = GasDensityDPM(model=2)
    cross = HaloModelCrossSpectra(fhmp, density_profile=dp, agn_model=agn)
@@ -733,7 +733,7 @@ Usage example:
    **Figure AGN-5.** Predicted hard X-ray (2–10 keV) AGN luminosity function
    (solid, type-1 AGN only) at :math:`z=0.1, 0.5, 1.0`, with two references:
    **Ueda+2014 LDDE** (dashed,
-   `arXiv:1402.7902 <https://arxiv.org/abs/1402.7902>`_) — total hard XLF
+   `arXiv:1402.1836 <https://arxiv.org/abs/1402.1836>`_) — total hard XLF
    including obscured (type 2) and Compton-thick AGN;
    **Hasinger+2005 → hard** (dotted) — the soft LDDE shifted to the hard band
    via :math:`\log_{10}L_{\rm hard}=\log_{10}L_{\rm soft}-\log_{10}f_{h\to s}`,
@@ -749,21 +749,21 @@ Girelli et al. 2020 (`arXiv:2007.06220
 <https://arxiv.org/abs/2007.06220>`_);
 Hasinger, Miyaji & Schmidt 2005 (`arXiv:astro-ph/0506118
 <https://arxiv.org/abs/astro-ph/0506118>`_) — soft XLF LDDE reference;
-Ueda et al. 2014 (`arXiv:1402.7902
-<https://arxiv.org/abs/1402.7902>`_) — total hard XLF LDDE reference.
+Ueda et al. 2014 (`arXiv:1402.1836
+<https://arxiv.org/abs/1402.1836>`_) — total hard XLF LDDE reference.
 
-.. automodule:: hod_mod.galaxies.agn
+.. automodule:: hod_mod.agn.xray
    :members:
    :undoc-members:
 
 HAM AGN Model
 --------------
 
-(`hod_mod.galaxies.agn_ham`)
+(`hod_mod.agn.ham`)
 
-:class:`~hod_mod.galaxies.agn_ham.HamAGNModel` implements the
+:class:`~hod_mod.agn.ham.HamAGNModel` implements the
 Comparat et al. 2019 abundance-matching (HAM) AGN model.  Unlike
-:class:`~hod_mod.galaxies.agn.XrayAGNModel`, which uses a parametric
+:class:`~hod_mod.agn.xray.XrayAGNModel`, which uses a parametric
 :math:`L_X`–:math:`M_*` relation, this model matches the cumulative
 galaxy number density to the hard X-ray luminosity function directly,
 so the **hard XLF is reproduced by construction**.  The soft XLF is
@@ -940,7 +940,7 @@ Usage
 
 .. code-block:: python
 
-   from hod_mod.galaxies.agn_ham import HamAGNModel
+   from hod_mod.agn.ham import HamAGNModel
    import numpy as np
 
    # Instantiate — K-correction table loaded from package data automatically
@@ -951,14 +951,14 @@ Usage
    log10lx = agn.mean_agn_log10lx(m_halo, z=0.5)
 
    # Pass to HaloModelCrossSpectra
-   from hod_mod.galaxies.clustering import HaloModelCrossSpectra
+   from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
    cross = HaloModelCrossSpectra(fhmp, density_profile=dp, agn_model=agn)
 
 **References:**
 Comparat et al. 2019 (`arXiv:1901.10866 <https://arxiv.org/abs/1901.10866>`_);
 Aird et al. 2015 (`arXiv:1503.01120 <https://arxiv.org/abs/1503.01120>`_) —
 LADE hard XLF;
-Ueda et al. 2014 (`arXiv:1402.7902 <https://arxiv.org/abs/1402.7902>`_) —
+Ueda et al. 2014 (`arXiv:1402.1836 <https://arxiv.org/abs/1402.1836>`_) —
 LDDE hard XLF;
 Zu & Mandelbaum 2015 (`arXiv:1505.02781 <https://arxiv.org/abs/1505.02781>`_) —
 iHOD SHMR;
@@ -966,7 +966,7 @@ Hasinger, Miyaji & Schmidt 2005 (`arXiv:astro-ph/0506118
 <https://arxiv.org/abs/astro-ph/0506118>`_) — soft XLF LDDE reference;
 Wilms, Allen & McCray 2000, ApJ 542, 914 — X-ray absorption cross-sections.
 
-.. automodule:: hod_mod.galaxies.agn_ham
+.. automodule:: hod_mod.agn.ham
    :members:
    :undoc-members:
 
@@ -975,21 +975,21 @@ Wilms, Allen & McCray 2000, ApJ 542, 914 — X-ray absorption cross-sections.
 HOD AGN Model
 -------------
 
-(`hod_mod.galaxies.agn_hod`)
+(`hod_mod.agn.hod`)
 
-:class:`~hod_mod.galaxies.agn_hod.HODAgnModel` is a third AGN model that places
+:class:`~hod_mod.agn.hod.HODAgnModel` is a third AGN model that places
 AGN with an explicit halo occupation distribution (a constant-duty-cycle
-More+2015 form, :class:`~hod_mod.galaxies.hod.MoreConstFincHODModel`), maps host
+More+2015 form, :class:`~hod_mod.connection.hod.MoreConstFincHODModel`), maps host
 halo masses to stellar masses with the Zu & Mandelbaum 2015 SHMR, and assigns
 :math:`L_X` by a flux/optically-selected abundance match against the Aird+2015
-XLF.  Unlike :class:`~hod_mod.galaxies.agn.XrayAGNModel` and
-:class:`~hod_mod.galaxies.agn_ham.HamAGNModel`, it exposes its own AGN
+XLF.  Unlike :class:`~hod_mod.agn.xray.XrayAGNModel` and
+:class:`~hod_mod.agn.ham.HamAGNModel`, it exposes its own AGN
 occupation ``nc_ns_agn`` which drives an occupation-weighted X-ray auto/cross
 power spectrum (Lau et al. 2024,
 `arXiv:2410.22397 <https://arxiv.org/abs/2410.22397>`_, App. A).  See
 :ref:`hod_zumandelbaum2015` (*HOD AGN model* rubric) for the full description and
 the LS10-BGS S1…S7 sample configuration.
 
-.. automodule:: hod_mod.galaxies.agn_hod
+.. automodule:: hod_mod.agn.hod
    :members:
    :undoc-members:

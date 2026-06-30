@@ -59,29 +59,6 @@ For development, create and activate the conda/mamba environment, then install i
     mamba activate hod_mod
     pip install -e .
 
-With GNU Guix (no conda)
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-A conda-free, reproducible environment can be built with `GNU Guix
-<https://guix.gnu.org/>`_. Guix provides a hermetic Python interpreter and the
-C/Fortran toolchain inside a container; the Python libraries are installed with
-``pip`` into a virtualenv. See ``INSTALL_GUIX.md`` in the repository root for the
-full procedure and prerequisites. In short:
-
-.. code-block:: bash
-
-    guix shell --container --network -m manifest.scm   # hermetic Python + toolchain
-    python -m venv .venv-guix && source .venv-guix/bin/activate
-    export LD_LIBRARY_PATH="$GUIX_ENVIRONMENT/lib"     # so wheels find libz/libstdc++/…
-    pip install numpy scipy astropy matplotlib h5py \
-                jax jaxlib camb colossus AletheiaCosmo
-    pip install emcee pyyaml pandas                    # the hod_mod[fitting] extra
-    pip install --no-build-isolation --no-deps -e .
-
-The repository is pinned to a known-good Guix revision via ``channels.scm``; prefix
-the ``guix shell`` command with ``guix time-machine -C channels.scm --`` for a fully
-reproducible build.
-
 ---
 
 Quick start
@@ -92,10 +69,11 @@ Compute the projected correlation function :math:`w_p(r_p)` with a the HOD model
 .. code-block:: python
 
     import jax.numpy as jnp
-    from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-    from hod_mod.cosmology.halo_mass_function import make_hmf
-    from hod_mod.cosmology.halo_profiles import HaloProfile
-    from hod_mod.galaxies import MoreHODModel, FullHaloModelPrediction
+    from hod_mod.core.power_spectrum import LinearPowerSpectrum
+    from hod_mod.core.halo_mass_function import make_hmf
+    from hod_mod.core.halo_profiles import HaloProfile
+    from hod_mod.connection import MoreHODModel
+    from hod_mod.observables import FullHaloModelPrediction
 
     pk_lin = LinearPowerSpectrum()
     theta  = pk_lin.default_cosmology()       # Planck 2018 best-fit
@@ -181,14 +159,21 @@ Repository structure
 
 .. code-block:: text
 
-    hod_mod/
-    ├── cosmology/           P(k), HMF, halo profiles, distances, concentration
-    ├── galaxies/            HOD/ICSMF/iHOD models, SHAM, CLF, clustering
-    ├── fitting/             WpFitter (MAP + emcee), JointFitter, Planck prior
+    hod_mod/                 organised by observable pipeline over a shared core
+    ├── core/                P(k), HMF, halo profiles, distances, concentration, BNL
+    ├── connection/          galaxy–halo occupation: hod/ (per-family), CLF, SHAM
+    ├── gas/                 hot-gas fields: pressure, density, cooling, metallicity,
+    │                        conversions, eROSITA response (X-ray + tSZ ingredients)
+    ├── agn/                 AGN X-ray models: xray, ham, hod, duty_cycle
+    ├── observables/         the pipelines: clustering (wp, ΔΣ), cross_spectra
+    │                        (g×y tSZ + g×X engine), cross_clustering, IA, baryon frac.
+    ├── fitting/             models, config, fitters (MAP + emcee), Planck prior
+    ├── cli/                 unified ``hod-mod`` command (python -m hod_mod)
     └── data_io/             SumStatReader (HDF5 + FITS), wp/ΔΣ CSV loaders
 
     hod_mod/scripts/
     ├── cosmology/           demo scripts (P(k), HMF, profiles)
+    ├── galaxies/            demo + AGN/gas plotting scripts
     ├── benchmarks/          literature benchmark runner
     └── fitting/
         ├── bgs_ls10/        BGS/LS10 fitting campaign

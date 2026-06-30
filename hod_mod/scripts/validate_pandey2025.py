@@ -53,13 +53,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from hod_mod.cosmology import PressureProfileA10
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.galaxies.hod import MoreHODModel
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
-from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
+from hod_mod.gas import PressureProfileA10
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.connection.hod import MoreHODModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
+from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 
 _HERE    = Path(__file__).parent
 _FIG_DIR = _HERE / "figures"
@@ -157,7 +157,7 @@ def fig_cl_gy_decomposition(cross):
     lpgy1h = tables["log_pgy_1h"]
     lpgy2h = tables["log_pgy_2h"]
 
-    from hod_mod.cosmology.distances import comoving_distance
+    from hod_mod.core.distances import comoving_distance
     h      = float(_THETA["h"])
     om     = float(_THETA["Omega_m"])
     chi_arr = np.array([

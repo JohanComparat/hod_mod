@@ -6,9 +6,9 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 import pytest
 import jax.numpy as jnp
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
 
 
 @pytest.fixture(scope="session")

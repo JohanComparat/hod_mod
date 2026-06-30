@@ -4,19 +4,19 @@ X-ray cross/auto power spectra."""
 import numpy as np
 import pytest
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.cosmology.gas_profiles import GasDensityDPM
-from hod_mod.galaxies.hod import (
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.gas import GasDensityDPM
+from hod_mod.connection.hod import (
     MoreHODModel,
     MoreConstFincHODModel,
     n_sat_more15_const_finc,
 )
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
-from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
-from hod_mod.galaxies.agn import XrayAGNModel
-from hod_mod.galaxies.agn_hod import HODAgnModel, BGS_SAMPLES
+from hod_mod.observables.clustering import FullHaloModelPrediction
+from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+from hod_mod.agn.xray import XrayAGNModel
+from hod_mod.agn.hod import HODAgnModel, BGS_SAMPLES
 
 _THETA = LinearPowerSpectrum.default_cosmology()
 _COLOSSUS = dict(

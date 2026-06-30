@@ -5,7 +5,7 @@ stores a 286-element data vector and its full jackknife covariance covering
 SMF, WP, ESD_HSC, ESD_DES, ESD_KIDS, WTHETA, and KNN.  This script extracts
 the [WP | ESD_HSC | ESD_DES] sub-data-vector with the corresponding
 (N_wp + 2 N_esd) × (N_wp + 2 N_esd) joint covariance sub-block and fits with
-:class:`~hod_mod.galaxies.hod.MoreHODModel` including four cosmological
+:class:`~hod_mod.connection.hod.MoreHODModel` including four cosmological
 parameters with tight Gaussian Planck 2018 priors.
 
 HSC and DES observe the same lens sample, so the model predicts one ΔΣ(R)
@@ -93,18 +93,18 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 import numpy as np
 import jax.numpy as jnp
 
-from hod_mod.cosmology.beyond_linear_bias import BeyondLinearBiasMead21
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.galaxies.hod import (
+from hod_mod.core.beyond_linear_bias import BeyondLinearBiasMead21
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.connection.hod import (
     HODModel, MoreHODModel, Kravtsov04HODModel,
     VanUitert16CSMFModel, ZuMandelbaum15HODModel, Zacharegkas25HODModel,
 )
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
-from hod_mod.galaxies.baryon_fraction import BaryonFractionSigmoid
-from hod_mod.galaxies.intrinsic_alignment import NLAModel
-from hod_mod.fitting.hod_wp import _assemble_hod_params
+from hod_mod.observables.clustering import FullHaloModelPrediction
+from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid
+from hod_mod.observables.intrinsic_alignment import NLAModel
+from hod_mod.fitting import _assemble_hod_params
 from hod_mod.fitting.planck_prior import (
     PLANCK18_MEANS,
     PLANCK18_SIGMAS,
@@ -112,6 +112,7 @@ from hod_mod.fitting.planck_prior import (
     gaussian_log_prior,
 )
 from hod_mod.data_io.sum_stat_reader import SumStatReader
+from hod_mod.paths import results_root
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -570,7 +571,7 @@ class MultiProbeFitter:
         n_walkers: int = 64,
         n_steps: int = 3000,
         n_burnin: int = 500,
-        output_dir: str = "results/bgs_multiprobe/",
+        output_dir: str = str(results_root() / "bgs_multiprobe"),
     ):
         if hod_model not in HOD_REGISTRY:
             raise ValueError(f"Unknown HOD model '{hod_model}'. Choose from {list(HOD_REGISTRY)}")
@@ -1285,7 +1286,7 @@ def main():
     parser.add_argument("--plot",       action="store_true")
     parser.add_argument(
         "--output-dir",
-        default=os.path.join(repo_root, "results", "bgs_multiprobe"),
+        default=os.path.join(results_root(), "bgs_multiprobe"),
     )
     args = parser.parse_args()
 

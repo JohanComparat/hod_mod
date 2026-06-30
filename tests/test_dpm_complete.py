@@ -16,7 +16,7 @@ Oppenheimer+2025, arXiv:2505.14782 — DPM paper
 import numpy as np
 import pytest
 
-from hod_mod.cosmology.gas_profiles import (
+from hod_mod.gas import (
     PressureProfileDPM,
     MetallicityProfileDPM,
     GasDensityDPM,
@@ -25,7 +25,7 @@ from hod_mod.cosmology.gas_profiles import (
     xray_cooling_function,
     _RHO_CRIT0,
 )
-from hod_mod.galaxies.cross_spectra import (
+from hod_mod.observables.cross_spectra import (
     psf_window_ell,
     psf_king_profile,
     psf_king_window_ell,
@@ -37,7 +37,9 @@ from hod_mod.galaxies.cross_spectra import (
 # ---------------------------------------------------------------------------
 
 _OM = 0.3
-_THETA = {"h": 0.7, "Omega_m": _OM}
+# Full cosmology dict: the emissivity scatter-boost path reaches eisenstein_hu_pk,
+# which requires Omega_b and n_s in addition to h and Omega_m.
+_THETA = {"h": 0.7, "Omega_m": _OM, "Omega_b": 0.048, "n_s": 0.96}
 
 
 def _r200(m200, omega_m=_OM):
@@ -270,7 +272,7 @@ class TestKingPsfWindowEll:
 
     def test_alpha_1p5_is_exponential(self):
         """α=3/2 special case: B_ℓ = exp(−ℓ θ_c) exactly."""
-        from hod_mod.galaxies.cross_spectra import _ARCSEC_TO_RAD
+        from hod_mod.observables.cross_spectra import _ARCSEC_TO_RAD
         tc_arcsec = 8.64
         ell = np.array([0.0, 100.0, 1000.0, 5000.0])
         Bk = np.asarray(psf_king_window_ell(ell, theta_c_arcsec=tc_arcsec, alpha=1.5))

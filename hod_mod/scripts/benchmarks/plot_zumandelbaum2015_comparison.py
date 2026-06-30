@@ -22,6 +22,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from hod_mod.paths import results_root
 
 _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -29,7 +30,7 @@ _REPO_ROOT = os.path.dirname(
 sys.path.insert(0, _REPO_ROOT)
 
 CONFIG_FILE = os.path.join(_REPO_ROOT, "configs/benchmarks/benchmark_zumandelbaum2015.yml")
-OUT_DIR     = os.path.join(_REPO_ROOT, "results/benchmarks/zumandelbaum2015_sdss")
+OUT_DIR     = os.path.join(results_root(), "benchmarks/zumandelbaum2015_sdss")
 
 # Published best-fit parameters — Table 2 of ZM15 (arXiv:1505.02781)
 IHOD_PARAMS = {

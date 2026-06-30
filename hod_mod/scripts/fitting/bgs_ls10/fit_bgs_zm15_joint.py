@@ -316,11 +316,11 @@ def load_bins(data_dir: str, surveys: list[str], rp_min: float, rp_max: float,
 
 def build_predictor(hmf_backend: str):
     """Construct a ZuMandelbaum15HODModel FullHaloModelPrediction (mirrors WpFitter)."""
-    from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-    from hod_mod.cosmology.halo_mass_function import make_hmf
-    from hod_mod.cosmology.halo_profiles import HaloProfile
-    from hod_mod.galaxies.clustering import FullHaloModelPrediction
-    from hod_mod.galaxies.hod import ZuMandelbaum15HODModel
+    from hod_mod.core.power_spectrum import LinearPowerSpectrum
+    from hod_mod.core.halo_mass_function import make_hmf
+    from hod_mod.core.halo_profiles import HaloProfile
+    from hod_mod.observables.clustering import FullHaloModelPrediction
+    from hod_mod.connection.hod import ZuMandelbaum15HODModel
 
     pk          = LinearPowerSpectrum()
     theta_cosmo = pk.default_cosmology()
@@ -660,12 +660,12 @@ def plot_hod_shmr(bins, map_result, out_dir, z_eff=0.13):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import jax.numpy as jnp
-    from hod_mod.galaxies.hod import (
+    from hod_mod.connection.hod import (
         _mstar_from_mh_zu15,
         n_cen_thresh_zu15,
         n_sat_thresh_zu15,
     )
-    from hod_mod.galaxies.sham import smhm_moster13, smhm_behroozi13
+    from hod_mod.connection.sham import smhm_moster13, smhm_behroozi13
 
     params = map_result["params"]
     log10mh = jnp.linspace(10.0, 15.5, 300)
@@ -995,7 +995,7 @@ def plot_montage(bins, predictor, theta_cosmo, h, pi_max_h, map_result, obs_smf,
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import jax.numpy as jnp
-    from hod_mod.galaxies.hod import _mstar_from_mh_zu15
+    from hod_mod.connection.hod import _mstar_from_mh_zu15
 
     params = map_result["params"]
     cmap   = plt.get_cmap("viridis")
@@ -1147,8 +1147,9 @@ def main():
     p.add_argument("--n-walkers", type=int, default=32)
     p.add_argument("--n-burnin",  type=int, default=500)
     p.add_argument("--n-steps",   type=int, default=2000)
+    from hod_mod.paths import results_root
     p.add_argument("--out-dir", default=os.path.join(
-        _REPO_ROOT, "results/bgs_zm15_joint"))
+        results_root(), "bgs_zm15_joint"))
     p.add_argument("--force-mcmc", action="store_true",
                    help="Rerun MCMC even if a chain already exists")
     p.add_argument("--plot-only", action="store_true",

@@ -158,6 +158,21 @@ LD_LIBRARY_PATH=$PROF/lib JAX_PLATFORMS=cpu python -m \
   # add: --surveys HSC DES KIDS --fit-esd   (ESD also fit)
 # It does not work well. Fair enough.
 
+XCORR
+XCORR
+XCORR
+
+JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_comparat2025 --sample S1 --fix-zm15 --mode map --free-params agn-models --agn-model ham
+
+# interpreter: /home/comparat/mamba/envs/hod_mod/bin/python  (CPU is ~4× faster than GPU here)
+
+# (optional) precompute the W_AGN(z) kernel — the fit auto-runs this if the h5 is missing
+JAX_PLATFORMS=cpu python -m hod_mod.scripts.galaxies.precompute_w_agn --sample S1
+
+# MAP fit: gas held at the fixed-ZM15 reference, AGN amplitude fit over θ∈[8,300]"
+JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_agn_duty_cycle_cross --sample S1 --gas-model 2 --mode map
+
+
 
 On LAPTOP :
 # Fast (amplitudes / tilts only — minutes each):

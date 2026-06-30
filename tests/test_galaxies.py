@@ -5,7 +5,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from hod_mod.galaxies.hod import (
+from hod_mod.connection.hod import (
     HODBase,
     n_cen, n_sat, n_total, HODModel,
     _incompleteness_more15, n_cen_more15, n_sat_more15, n_total_more15,
@@ -20,18 +20,18 @@ from hod_mod.galaxies.hod import (
     f_red_cen_zu16, f_red_sat_zu16,
     ZuMandelbaum15HODModel, ZuMandelbaum16QuenchingModel,
 )
-from hod_mod.galaxies.clustering import (
+from hod_mod.observables.clustering import (
     _ogata_table, _pk_to_xi, HODClusteringPrediction,
     FullHaloModelPrediction,
     _hubble_E, _comoving_dist_h,
 )
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.galaxies.sham import (
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.connection.sham import (
     smhm_moster13, smhm_behroozi13, smhm_girelli20,
     SHAMModel, _GIRELLI20_NO_SCATTER, _GIRELLI20_SCATTER,
 )
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
 
 
 _HOD_PARAMS = {
@@ -391,7 +391,7 @@ class TestHODBase:
             HODBase(hmf, bias)
 
     def test_single_arg_init_flag(self):
-        from hod_mod.galaxies.hod import ZuMandelbaum15HODModel, Zacharegkas25HODModel
+        from hod_mod.connection.hod import ZuMandelbaum15HODModel, Zacharegkas25HODModel
         assert ZuMandelbaum15HODModel._SINGLE_ARG_INIT is True
         assert Zacharegkas25HODModel._SINGLE_ARG_INIT is True
         assert HODModel._SINGLE_ARG_INIT is False
@@ -860,8 +860,8 @@ class TestNSatThreshZu15:
 class TestZuMandelbaum15HODModel:
     @pytest.fixture(scope="class")
     def setup(self):
-        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-        from hod_mod.cosmology.halo_mass_function import make_hmf
+        from hod_mod.core.power_spectrum import LinearPowerSpectrum
+        from hod_mod.core.halo_mass_function import make_hmf
         pk = LinearPowerSpectrum()
         theta = LinearPowerSpectrum.default_cosmology()
         hmf = make_hmf("tinker08", pk_func=pk.pk_linear)
@@ -949,8 +949,8 @@ class TestFRedSatZu16:
 class TestZuMandelbaum16QuenchingModel:
     @pytest.fixture(scope="class")
     def setup(self):
-        from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-        from hod_mod.cosmology.halo_mass_function import make_hmf
+        from hod_mod.core.power_spectrum import LinearPowerSpectrum
+        from hod_mod.core.halo_mass_function import make_hmf
         pk = LinearPowerSpectrum()
         theta = LinearPowerSpectrum.default_cosmology()
         hmf = make_hmf("tinker08", pk_func=pk.pk_linear)
