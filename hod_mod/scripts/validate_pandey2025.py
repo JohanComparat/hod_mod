@@ -42,7 +42,7 @@ available from the DES DR1/DR3 data release pages or the ACT DR6 GitHub:
 
 Usage
 -----
-    cd /home/comparat/software/hod_mod
+    cd $HOD_MOD_REPO
     python -m hod_mod.scripts.validate_pandey2025
 """
 

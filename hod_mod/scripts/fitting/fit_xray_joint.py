@@ -57,11 +57,12 @@ from hod_mod.scripts.fitting import fit_agn_duty_cycle_baseline as B
 from hod_mod.scripts.validate_gas_profiles import (
     _make_density_variant, _make_pressure_variant, _calibrate_ne03_P03,
 )
+from hod_mod import paths
 
-_OUT_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..",
-                 "results", "xray_joint")
-)
+# Emulator caches + fit outputs live under the results root ($HOD_MOD_RESULTS if
+# set, else the per-user data dir) — NOT in the repo.  Point $HOD_MOD_RESULTS at
+# the location the caches were moved to so they are reused instead of rebuilt.
+_OUT_DIR = os.fspath(paths.results_root() / "xray_joint")
 
 # ---- emulator grid (gas emission profile shape) ----
 # Each (p2, r_max, beta) cell builds the full-APEC emissivity FT EXPLICITLY (no
@@ -69,11 +70,13 @@ _OUT_DIR = os.path.normpath(
 # shift of Λ(T) for the full-APEC path).  The override is used only for the exact
 # (n_e,0.3/n_e_fid)² rescale.  Grid kept modest so the ~14 s/cell stays ~45 min/7.
 _ALPHA_PROF = 0.9
-# Grid shifted toward the data-preferred region (S1 diagnostic wanted low p2,
-# high beta, large r_max).
-_P2_GRID   = np.array([0.3, 1.0, 2.4])                  # gas outer slope
+# Grid extended DOWN in p2 and beta_gas: the broad-band MCMC found S2-S4 railing at
+# the old lower edges (p2=0.3, beta=0.9) — they want a weaker L_X-M slope and a
+# shallower/more-extended gas profile.  S1 (interior, p2~1.1, beta~1.2) stays
+# covered.  4×3×4 = 48 cells (~14 s/cell).
+_P2_GRID   = np.array([0.1, 0.6, 1.2, 2.4])             # gas outer slope
 _RMAX_GRID = np.array([3.0, 4.0, 5.0])                  # r_max / r200
-_BETA_GRID = np.array([0.9, 1.5, 2.1])                  # gas mass slope (L_X-M)
+_BETA_GRID = np.array([0.3, 0.9, 1.5, 2.1])            # gas mass slope (L_X-M)
 
 _THETA_MIN, _THETA_MAX = 8.0, 300.0
 
@@ -246,13 +249,89 @@ def _neg_log_prob(p, samples):
     return 0.5 * sum(_chi2_sample(p, S) for S in samples.values())
 
 
+def _components(p, S):
+    """Gas and AGN model w(theta) for params p on sample S."""
+    log10_ne_03, beta, p2, r_max, log10DC = p
+    gas_shape = S["interp"]([[p2, r_max, beta]])[0]
+    a_gas = S["c_total"] * (10.0 ** (log10_ne_03 - np.log10(_NE03_FID))) ** 2
+    a_agn = 10.0 ** log10DC * S["c_obs_total"]
+    return a_gas * gas_shape, a_agn * S["agn_dc1"]
+
+
+def _figures(tag, samples, flat, chain_full, lp_full, nburn, map_p, out_dir):
+    """Complete diagnostic set: MCMC traces, corner, and per-sample w(theta)
+    decomposition (data vs gas/AGN/total at the MAP + posterior 16-84 band) with
+    pull residuals."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # (1) traces
+    np_ = len(_PARAMS)
+    fig, axs = plt.subplots(np_ + 1, 1, figsize=(8, 1.5 * (np_ + 1)), sharex=True)
+    for i, p in enumerate(_PARAMS):
+        axs[i].plot(chain_full[:, :, i], color="C0", alpha=0.12, lw=0.5)
+        axs[i].set_ylabel(p, fontsize=8); axs[i].axvline(nburn, color="C3", ls=":")
+    axs[-1].plot(lp_full, color="C0", alpha=0.12, lw=0.5)
+    axs[-1].set_ylabel("log prob", fontsize=8); axs[-1].axvline(nburn, color="C3", ls=":")
+    axs[-1].set_xlabel("step")
+    axs[0].set_title(f"{tag}: MCMC traces (red = burn-in {nburn})", fontsize=9)
+    fig.tight_layout(); fig.savefig(os.path.join(out_dir, f"{tag}_bb_traces.png"), dpi=110)
+    plt.close(fig)
+
+    # (2) corner
+    try:
+        import corner
+        fig = corner.corner(flat, labels=_PARAMS, truths=list(map_p))
+        fig.savefig(os.path.join(out_dir, f"{tag}_bb_corner.png"), dpi=110); plt.close(fig)
+    except Exception as e:
+        print(f"  (corner skipped: {e})", flush=True)
+
+    # (3) per-sample w(theta) decomposition + posterior band + pulls
+    rng = np.random.default_rng(0)
+    idx = rng.choice(len(flat), size=min(300, len(flat)), replace=False)
+    for s, S in samples.items():
+        th = S["th_as"]; m = S["mask"]; wd = S["wdata"]; err = S["err"]
+        gas_m, agn_m = _components(map_p, S); tot_m = gas_m + agn_m
+        tot_s = np.array([sum(_components(flat[i], S)) for i in idx])
+        lo, med, hi = np.percentile(tot_s, [16, 50, 84], axis=0)
+        fig, (ax, axp) = plt.subplots(2, 1, figsize=(7, 6), sharex=True,
+                                      gridspec_kw=dict(height_ratios=[3, 1]))
+        ax.errorbar(th[m], wd[m], yerr=err[m], fmt="o", ms=3, color="k", label="data", zorder=5)
+        ax.fill_between(th[m], np.abs(lo[m]), np.abs(hi[m]), color="C0", alpha=0.25,
+                        label="posterior 16-84")
+        ax.plot(th[m], np.abs(tot_m[m]), "C0-", label="total (MAP)")
+        ax.plot(th[m], np.abs(gas_m[m]), "C1--", label="gas")
+        ax.plot(th[m], np.abs(agn_m[m]), "C2:", label="AGN")
+        ax.set_xscale("log"); ax.set_yscale("log")
+        ax.set_ylabel(r"$|w(\theta)|$"); ax.legend(fontsize=8, ncol=2)
+        chi2 = float(np.sum(((wd - tot_m)[m] / err[m]) ** 2))
+        ndof = max(int(m.sum()) - len(_PARAMS), 1)
+        ax.set_title(f"{s}: broad-band decomposition  (χ²/dof={chi2/ndof:.2f})", fontsize=9)
+        pull = (wd - tot_m) / err
+        axp.axhline(0, color="grey", lw=0.7)
+        for lv in (-1, 1):
+            axp.axhline(lv, color="grey", lw=0.4, ls=":")
+        axp.plot(th[m], pull[m], "C0o", ms=3)
+        axp.set_ylabel("pull"); axp.set_xlabel(r"$\theta$ [arcsec]"); axp.set_ylim(-5, 5)
+        fig.tight_layout(); fig.savefig(os.path.join(out_dir, f"{s}_bb_decomp.png"), dpi=110)
+        plt.close(fig)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--samples", nargs="+", default=list(F.SAMPLES))
     ap.add_argument("--hmf", default="tinker08")
     ap.add_argument("--f-sys", type=float, default=0.05)
     ap.add_argument("--map-only", action="store_true")
+    ap.add_argument("--mcmc", action="store_true",
+                    help="after the MAP, run emcee over the shared params")
+    ap.add_argument("--nwalkers", type=int, default=64)
+    ap.add_argument("--nsteps", type=int, default=8000)
+    ap.add_argument("--nburn", type=int, default=2000)
     args = ap.parse_args(argv)
+    # per-run tag so parallel single-sample runs do not clobber each other
+    tag = "_".join(args.samples)
 
     samples = {}
     for s in args.samples:
@@ -309,7 +388,7 @@ def main(argv=None):
     map_dict["chi2_per_sample"] = {s: float(v) for s, v in per_sample.items()}
 
     os.makedirs(_OUT_DIR, exist_ok=True)
-    out = os.path.join(_OUT_DIR, "joint_map.json")
+    out = os.path.join(_OUT_DIR, f"joint_map_{tag}.json")
     with open(out, "w") as fh:
         json.dump(map_dict, fh, indent=2)
     print("\n=== JOINT MAP ===")
@@ -320,6 +399,53 @@ def main(argv=None):
     for s, v in per_sample.items():
         print(f"    {s}: chi2={v:.1f} ({samples[s]['n_pts']} pts)")
     print(f"\nSaved -> {out}", flush=True)
+
+    if args.map_only or not args.mcmc:
+        return map_dict
+
+    # ---- MCMC over the shared physical params (fast: cached-grid likelihood) ----
+    import emcee
+    ndim = len(_PARAMS)
+    nw = args.nwalkers
+    rng = np.random.default_rng(42)
+    p0 = map_p + 1e-3 * rng.standard_normal((nw, ndim)) * np.ptp(_BOUNDS, axis=1)
+    p0 = np.clip(p0, _BOUNDS[:, 0] + 1e-6, _BOUNDS[:, 1] - 1e-6)
+
+    def logp(p):
+        v = nlp(p)
+        return -v if v < 1e29 else -np.inf
+
+    sampler = emcee.EnsembleSampler(nw, ndim, logp)
+    print(f"\nMCMC: {nw} walkers × {args.nsteps} steps ({tag}) ...", flush=True)
+    t0 = time.time()
+    sampler.run_mcmc(p0, args.nsteps, progress=False)
+    print(f"MCMC done in {time.time()-t0:.0f}s; mean acceptance="
+          f"{np.mean(sampler.acceptance_fraction):.2f}", flush=True)
+
+    flat = sampler.get_chain(discard=args.nburn, flat=True)
+    logprob = sampler.get_log_prob(discard=args.nburn, flat=True)
+    np.savez(os.path.join(_OUT_DIR, f"{tag}_bb_chain.npz"),
+             flatchain=flat, log_prob=logprob, chain=sampler.get_chain(),
+             lp=sampler.get_log_prob(), params=_PARAMS, nburn=args.nburn,
+             c_total=samples[anchor_sample]["c_total"])
+    pct = np.percentile(flat, [16, 50, 84], axis=0)
+    post = {p: dict(median=float(pct[1, i]), lo=float(pct[1, i] - pct[0, i]),
+                    hi=float(pct[2, i] - pct[1, i])) for i, p in enumerate(_PARAMS)}
+    dn = 10.0 ** (flat[:, 0] - np.log10(_NE03_FID))
+    dnp = np.percentile(dn, [16, 50, 84])
+    post["density_norm"] = dict(median=float(dnp[1]), lo=float(dnp[1] - dnp[0]),
+                                hi=float(dnp[2] - dnp[1]))
+    with open(os.path.join(_OUT_DIR, f"{tag}_bb_summary.json"), "w") as fh:
+        json.dump(dict(samples=args.samples, map=map_dict,
+                       acceptance=float(np.mean(sampler.acceptance_fraction)),
+                       posterior=post), fh, indent=2)
+    print("Posterior (median +hi -lo):", flush=True)
+    for i, p in enumerate(_PARAMS):
+        print(f"  {p:12s} = {pct[1,i]:.3f} +{pct[2,i]-pct[1,i]:.3f} -{pct[1,i]-pct[0,i]:.3f}",
+              flush=True)
+    _figures(tag, samples, flat, sampler.get_chain(), sampler.get_log_prob(),
+             args.nburn, map_p, _OUT_DIR)
+    print(f"Saved MCMC chain/summary/figures -> {_OUT_DIR}", flush=True)
     return map_dict
 
 

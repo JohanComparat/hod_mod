@@ -1,7 +1,7 @@
 """Joint fit of ZuMandelbaum+2015 iHOD to wp(rp) + SMF Phi(M*) for BGS Mstar-threshold samples.
 
 Data source:
-    ~/software/sum_stat/data/BGS_Mstar{9.0,10.0,10.5,11.0,11.5}/  (sum_stat HDF5)
+    $HOD_MOD_SUMSTAT/BGS_Mstar{9.0,10.0,10.5,11.0,11.5}/  (sum_stat HDF5)
     Both wp(rp) and SMF Phi(M*) are read from the same jackknife HDF5 file.
 
 Model:
@@ -85,10 +85,10 @@ from hod_mod.connection.hod import (
 )
 from hod_mod.observables.clustering import FullHaloModelPrediction
 from hod_mod.data_io.sum_stat_reader import SumStatReader
-from hod_mod.paths import results_root
+from hod_mod.paths import cache_root, results_root, sum_stat_root
 
 try:
-    _JAX_CACHE = Path(os.path.expanduser("~/.cache/jax_xla_bgs_smf_wp"))
+    _JAX_CACHE = (cache_root() / "jax_xla_bgs_smf_wp")
     _JAX_CACHE.mkdir(parents=True, exist_ok=True)
     jax.config.update("jax_compilation_cache_dir", str(_JAX_CACHE))
     jax.config.update("jax_persistent_cache_min_compile_time_secs", 0.0)
@@ -98,7 +98,7 @@ except Exception:
 # --------------------------------------------------------------------------
 # Paths
 # --------------------------------------------------------------------------
-_SUM_STAT_DIR = Path(os.path.expanduser("~/software/sum_stat/data"))
+_SUM_STAT_DIR = sum_stat_root()
 _RESULTS_DIR  = results_root() / "fits" / "bgs_smf_wp"
 
 # --------------------------------------------------------------------------

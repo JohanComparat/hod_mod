@@ -64,16 +64,38 @@ from hod_mod.data_io import fetch
 chain = fetch("results/benchmarks/more2015_logM11_12/flatchain.npz")
 ```
 
-Optional configuration via environment variables:
-
-| Variable | Purpose |
-|---|---|
-| `HOD_MOD_DATA_DOI` | pin a specific Zenodo version for reproducibility (default: pinned in code) |
-| `HOD_MOD_DATA_DIR` | read from a local mirror directory instead of downloading |
-| `HOD_MOD_DATA_CACHE` | override the download cache location |
-
 See [docs/data_hosting.rst](docs/data_hosting.rst) for the full strategy and the
 upload/registry workflow.
+
+## Environment variables
+
+All filesystem locations are resolved through [`hod_mod.paths`](hod_mod/paths.py)
+— there are **no hardcoded paths in the code**. Each helper reads an env var and
+falls back to a sensible default, so a fresh checkout runs without configuration,
+and your machine's layout is set once in `~/.bashrc`.
+
+| Variable | Helper | Points to | Default |
+|---|---|---|---|
+| `HOD_MOD_REPO` | `repo_root()` | code repository (`configs/`, in-repo `data/`) | auto-detected from the package |
+| `HOD_MOD_DATA_DIR` | `data_root()` | the **data repository** (external inputs: `zenodo/`, `erosita/`, `legacysurvey/`, `st_mod_data/`, `xray_bands/`) | `hod_mod/data` |
+| `HOD_MOD_SUMSTAT` | `sum_stat_root()` | `sum_stat` measurement products | `~/software/sum_stat/data` |
+| `HOD_MOD_RESULTS` | `results_root()` | generated outputs (chains, figures) — **never** in the repo | `~/.local/share/hod_mod/results` |
+| `HOD_MOD_CACHE` | `cache_root()` | JAX/XLA compilation caches | OS user-cache dir |
+| `HOD_MOD_DATA_DOI` | — | pin a specific Zenodo version (default: pinned in code) | concept DOI |
+
+Recommended `~/.bashrc` setup:
+
+```bash
+export HOD_MOD_REPO="$HOME/software/hod_mod"
+export HOD_MOD_DATA_DIR="$HOME/data"
+export HOD_MOD_SUMSTAT="$HOME/software/sum_stat/data"
+export HOD_MOD_RESULTS="$HOME/data/hod_mod_results"
+```
+
+```python
+from hod_mod.paths import repo_root, data_root, sum_stat_root, results_root
+print(repo_root(), data_root(), sum_stat_root(), results_root())
+```
 
 ## Tests
 
@@ -112,7 +134,7 @@ All clustering HOD classes subclass `HODBase` (ABC) and implement `nc_ns()` and
 `hod_mod` predicts galaxy × gas cross-correlations using parametric electron
 pressure and density profiles embedded in the same halo model framework.
 
-**Gas profile classes** (`hod_mod.cosmology.gas_profiles`):
+**Gas profile classes** (`hod_mod.gas`):
 
 | Class | Physical profile | Reference |
 |---|---|---|
@@ -120,7 +142,7 @@ pressure and density profiles embedded in the same halo model framework.
 | `GasDensityDPM` (model=1,2,3) | electron density n_e(r\|M,z) → soft X-ray ε | [Oppenheimer et al. 2025](https://arxiv.org/abs/2505.14782) |
 | `m200_to_m500c` | NFW bisection: M₂₀₀ → M₅₀₀c, R₅₀₀c | — |
 
-**Cross-spectrum observables** (`hod_mod.galaxies.cross_spectra`):
+**Cross-spectrum observables** (`hod_mod.observables.cross_spectra`):
 
 | Method | Observable | Units |
 |---|---|---|
@@ -132,8 +154,8 @@ pressure and density profiles embedded in the same halo model framework.
 | `angular_cl_gX` | C_ℓ^{g,X} via Limber approximation | (Mpc/h) cm⁻⁶ |
 
 ```python
-from hod_mod.cosmology import PressureProfileA10, GasDensityDPM
-from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
+from hod_mod.gas import PressureProfileA10, GasDensityDPM
+from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 
 pp    = PressureProfileA10(r_max_over_r500c=5.0, n_gl=200)   # Arnaud+2010
 dp    = GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=200) # Oppenheimer+2025
@@ -151,10 +173,10 @@ is included in `hod_mod/data/benchmarks/xray/`.
 ## Quick start — clustering and lensing
 
 ```python
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.galaxies import MoreHODModel, FullHaloModelPrediction
+from hod_mod import (
+    LinearPowerSpectrum, make_hmf, HaloProfile,
+    MoreHODModel, FullHaloModelPrediction,
+)
 import jax.numpy as jnp
 
 pk_lin = LinearPowerSpectrum()

@@ -45,12 +45,12 @@ from hod_mod.observables.clustering import FullHaloModelPrediction
 from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 from hod_mod.agn.ham import HamAGNModel
 from hod_mod.core.distances import comoving_distance
-from hod_mod.paths import results_root
+from hod_mod.paths import data_root, results_root
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_ZENODO_DIR  = Path.home() / "data/zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR"
+_ZENODO_DIR  = data_root() / "zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR"
 _RESULTS_DIR = results_root() / "fits" / "comparat2025"
 
 # ---------------------------------------------------------------------------

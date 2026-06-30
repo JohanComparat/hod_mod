@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] — 2026-06-30
+
+Repository hygiene and reproducible paths. No public-API symbol changes.
+
+### Data & results moved out of the repo
+- Curated benchmark data + results are archived on **Zenodo**
+  (concept DOI ``10.5281/zenodo.21078473``) and fetched on demand with checksum
+  verification via ``hod_mod.data_io.fetch`` (``pooch``).
+- Generated outputs now write **outside** the repo via
+  ``hod_mod.paths.results_root`` (``$HOD_MOD_RESULTS``); ~30 scripts updated.
+- ``results/`` purged from git history; ``.git`` shrank 309 MB → ~31 MB.
+
+### No hardcoded paths
+- All filesystem locations resolve through ``hod_mod.paths`` helpers with env-var
+  overrides: ``repo_root()`` (``$HOD_MOD_REPO``), ``data_root()``
+  (``$HOD_MOD_DATA_DIR``), ``sum_stat_root()`` (``$HOD_MOD_SUMSTAT``),
+  ``results_root()`` (``$HOD_MOD_RESULTS``), ``cache_root()`` (``$HOD_MOD_CACHE``).
+- Removed every hardcoded ``/home/comparat`` / ``~/data`` / ``~/software/sum_stat``
+  path from executable code.
+
+### Misc
+- Documentation figures moved to ``docs/_images/``; README updated to the
+  refactored module paths + an environment-variable setup section.
+- Removed Guix install support; added a ``pre-commit`` guard against committing
+  large files or ``results/``.
+
 ## [0.1.0] — 2026-06-30
 
 A structural refactor that reorganises the package **by observable pipeline**

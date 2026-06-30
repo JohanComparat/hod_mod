@@ -112,13 +112,13 @@ from hod_mod.fitting.planck_prior import (
     gaussian_log_prior,
 )
 from hod_mod.data_io.sum_stat_reader import SumStatReader
-from hod_mod.paths import results_root
+from hod_mod.paths import results_root, sum_stat_root
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-SUM_STAT_DIR = "/home/comparat/software/sum_stat/data"
+SUM_STAT_DIR = str(sum_stat_root())
 
 # Cosmological parameters that are varied with a Planck Gaussian prior.
 # Omega_b is held fixed; Omega_cdm is derived as Omega_m - Omega_b.

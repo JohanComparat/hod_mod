@@ -24,7 +24,7 @@ Usage
 
     # add a new version to an existing concept record
     python hod_mod/scripts/data/upload_zenodo.py --new-version 1234567 \
-        --extra ~/data/zenodo/LSDR10_GALxEVT
+        --extra $HOD_MOD_DATA_DIR/zenodo/LSDR10_GALxEVT
 
 After publishing, regenerate the shipped registry from the live record::
 

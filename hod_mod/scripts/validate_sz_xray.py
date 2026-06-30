@@ -19,7 +19,7 @@ Comparat+2025 : arXiv:2503.19796 (galaxy × soft X-ray benchmark)
 
 Usage
 -----
-    cd /home/comparat/software/hod_mod
+    cd $HOD_MOD_REPO
     python -m hod_mod.scripts.validate_sz_xray
 """
 

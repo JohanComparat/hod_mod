@@ -10,7 +10,7 @@ This is the iHOD philosophy from Zu & Mandelbaum (2015): one universal SHMR
 (+ scatter + satellite occupation) predicts the galaxy content of every
 stellar-mass threshold sample simultaneously.
 
-Data (from ~/software/sum_stat/data/):
+Data (from $HOD_MOD_SUMSTAT/):
     BGS_Mstar9.0/    BGS_Mstar10.0/   BGS_Mstar10.5/
     BGS_Mstar11.0/   BGS_Mstar11.5/
 
