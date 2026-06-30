@@ -60,7 +60,7 @@ CLI options
 -----------
 --data-dir PATH
     Directory of per-bin sum_stat joint HDF5 files
-    (default: ~/software/sum_stat/data/BGS_Mstar10_massbins)
+    (default: $HOD_MOD_SUMSTAT/BGS_Mstar10_massbins)
 
 --surveys [HSC [DES [KIDS]]]
     Lensing surveys to include.  Pass one or more of HSC, DES, KIDS.
@@ -86,7 +86,7 @@ CLI options
                   only — NOT fitted. Default: auto-discover the widest-coverage
                   BGS_Mstar* file under --smf-data-dir.
 --smf-data-dir PATH  Root searched for an observed SMF file when --smf-file is
-                  omitted (default ~/software/sum_stat/data)
+                  omitted (default $HOD_MOD_SUMSTAT)
 --ng-frac-err-floor FLOAT  Minimum fractional error on n_g (default 0.05)
 --gaussian-prior  Add Gaussian prior from published ZM15 values (Table 2)
 --n-walkers INT   emcee walkers (default 32)
@@ -111,13 +111,13 @@ Usage examples
 --------------
     # Full fit: MAP + MCMC, all surveys
     python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint \\
-        --data-dir ~/software/sum_stat/data/BGS_Mstar10_massbins \\
+        --data-dir $HOD_MOD_SUMSTAT/BGS_Mstar10_massbins \\
         --surveys HSC DES KIDS --mode both \\
         --n-walkers 32 --n-burnin 500 --n-steps 2000
 
     # wp + n_gal only (no lensing)
     python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint \\
-        --data-dir ~/software/sum_stat/data/BGS_Mstar10_massbins \\
+        --data-dir $HOD_MOD_SUMSTAT/BGS_Mstar10_massbins \\
         --surveys --mode both --out-dir results/bgs_zm15_joint_wp
 
     # Resume interrupted MCMC
@@ -1116,8 +1116,8 @@ def plot_all(bins, predictor, theta_cosmo, h, pi_max_h, map_result, obs_smf,
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--data-dir", default=os.path.expanduser(
-        "~/software/sum_stat/data/BGS_Mstar10_massbins"),
+    from hod_mod.paths import sum_stat_root
+    p.add_argument("--data-dir", default=str(sum_stat_root() / "BGS_Mstar10_massbins"),
         help="Directory of per-bin sum_stat joint HDF5 files")
     p.add_argument("--surveys", nargs="*", default=["HSC", "DES", "KIDS"],
                    help="Lensing surveys to include (HSC DES KIDS). "
@@ -1137,8 +1137,7 @@ def main():
                    help="Observed SMF file (sum_stat joint *_smf_* HDF5) used only "
                         "for comparison (NOT fitted). Default: auto-discover the "
                         "widest-coverage BGS_Mstar* file under --smf-data-dir.")
-    p.add_argument("--smf-data-dir", default=os.path.expanduser(
-        "~/software/sum_stat/data"),
+    p.add_argument("--smf-data-dir", default=str(sum_stat_root()),
         help="Root searched for an observed SMF file when --smf-file is omitted")
     p.add_argument("--ng-frac-err-floor", type=float, default=0.05,
                    help="Minimum fractional error on n_g (default 0.05)")

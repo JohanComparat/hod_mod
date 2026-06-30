@@ -55,8 +55,7 @@ from hod_mod.scripts.validate_gas_profiles import (
     _make_density_variant, _make_pressure_variant, _calibrate_ne03_P03,
 )
 
-_OUT_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "results", "xray_joint_bands"))
+_OUT_DIR = os.fspath(paths.results_root() / "xray_joint_bands")
 
 # 15 bands (folder names in eV) + their keV edges
 _BANDS = [f"{lo:04d}_E_{lo+100:04d}" for lo in range(500, 2000, 100)]

@@ -22,7 +22,7 @@ Produces four figures saved to ``docs/_images/``:
 
 Usage::
 
-    cd /home/comparat/software/hod_mod
+    cd $HOD_MOD_REPO
     JAX_PLATFORMS=cpu python -m hod_mod.scripts.galaxies.plot_agn_model
 """
 
