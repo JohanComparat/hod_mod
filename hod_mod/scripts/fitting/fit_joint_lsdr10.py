@@ -3,12 +3,12 @@
 Data sources
 ------------
 wp + ESD
-    ~/software/sum_stat/data/BGS_Mstar{10.0,10.5,11.0,11.5}/
+    $HOD_MOD_SUMSTAT/BGS_Mstar{10.0,10.5,11.0,11.5}/
     LS10_VLIM_ANY_*_N_*_joint_smf-wp-esd_hsc-esd_des-esd_kids-wtheta-knn-sys-comb.h5
     Read via SumStatReader.joint_bgs(probes=("wp", "esd_hsc")).
 
 Galaxy × X-ray
-    ~/data/zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR/*_GALxEVT_wtheta.fits
+    $HOD_MOD_DATA_DIR/zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR/*_GALxEVT_wtheta.fits
     Same format as fit_comparat2025.py.
 
 Samples with all three statistics (N matched between sum_stat and zenodo)
@@ -78,15 +78,13 @@ from hod_mod.observables.clustering import FullHaloModelPrediction
 from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 from hod_mod.agn.xray import XrayAGNModel
 from hod_mod.data_io.sum_stat_reader import SumStatReader
-from hod_mod.paths import results_root
+from hod_mod.paths import data_root, results_root, sum_stat_root
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_SUM_STAT_DIR = Path(os.path.expanduser("~/software/sum_stat/data"))
-_ZENODO_DIR   = Path(os.path.expanduser(
-    "~/data/zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR"
-))
+_SUM_STAT_DIR = sum_stat_root()
+_ZENODO_DIR   = data_root() / "zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR"
 _RESULTS_DIR  = results_root() / "fits" / "joint_lsdr10"
 _SHAPE_CACHE  = _RESULTS_DIR / "shape_cache"
 

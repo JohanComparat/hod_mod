@@ -47,8 +47,24 @@ New outputs (MCMC chains, figures, caches) are **never written inside the repo**
    from hod_mod.paths import results_root, results_path
    out = results_path("benchmarks", "my_run", "flatchain.npz")  # parent dir created
 
-Set the env var once (e.g. in ``~/.bashrc``) so every run and shell agrees::
+All filesystem locations go through :mod:`hod_mod.paths` (no hardcoded paths in
+the code); each helper reads an env var and falls back to a sensible default:
 
+============================ ====================== ================================================
+Env var                      Helper                 Points to
+============================ ====================== ================================================
+``HOD_MOD_REPO``             ``repo_root()``        code repo (``configs/``, in-repo ``data/``)
+``HOD_MOD_DATA_DIR``         ``data_root()``        data repo (zenodo/erosita/legacysurvey/bands)
+``HOD_MOD_SUMSTAT``          ``sum_stat_root()``    ``sum_stat`` measurement products
+``HOD_MOD_RESULTS``          ``results_root()``     generated outputs (never in the repo)
+``HOD_MOD_CACHE``            ``cache_root()``       JAX/XLA compilation caches
+============================ ====================== ================================================
+
+Set them once in ``~/.bashrc`` so every run and shell agrees::
+
+   export HOD_MOD_REPO="$HOME/software/hod_mod"
+   export HOD_MOD_DATA_DIR="$HOME/data"
+   export HOD_MOD_SUMSTAT="$HOME/software/sum_stat/data"
    export HOD_MOD_RESULTS="$HOME/data/hod_mod_results"
 
 Fetching data

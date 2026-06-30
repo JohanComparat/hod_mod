@@ -2,7 +2,7 @@
 
 Reads the official combined TM0 response from the eROSITA-DE DR1 ``arfrmf`` page
 (https://erosita.mpe.mpg.de/dr1/eSASS4DR1/eSASS4DR1_arfrmf/), placed in
-``~/data/erosita/instrument/``:
+``$HOD_MOD_DATA_DIR/erosita/instrument/``:
 
   * ARF  ``{variant}_tm0_arf_filter_2023-01-17.fits.gz``  (variant = survey | onaxis)
   * RMF  ``onaxis_tm0_rmf_2023-01-17.fits.gz``            (position-independent)
@@ -23,7 +23,7 @@ RMF (~2 MB) is not bundled — re-point ``--instr-dir`` to rebuild.
 
 Usage:
     python -m hod_mod.scripts.galaxies.build_erosita_response \
-        --instr-dir ~/data/erosita/instrument --variant survey
+        --instr-dir $HOD_MOD_DATA_DIR/erosita/instrument --variant survey
 """
 from __future__ import annotations
 
@@ -33,10 +33,11 @@ import shutil
 
 import numpy as np
 from astropy.io import fits
+from hod_mod.paths import data_root
 
 _HERE = os.path.dirname(__file__)
 _DATA_DIR = os.path.normpath(os.path.join(_HERE, "..", "..", "data", "erosita"))
-_DEFAULT_INSTR = os.path.expanduser("~/data/erosita/instrument")
+_DEFAULT_INSTR = str(data_root() / "erosita/instrument")
 _BAND = (0.5, 2.0)
 _ARF_NAME = "{variant}_tm0_arf_filter_2023-01-17.fits.gz"
 _RMF_NAME = "onaxis_tm0_rmf_2023-01-17.fits.gz"

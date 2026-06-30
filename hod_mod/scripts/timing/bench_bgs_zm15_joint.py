@@ -32,6 +32,8 @@ import argparse
 import os
 import sys
 
+from hod_mod.paths import sum_stat_root
+
 
 # ---------------------------------------------------------------------------
 # Single-backend benchmark (heavy imports happen inside, after JAX_PLATFORMS
@@ -186,8 +188,8 @@ def main() -> int:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--both", action="store_true",
                    help="Run both CPU and GPU (subprocess per backend) and compare.")
-    p.add_argument("--data-dir", default=os.path.expanduser(
-        "~/software/sum_stat/data/BGS_Mstar10_massbins"))
+    p.add_argument("--data-dir",
+                   default=str(sum_stat_root() / "BGS_Mstar10_massbins"))
     p.add_argument("--surveys", nargs="*", default=[],
                    help="Lensing surveys (HSC DES KIDS). Default none = wp+n_gal only.")
     p.add_argument("--n-eval", type=int, default=30, help="Steady-state eval count.")

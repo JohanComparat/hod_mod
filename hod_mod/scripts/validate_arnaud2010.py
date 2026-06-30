@@ -23,7 +23,7 @@ Parameter check (A10 Table 1):
 
 Usage
 -----
-    cd /home/comparat/software/hod_mod
+    cd $HOD_MOD_REPO
     python -m hod_mod.scripts.validate_arnaud2010
 """
 

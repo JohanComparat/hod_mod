@@ -15,7 +15,7 @@ Output: docs/_images/fig01b_nonlinear_power_spectrum.png
 
 Usage::
 
-    cd /home/comparat/software/hod_mod
+    cd $HOD_MOD_REPO
     JAX_PLATFORMS=cpu python -m hod_mod.scripts.cosmology.plot_nonlinear_power_spectrum
 """
 

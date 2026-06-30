@@ -1,8 +1,8 @@
 """Joint fit of galaxy × X-ray w_θ(θ) + wp(rp) + SMF Phi(M*) to Comparat+2025 data.
 
 Data sources:
-    w_θ  : ~/data/zenodo/LSDR10_GALxEVT/  (zenodo record 15111974)
-    wp   : ~/software/sum_stat/data/BGS_Mstar{10.0,…}/  (sum_stat HDF5)
+    w_θ  : $HOD_MOD_DATA_DIR/zenodo/LSDR10_GALxEVT/  (zenodo record 15111974)
+    wp   : $HOD_MOD_SUMSTAT/BGS_Mstar{10.0,…}/  (sum_stat HDF5)
     SMF  : same sum_stat HDF5 file ("smf" group), fit jointly with wp using
            the full smf+wp jackknife cross-covariance
            (``SumStatReader.joint_bgs(probes=("smf","wp"))``).
@@ -93,7 +93,7 @@ from hod_mod.agn.ham import HamAGNModel
 from hod_mod.agn.hod import HODAgnModel
 from hod_mod.agn.xray import XrayAGNModel
 from hod_mod.data_io.sum_stat_reader import SumStatReader
-from hod_mod.paths import results_root
+from hod_mod.paths import cache_root, data_root, results_root, sum_stat_root
 
 # Enable JAX XLA compilation cache. The angular_cl_gX JIT traces in Python
 # (~200s) but the XLA compilation step is fast (<1s on CPU). Lower the
@@ -101,7 +101,7 @@ from hod_mod.paths import results_root
 # This avoids re-tracing in every fresh Python process.
 try:
     import jax
-    _JAX_CACHE = Path(os.path.expanduser("~/.cache/jax_xla_comparat2025"))
+    _JAX_CACHE = (cache_root() / "jax_xla_comparat2025")
     _JAX_CACHE.mkdir(parents=True, exist_ok=True)
     jax.config.update("jax_compilation_cache_dir", str(_JAX_CACHE))
     jax.config.update("jax_persistent_cache_min_compile_time_secs", 0.0)
@@ -111,13 +111,9 @@ except Exception:
 # --------------------------------------------------------------------------
 # Paths
 # --------------------------------------------------------------------------
-_ZENODO_DIR = Path(os.path.expanduser(
-    "~/data/zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR"
-))
-_GAL_DIR = Path(os.path.expanduser(
-    "~/data/zenodo/LSDR10_GALxEVT/Galaxy_samples/data_and_randoms"
-))
-_SUM_STAT_DIR = Path(os.path.expanduser("~/software/sum_stat/data"))
+_ZENODO_DIR = data_root() / "zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR"
+_GAL_DIR = data_root() / "zenodo/LSDR10_GALxEVT/Galaxy_samples/data_and_randoms"
+_SUM_STAT_DIR = sum_stat_root()
 _RESULTS_DIR  = results_root() / "fits" / "comparat2025"
 
 # sum_stat subdirectory per sample (only samples with BGS data)
@@ -259,7 +255,7 @@ def load_data(label: str) -> dict:
     if not path.exists():
         raise FileNotFoundError(
             f"Zenodo data not found: {path}\n"
-            f"Expected ~/data/zenodo/LSDR10_GALxEVT/ to be populated."
+            f"Expected $HOD_MOD_DATA_DIR/zenodo/LSDR10_GALxEVT/ to be populated."
         )
     d = fits.open(path)[1].data
     return dict(
@@ -705,7 +701,7 @@ _BETA_PRESSURE_DEFAULT = 0.86   # MAP run6 β_P (was 0.80)
 # eROSITA CalDB PSF option (False → analytic King, True → TM1-7 mean from FITS)
 _USE_CALDB_PSF = False
 _CALDB_DIR = Path(
-    "/home/comparat/data/erosita/caldb_221121v03/caldb/srv-0500-2000"
+    str(data_root() / "erosita/caldb_221121v03/caldb/srv-0500-2000")
 )
 
 

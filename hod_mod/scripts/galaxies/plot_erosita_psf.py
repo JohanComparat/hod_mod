@@ -13,7 +13,7 @@ Usage::
 
 The TM CalDB files are read from::
 
-    /home/comparat/data/erosita/caldb_221121v03/caldb/srv-0500-2000/tm{1..7}_2dpsf_221121v03.fits
+    $HOD_MOD_DATA_DIR/erosita/caldb_221121v03/caldb/srv-0500-2000/tm{1..7}_2dpsf_221121v03.fits
 """
 
 from __future__ import annotations
@@ -26,10 +26,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy.special import j0 as _j0
-from hod_mod.paths import results_root
+from hod_mod.paths import data_root, results_root
 
 _CALDB = pathlib.Path(
-    "/home/comparat/data/erosita/caldb_221121v03/caldb/srv-0500-2000"
+    str(data_root() / "erosita/caldb_221121v03/caldb/srv-0500-2000")
 )
 _TM_IDS = [1, 2, 3, 4, 5, 6, 7]
 _OUT_DIR = results_root() / "psf"

@@ -21,7 +21,7 @@ HOD tying: log10m0 = log10mmin + DeltaM0, log10m1 = log10m0 + 1.0
 
 Usage
 -----
-    cd /home/comparat/software/hod_mod
+    cd $HOD_MOD_REPO
     python -m hod_mod.scripts.validate_comparat2025
 
     # Focus on key samples only (M*>10 and M*>11):

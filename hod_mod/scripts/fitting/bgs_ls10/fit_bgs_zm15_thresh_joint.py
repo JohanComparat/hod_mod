@@ -35,7 +35,7 @@ Data
 ----
 The per-sample joint HDF5 files produced by ``sum_stat``::
 
-    ~/software/sum_stat/data/BGS_Mstar<thr>/LS10_VLIM_ANY_<thr>_Mstar_12.0_..._joint_..._comb.h5
+    $HOD_MOD_SUMSTAT/BGS_Mstar<thr>/LS10_VLIM_ANY_<thr>_Mstar_12.0_..._joint_..._comb.h5
 
 are read through :class:`~hod_mod.data_io.sum_stat_reader.SumStatReader`:
 ``wp`` and ``esd_<survey>`` via :meth:`joint_bgs`, and the SMF via :meth:`smf`.
@@ -58,7 +58,7 @@ Usage examples
 --------------
     # wp + n(>thr) only (no lensing), MAP + MCMC
     python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_thresh_joint \\
-        --data-dir ~/software/sum_stat/data --mode both
+        --data-dir $HOD_MOD_SUMSTAT --mode both
 
     # load ESD for plotting only (not fit)
     python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_thresh_joint \\
@@ -105,6 +105,7 @@ from hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint import (  # noqa: E402
     load_observed_smf,
     plot_all,
 )
+from hod_mod.paths import sum_stat_root
 
 # LS10_VLIM_ANY_<thr>_Mstar_12.0_...   →  thr is the stellar-mass threshold.
 _THRESH_RE = re.compile(r"VLIM_ANY_([0-9p.]+)_Mstar_")
@@ -248,7 +249,7 @@ def load_thresholds(data_dir: str, surveys: list[str], rp_min: float, rp_max: fl
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--data-dir", default=os.path.expanduser("~/software/sum_stat/data"),
+    p.add_argument("--data-dir", default=str(sum_stat_root()),
                    help="Parent directory of the BGS_Mstar*/ threshold-sample dirs")
     p.add_argument("--surveys", nargs="*", default=[],
                    help="Lensing surveys to LOAD (HSC DES KIDS). Loaded for plotting; "

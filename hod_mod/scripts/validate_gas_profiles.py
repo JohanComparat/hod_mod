@@ -57,13 +57,14 @@ from hod_mod.gas import (
     _gnfw_f_params,
 )
 from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.paths import data_root
 
 _HERE    = Path(__file__).parent
 _FIG_DIR = _HERE / "figures"
 _FIG_DIR.mkdir(exist_ok=True)
 
-_DATA_SR  = Path("/home/comparat/data/st_mod_data/data/validation/validation_GAS/scaling_relations")
-_DATA_POP = Path("/home/comparat/data/st_mod_data/data/benchmark/popesso2024")
+_DATA_SR  = Path(str(data_root() / "st_mod_data/data/validation/validation_GAS/scaling_relations"))
+_DATA_POP = Path(str(data_root() / "st_mod_data/data/benchmark/popesso2024"))
 
 _THETA   = LinearPowerSpectrum.default_cosmology()
 _H       = float(_THETA["h"])

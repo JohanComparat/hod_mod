@@ -11,7 +11,7 @@ Produces four panels:
 
 Usage
 -----
-    cd /home/comparat/software/hod_mod
+    cd $HOD_MOD_REPO
     python -m hod_mod.scripts.validate_bnl
 """
 

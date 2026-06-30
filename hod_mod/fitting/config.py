@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import jax.numpy as jnp
 
-from hod_mod.paths import results_root
+from hod_mod.paths import repo_root as _repo_root, results_root
 
 
 
@@ -140,15 +140,9 @@ def load_config(path: str) -> FitConfig:
     with open(path) as fh:
         raw = yaml.safe_load(fh)
 
-    # Walk up from the config file until we find the directory that has
-    # both 'configs/' and 'data/' as direct children (= repo root).
-    repo_root = os.path.dirname(os.path.abspath(path))
-    while not (os.path.isdir(os.path.join(repo_root, "configs")) and
-               os.path.isdir(os.path.join(repo_root, "data"))):
-        parent = os.path.dirname(repo_root)
-        if parent == repo_root:  # reached filesystem root
-            break
-        repo_root = parent
+    # Code repository root: $HOD_MOD_REPO, else auto-detected from the package
+    # location. Config files reference data/ relative to it.
+    repo_root = str(_repo_root())
 
     data_cfg   = raw.get("data", {})
     model_cfg  = raw["model"]

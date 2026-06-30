@@ -26,6 +26,19 @@ import os
 from pathlib import Path
 
 
+def repo_root() -> Path:
+    """Return the code repository root.
+
+    ``$HOD_MOD_REPO`` overrides the default, which is auto-detected from this
+    file's location (``<repo>/hod_mod/paths.py``). Used to locate ``configs/``
+    and the in-repo ``data/`` tree regardless of the current working directory.
+    """
+    env = os.environ.get("HOD_MOD_REPO")
+    if env:
+        return Path(env).expanduser()
+    return Path(__file__).resolve().parent.parent
+
+
 def results_root() -> Path:
     """Return the writable root for generated results (never inside the repo).
 
@@ -84,3 +97,28 @@ def data_path(*parts: str | os.PathLike, mkdir: bool = False) -> Path:
     if mkdir:
         p.parent.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def sum_stat_root() -> Path:
+    """Return the root of the ``sum_stat`` measurement products.
+
+    Defaults to the ``sum_stat`` package's ``data`` directory under the user's
+    ``software`` tree; set ``$HOD_MOD_SUMSTAT`` to override.
+    """
+    env = os.environ.get("HOD_MOD_SUMSTAT")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / "software" / "sum_stat" / "data"
+
+
+def cache_root() -> Path:
+    """Return a cache directory for compilation artifacts (e.g. JAX XLA caches).
+
+    ``$HOD_MOD_CACHE`` overrides the default OS user-cache dir.
+    """
+    env = os.environ.get("HOD_MOD_CACHE")
+    if env:
+        return Path(env).expanduser()
+    import platformdirs
+
+    return Path(platformdirs.user_cache_dir("hod_mod"))

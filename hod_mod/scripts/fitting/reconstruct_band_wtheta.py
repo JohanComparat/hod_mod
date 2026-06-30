@@ -21,12 +21,12 @@ import numpy as np
 from astropy.table import Table
 
 from hod_mod import paths
+from hod_mod.paths import data_root
 
-_GIT = os.path.expanduser("~/data/legacysurvey/lsdr10_clustering_data")
+_GIT = str(data_root() / "legacysurvey/lsdr10_clustering_data")
 _BACKUP = "/media/comparat/backup/data/data_s4_c030"
 _META = os.path.join(_GIT, "data", "metadata_wtheta_per_field")
-_ZENODO_XCORR = os.path.expanduser(
-    "~/data/zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR")
+_ZENODO_XCORR = str(data_root() / "zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR")
 # Output root for the reconstructed band w(theta): $HOD_MOD_DATA_DIR/xray_bands
 # if set, else the in-repo hod_mod/data/xray_bands (gitignored).  Keep this in
 # sync with the Phase-B band loader (fit_xray_joint_bands.load_band_data).
