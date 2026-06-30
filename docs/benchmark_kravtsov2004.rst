@@ -112,7 +112,7 @@ Best-fit parameters from the MAP:
    * - ``alpha``
      - 1.075
 
-.. figure:: ../results/benchmarks/kravtsov2004_cmass/benchmark_kravtsov2004_wp.png
+.. figure:: _images/benchmarks__kravtsov2004_cmass__benchmark_kravtsov2004_wp.png
    :width: 80%
    :alt: Kravtsov+2004 wp comparison
 
@@ -166,7 +166,7 @@ of 64 000 samples.  Posterior statistics derived from the full chain:
      - 1.81
      - 0.44
 
-.. figure:: ../results/benchmarks/kravtsov2004_cmass/benchmark_kravtsov2004_wp_mcmc.png
+.. figure:: _images/benchmarks__version0__kravtsov2004_cmass__benchmark_kravtsov2004_wp_mcmc.png
    :width: 80%
    :alt: Kravtsov+2004 wp with MCMC band
 
@@ -176,7 +176,7 @@ of 64 000 samples.  Posterior statistics derived from the full chain:
    (16th–84th percentile over 400 chain draws).
    Bottom: residuals data/MAP :math:`-1`; band shows MCMC spread.
 
-.. figure:: ../results/benchmarks/kravtsov2004_cmass/corner_kravtsov2004.png
+.. figure:: _images/benchmarks__version0__kravtsov2004_cmass__corner_kravtsov2004.png
    :width: 90%
    :alt: Kravtsov+2004 MCMC corner plot
 
@@ -199,7 +199,7 @@ Comparison with More+2015
 Both models fit the same BOSS CMASS data with the same WMAP7 cosmology.
 The figure below places them side by side.
 
-.. figure:: ../results/benchmarks/kravtsov2004_cmass/comparison_kravtsov2004_vs_more2015_wp.png
+.. figure:: _images/benchmarks__version0__kravtsov2004_cmass__comparison_kravtsov2004_vs_more2015_wp.png
    :width: 85%
    :alt: Model comparison Kravtsov+2004 vs More+2015
 

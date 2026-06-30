@@ -10,17 +10,17 @@ Fitting with the More+2015 HOD Model
 Overview
 --------
 
-:script:`hod_mod/scripts/fitting/run_fit_More15.py` is a command-line tool for fitting
-the :class:`~hod_mod.galaxies.clustering.FullHaloModelPrediction` forward model to
+``hod_mod/scripts/fitting/run_fit_More15.py`` (also ``hod-mod fit``) is a command-line tool for fitting
+the :class:`~hod_mod.observables.clustering.FullHaloModelPrediction` forward model to
 observational data using the `More et al. (2015) <https://arxiv.org/abs/1407.1856>`_
 Halo Occupation Distribution (HOD) model.
 
 The script is a thin wrapper around the validated fitting classes in
-:mod:`hod_mod.fitting.hod_wp`:
+:mod:`hod_mod.fitting`:
 
-- :class:`~hod_mod.fitting.hod_wp.WpFitter` — projected clustering :math:`w_p(r_p)` only
-- :class:`~hod_mod.fitting.hod_wp.DeltaSigmaFitter` — excess surface density :math:`\Delta\Sigma(R)` only
-- :class:`~hod_mod.fitting.hod_wp.JointFitter` — joint :math:`w_p + \Delta\Sigma + n_\mathrm{gal}`
+- :class:`~hod_mod.fitting.WpFitter` — projected clustering :math:`w_p(r_p)` only
+- :class:`~hod_mod.fitting.DeltaSigmaFitter` — excess surface density :math:`\Delta\Sigma(R)` only
+- :class:`~hod_mod.fitting.JointFitter` — joint :math:`w_p + \Delta\Sigma + n_\mathrm{gal}`
 
 The probe mode is detected automatically from the YAML configuration (see `Probe Modes`_).
 
@@ -298,13 +298,13 @@ The fitter class is selected automatically based on which data sections appear i
      - Fitter class
      - Likelihood
    * - ``data:`` only
-     - :class:`~hod_mod.fitting.hod_wp.WpFitter`
+     - :class:`~hod_mod.fitting.WpFitter`
      - :math:`\chi^2_{w_p}`
    * - ``ds:`` only (no ``data:``)
-     - :class:`~hod_mod.fitting.hod_wp.DeltaSigmaFitter`
+     - :class:`~hod_mod.fitting.DeltaSigmaFitter`
      - :math:`\chi^2_{\Delta\Sigma}`
    * - ``data:`` + ``joint:``
-     - :class:`~hod_mod.fitting.hod_wp.JointFitter`
+     - :class:`~hod_mod.fitting.JointFitter`
      - :math:`\chi^2_{w_p} + \chi^2_{\Delta\Sigma} + \chi^2_{n_\mathrm{gal}}`
 
 Covariance Options
@@ -321,7 +321,7 @@ off-diagonal correlations are negligible.
 Full covariance (HDF5/FITS jackknife)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When the data file is an HDF5/FITS jackknife catalogue, :func:`~hod_mod.fitting.hod_wp.load_config`
+When the data file is an HDF5/FITS jackknife catalogue, :func:`~hod_mod.fitting.load_config`
 builds the full jackknife covariance matrix and applies the
 `Hartlap et al. (2007) <https://arxiv.org/abs/astro-ph/0608064>`_ correction:
 

@@ -39,7 +39,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-from hod_mod.fitting.hod_wp import load_config, WpFitter
+from hod_mod.fitting import load_config, WpFitter
 
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))

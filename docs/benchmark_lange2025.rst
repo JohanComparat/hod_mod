@@ -68,7 +68,7 @@ Observables
 HOD model: ``Lange25HODModel``
 -------------------------------
 
-hod_mod implements the Lange+2025 HOD as :class:`~hod_mod.galaxies.hod.Lange25HODModel`:
+hod_mod implements the Lange+2025 HOD as :class:`~hod_mod.connection.hod.Lange25HODModel`:
 
 - **Base occupation**: Zheng+2007 centrals + Kravtsov+2004 satellites
 - **f_Gamma** ∈ [0.5, 1.0]: central galaxy completeness
@@ -201,7 +201,7 @@ wp-only — BGS2
      - 1.218
      - —
 
-.. figure:: ../results/benchmarks/lange2025/bgs2_bwpd_wp/benchmark_lange2025_bgs2_bwpd_wp_wp.png
+.. figure:: _images/benchmarks__lange2025__bgs2_bwpd_wp__benchmark_lange2025_bgs2_bwpd_wp_wp.png
    :width: 80%
    :alt: BGS2 bwpd wp MAP fit
 
@@ -212,7 +212,7 @@ ESD-only — BGS2 × HSC-Y3
 
 :math:`\chi^2 = 4.24`; ndof = −3 — **FAIL** (underdetermined)
 
-.. figure:: ../results/benchmarks/lange2025/bgs2_bwpd_esd/benchmark_lange2025_bgs2_bwpd_esd_ds.png
+.. figure:: _images/benchmarks__lange2025__bgs2_bwpd_esd__benchmark_lange2025_bgs2_bwpd_esd_ds.png
    :width: 80%
    :alt: BGS2 bwpd ESD MAP fit
 
@@ -246,13 +246,13 @@ Joint wp+ESD — BGS2 × HSC-Y3
      - 0.849
      - —
 
-.. figure:: ../results/benchmarks/lange2025/bgs2_bwpd_hsc/benchmark_lange2025_bgs2_bwpd_hsc_wp.png
+.. figure:: _images/benchmarks__lange2025__bgs2_bwpd_hsc__benchmark_lange2025_bgs2_bwpd_hsc_wp.png
    :width: 80%
    :alt: BGS2 bwpd joint wp MAP fit
 
    MAP :math:`w_p(r_p)` vs BGS2 data.
 
-.. figure:: ../results/benchmarks/lange2025/bgs2_bwpd_hsc/benchmark_lange2025_bgs2_bwpd_hsc_ds.png
+.. figure:: _images/benchmarks__lange2025__bgs2_bwpd_hsc__benchmark_lange2025_bgs2_bwpd_hsc_ds.png
    :width: 80%
    :alt: BGS2 bwpd joint ESD MAP fit
 
@@ -283,7 +283,7 @@ wp-only — BGS3
      - 13.607
      - —
 
-.. figure:: ../results/benchmarks/lange2025/bgs3_bwpd_wp/benchmark_lange2025_bgs3_bwpd_wp_wp.png
+.. figure:: _images/benchmarks__lange2025__bgs3_bwpd_wp__benchmark_lange2025_bgs3_bwpd_wp_wp.png
    :width: 80%
    :alt: BGS3 bwpd wp MAP fit
 
@@ -294,7 +294,7 @@ ESD-only — BGS3 × HSC-Y3
 
 :math:`\chi^2 = 1.96`; ndof = −3 — **FAIL** (underdetermined)
 
-.. figure:: ../results/benchmarks/lange2025/bgs3_bwpd_esd/benchmark_lange2025_bgs3_bwpd_esd_ds.png
+.. figure:: _images/benchmarks__lange2025__bgs3_bwpd_esd__benchmark_lange2025_bgs3_bwpd_esd_ds.png
    :width: 80%
    :alt: BGS3 bwpd ESD MAP fit
 
@@ -328,13 +328,13 @@ Joint wp+ESD — BGS3 × HSC-Y3
      - 0.612
      - —
 
-.. figure:: ../results/benchmarks/lange2025/bgs3_bwpd_hsc/benchmark_lange2025_bgs3_bwpd_hsc_wp.png
+.. figure:: _images/benchmarks__lange2025__bgs3_bwpd_hsc__benchmark_lange2025_bgs3_bwpd_hsc_wp.png
    :width: 80%
    :alt: BGS3 bwpd joint wp MAP fit
 
    MAP :math:`w_p(r_p)` vs BGS3 data.
 
-.. figure:: ../results/benchmarks/lange2025/bgs3_bwpd_hsc/benchmark_lange2025_bgs3_bwpd_hsc_ds.png
+.. figure:: _images/benchmarks__lange2025__bgs3_bwpd_hsc__benchmark_lange2025_bgs3_bwpd_hsc_ds.png
    :width: 80%
    :alt: BGS3 bwpd joint ESD MAP fit
 
@@ -365,7 +365,7 @@ wp-only — LRG1
      - 14.264
      - —
 
-.. figure:: ../results/benchmarks/lange2025/lrg1_bwpd_wp/benchmark_lange2025_lrg1_bwpd_wp_wp.png
+.. figure:: _images/benchmarks__lange2025__lrg1_bwpd_wp__benchmark_lange2025_lrg1_bwpd_wp_wp.png
    :width: 80%
    :alt: LRG1 bwpd wp MAP fit
 
@@ -376,7 +376,7 @@ ESD-only — LRG1 × HSC-Y3
 
 :math:`\chi^2 = 7.20`; ndof = −3 — **FAIL** (underdetermined)
 
-.. figure:: ../results/benchmarks/lange2025/lrg1_bwpd_esd/benchmark_lange2025_lrg1_bwpd_esd_ds.png
+.. figure:: _images/benchmarks__lange2025__lrg1_bwpd_esd__benchmark_lange2025_lrg1_bwpd_esd_ds.png
    :width: 80%
    :alt: LRG1 bwpd ESD MAP fit
 
@@ -410,13 +410,13 @@ Joint wp+ESD — LRG1 × HSC-Y3
      - 0.550
      - —
 
-.. figure:: ../results/benchmarks/lange2025/lrg1_bwpd_hsc/benchmark_lange2025_lrg1_bwpd_hsc_wp.png
+.. figure:: _images/benchmarks__lange2025__lrg1_bwpd_hsc__benchmark_lange2025_lrg1_bwpd_hsc_wp.png
    :width: 80%
    :alt: LRG1 bwpd joint wp MAP fit
 
    MAP :math:`w_p(r_p)` vs LRG1 data.
 
-.. figure:: ../results/benchmarks/lange2025/lrg1_bwpd_hsc/benchmark_lange2025_lrg1_bwpd_hsc_ds.png
+.. figure:: _images/benchmarks__lange2025__lrg1_bwpd_hsc__benchmark_lange2025_lrg1_bwpd_hsc_ds.png
    :width: 80%
    :alt: LRG1 bwpd joint ESD MAP fit
 
@@ -447,7 +447,7 @@ wp-only — LRG2
      - 14.187
      - —
 
-.. figure:: ../results/benchmarks/lange2025/lrg2_bwpd_wp/benchmark_lange2025_lrg2_bwpd_wp_wp.png
+.. figure:: _images/benchmarks__lange2025__lrg2_bwpd_wp__benchmark_lange2025_lrg2_bwpd_wp_wp.png
    :width: 80%
    :alt: LRG2 bwpd wp MAP fit
 
@@ -458,7 +458,7 @@ ESD-only — LRG2 × HSC-Y3
 
 :math:`\chi^2 = 1.84`; ndof = −3 — **FAIL** (underdetermined)
 
-.. figure:: ../results/benchmarks/lange2025/lrg2_bwpd_esd/benchmark_lange2025_lrg2_bwpd_esd_ds.png
+.. figure:: _images/benchmarks__lange2025__lrg2_bwpd_esd__benchmark_lange2025_lrg2_bwpd_esd_ds.png
    :width: 80%
    :alt: LRG2 bwpd ESD MAP fit
 
@@ -492,13 +492,13 @@ Joint wp+ESD — LRG2 × HSC-Y3
      - 0.541
      - —
 
-.. figure:: ../results/benchmarks/lange2025/lrg2_bwpd_hsc/benchmark_lange2025_lrg2_bwpd_hsc_wp.png
+.. figure:: _images/benchmarks__lange2025__lrg2_bwpd_hsc__benchmark_lange2025_lrg2_bwpd_hsc_wp.png
    :width: 80%
    :alt: LRG2 bwpd joint wp MAP fit
 
    MAP :math:`w_p(r_p)` vs LRG2 data.
 
-.. figure:: ../results/benchmarks/lange2025/lrg2_bwpd_hsc/benchmark_lange2025_lrg2_bwpd_hsc_ds.png
+.. figure:: _images/benchmarks__lange2025__lrg2_bwpd_hsc__benchmark_lange2025_lrg2_bwpd_hsc_ds.png
    :width: 80%
    :alt: LRG2 bwpd joint ESD MAP fit
 

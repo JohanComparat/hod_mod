@@ -145,11 +145,11 @@ def _from_carr(c, n):
 def setup():
     """Build both model stacks once per module (expensive CAMB call)."""
     pytest.importorskip("camb")
-    from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-    from hod_mod.cosmology.halo_mass_function import make_hmf
-    from hod_mod.cosmology.halo_profiles import HaloProfile
-    from hod_mod.galaxies.hod import AUMHODModel
-    from hod_mod.galaxies.clustering import FullHaloModelPrediction
+    from hod_mod.core.power_spectrum import LinearPowerSpectrum
+    from hod_mod.core.halo_mass_function import make_hmf
+    from hod_mod.core.halo_profiles import HaloProfile
+    from hod_mod.connection.hod import AUMHODModel
+    from hod_mod.observables.clustering import FullHaloModelPrediction
 
     sigma8 = _compute_sigma8(_THETA_COSMO)
 
@@ -179,7 +179,7 @@ class TestOccupation:
 
     def test_ncen_agrees(self, setup):
         """N_cen agrees to < 0.1% — identical erfc formula."""
-        from hod_mod.galaxies.hod import n_cen
+        from hod_mod.connection.hod import n_cen
         nc_gga = np.asarray(n_cen(jnp.asarray(self._LOG10M),
                                    _HOD_PARAMS["log10mmin"], _HOD_PARAMS["sigma_logm"]))
         nc_aum = np.array([setup["aum"].ncen(lm) for lm in self._LOG10M])
@@ -190,7 +190,7 @@ class TestOccupation:
 
     def test_nsat_agrees(self, setup):
         """N_sat agrees to < 2% — AUMHODModel is exact TINK=0 replica."""
-        from hod_mod.galaxies.hod import n_sat_aum
+        from hod_mod.connection.hod import n_sat_aum
         ns_gga = np.asarray(n_sat_aum(jnp.asarray(self._LOG10M),
                                        _HOD_PARAMS["log10mmin"], _HOD_PARAMS["sigma_logm"],
                                        _HOD_PARAMS["log10m0"], _HOD_PARAMS["log10m1"],
@@ -205,14 +205,14 @@ class TestOccupation:
 
         Strict > 0 fails at saturation (float32 gives nc=1 exactly, diff=0).
         """
-        from hod_mod.galaxies.hod import n_cen
+        from hod_mod.connection.hod import n_cen
         nc = np.asarray(n_cen(jnp.asarray(self._LOG10M),
                                _HOD_PARAMS["log10mmin"], _HOD_PARAMS["sigma_logm"]))
         assert np.all(np.diff(nc) >= 0)
 
     def test_nsat_positive_and_increasing(self, setup):
         """N_sat > 0 and increasing for M > Mmin in both codes."""
-        from hod_mod.galaxies.hod import n_sat_aum
+        from hod_mod.connection.hod import n_sat_aum
         log10m_hi = np.linspace(13.5, 15.5, 20)
         ns = np.asarray(n_sat_aum(jnp.asarray(log10m_hi),
                                    _HOD_PARAMS["log10mmin"], _HOD_PARAMS["sigma_logm"],

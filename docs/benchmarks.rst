@@ -35,7 +35,7 @@ All five variants use the **MoreHODModel** on BOSS CMASS data (White+2014).
 The three mass-threshold variants (logM11_12, logM11p3_12, logM11p4_12) fit
 both :math:`w_p(r_p)` and :math:`\Delta\Sigma(R)` jointly.
 All fits include the beyond-linear halo bias correction
-(:class:`~hod_mod.cosmology.beyond_linear_bias.BeyondLinearBiasMead21`).
+(:class:`~hod_mod.core.beyond_linear_bias.BeyondLinearBiasMead21`).
 
 .. list-table::
    :header-rows: 1

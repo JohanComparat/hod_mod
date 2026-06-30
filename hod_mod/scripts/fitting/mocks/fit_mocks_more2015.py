@@ -51,8 +51,9 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 import numpy as np
 
-from hod_mod.fitting.hod_wp import WpFitConfig, WpFitter
+from hod_mod.fitting import WpFitConfig, WpFitter
 from hod_mod.fitting.planck_prior import PLANCK18_MEANS, PLANCK18_SIGMAS, PLANCK18_3SIGMA
+from hod_mod.paths import results_root
 
 SUM_STAT_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..",
@@ -171,7 +172,7 @@ def main():
     parser.add_argument("--n-burnin",  type=int, default=500)
     parser.add_argument("--plot", action="store_true")
     parser.add_argument("--output-dir",
-                        default=os.path.join(repo_root, "results", "mocks"))
+                        default=os.path.join(results_root(), "mocks"))
     args = parser.parse_args()
 
     info   = MOCK_BINS[args.mstar]

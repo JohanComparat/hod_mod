@@ -23,12 +23,13 @@ import numpy as np
 import scipy.optimize as opt
 import jax.numpy as jnp
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.cosmology.nonlinear import HALOFITSpectrum, CachedPkNonlinear
-from hod_mod.galaxies.hod import MoreHODModel, Leauthaud12HODModel
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.paths import results_root
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.core.nonlinear import HALOFITSpectrum, CachedPkNonlinear
+from hod_mod.connection.hod import MoreHODModel, Leauthaud12HODModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
 from hod_mod.data_io.sum_stat_reader import SumStatReader
 
 # ---------------------------------------------------------------------------
@@ -195,7 +196,7 @@ def main():
     parser.add_argument("--plot", action="store_true")
     parser.add_argument("--save", type=str, default=None)
     parser.add_argument("--output-json", type=str,
-                        default="results/bgs_m10_nonlinear_models.json")
+                        default=str(results_root() / "bgs_m10_nonlinear_models.json"))
     args = parser.parse_args()
 
     print(f"Loading BGS M10 wp data from:\n  {_DATA_FILE}")

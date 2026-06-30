@@ -35,22 +35,23 @@ from scipy.special import j0
 
 from astropy.io import fits
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.cosmology import GasDensityDPM, ApecCoolingTable
-from hod_mod.cosmology.gas_profiles import PressureProfileDPM
-from hod_mod.galaxies.hod import ZuMandelbaum15HODModel
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
-from hod_mod.galaxies.cross_spectra import HaloModelCrossSpectra
-from hod_mod.galaxies.agn_ham import HamAGNModel
-from hod_mod.cosmology.distances import comoving_distance
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.gas import GasDensityDPM, ApecCoolingTable
+from hod_mod.gas import PressureProfileDPM
+from hod_mod.connection.hod import ZuMandelbaum15HODModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
+from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+from hod_mod.agn.ham import HamAGNModel
+from hod_mod.core.distances import comoving_distance
+from hod_mod.paths import results_root
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 _ZENODO_DIR  = Path.home() / "data/zenodo/LSDR10_GALxEVT/Measurements_Xcorr_Stacks/XCORR"
-_RESULTS_DIR = Path(__file__).parents[2] / "results" / "fits" / "comparat2025"
+_RESULTS_DIR = results_root() / "fits" / "comparat2025"
 
 # ---------------------------------------------------------------------------
 # Cosmology (Planck 2018)
@@ -109,7 +110,7 @@ def _make_density_variant(model: int = 2, ne_03: float | None = None,
 
 def _make_pressure_variant(model: int = 2, P_03: float | None = None,
                            beta: float | None = None) -> PressureProfileDPM:
-    from hod_mod.cosmology.gas_profiles import _gnfw_f_params
+    from hod_mod.gas import _gnfw_f_params
     pp = PressureProfileDPM(model=model)
     if P_03 is not None:
         pp._P_03 = float(P_03)

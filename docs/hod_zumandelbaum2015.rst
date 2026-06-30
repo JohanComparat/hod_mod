@@ -7,7 +7,7 @@ Zu & Mandelbaum 2015 iHOD Model — SDSS, X-ray & BGS
    :widths: 25 75
 
    * - **Model class**
-     - :class:`~hod_mod.galaxies.hod.ZuMandelbaum15HODModel`
+     - :class:`~hod_mod.connection.hod.ZuMandelbaum15HODModel`
    * - **Paper**
      - Zu & Mandelbaum 2015, MNRAS 454, 1161
        (`arXiv:1505.02781 <https://arxiv.org/abs/1505.02781>`_)
@@ -25,8 +25,8 @@ Zu & Mandelbaum 2015 iHOD Model — SDSS, X-ray & BGS
      - BGS LS10 × eROSITA (0.5–2 keV),
        Comparat et al. 2025 (`arXiv:2503.19796 <https://arxiv.org/abs/2503.19796>`_)
    * - **Code**
-     - :mod:`hod_mod.galaxies.hod` (lines 1431–1735),
-       :mod:`hod_mod.galaxies.clustering`,
+     - :mod:`hod_mod.connection.hod` (lines 1431–1735),
+       :mod:`hod_mod.observables.clustering`,
        :mod:`hod_mod.scripts.fitting.fit_comparat2025`
 
 ----
@@ -40,7 +40,7 @@ Both HOD models share the same backbone; see also :ref:`hod_more2015`.
 
 Six base parameters :math:`\boldsymbol{\theta} = (\Omega_m,\,\Omega_b,\,h,\,n_s,\,\ln 10^{10}A_s,\,\sigma_8)`
 define the linear matter power spectrum :math:`P_\mathrm{lin}(k, z)` via
-`CAMB <https://camb.readthedocs.io>`_ (:class:`~hod_mod.cosmology.LinearPowerSpectrum`).
+`CAMB <https://camb.readthedocs.io>`_ (:class:`~hod_mod.core.LinearPowerSpectrum`).
 
 Benchmark cosmology (ZM15-specific):
 :math:`\Omega_m = 0.260,\ h = 0.720,\ \sigma_8 = 0.770,\ n_s = 0.960,\ \Omega_b = 0.044`.
@@ -52,7 +52,7 @@ BGS/LS10 X-ray fits use Planck 2018:
 
 Tinker et al. 2008 (`arXiv:0803.2706 <https://arxiv.org/abs/0803.2706>`_),
 :math:`\Delta = 200\rho_m`, via
-:func:`~hod_mod.cosmology.halo_mass_function.make_hmf`
+:func:`~hod_mod.core.halo_mass_function.make_hmf`
 with ``backend="tinker08"`` (default).
 
 Alternative emulator backends — ``"csst"`` (Chen+2025,
@@ -65,8 +65,8 @@ same interface; see :doc:`cosmology` for details.
 
    The BGS×eROSITA fit (:mod:`hod_mod.scripts.fitting.fit_comparat2025`) uses
    the **CSST emulator** HMF by default, and the *same* HMF instance is reused by
-   the AGN models (``HamAGNModel``/``HODAgnModel`` accept an ``hmf=`` argument)
-   so the galaxy clustering and the AGN abundance-match share one consistent
+   the AGN model (``HamAGNModel`` accepts an ``hmf=`` argument)
+   so the galaxy clustering and the AGN model share one consistent
    mass function rather than each defaulting to Tinker08.
 
 .. rubric:: Linear halo bias
@@ -74,9 +74,9 @@ same interface; see :doc:`cosmology` for details.
 Tinker et al. 2010 (`arXiv:1001.3162 <https://arxiv.org/abs/1001.3162>`_), with
 the **beyond-linear halo bias** correction of Mead & Verde 2021
 (`arXiv:2011.08858 <https://arxiv.org/abs/2011.08858>`_;
-:class:`~hod_mod.cosmology.beyond_linear_bias.BeyondLinearBiasMead21`) applied
+:class:`~hod_mod.core.beyond_linear_bias.BeyondLinearBiasMead21`) applied
 to the 2-halo galaxy terms.  The BGS×eROSITA fit passes this ``bnl_model`` into
-:class:`~hod_mod.galaxies.clustering.FullHaloModelPrediction` so the non-linear
+:class:`~hod_mod.observables.clustering.FullHaloModelPrediction` so the non-linear
 scale-dependent bias is used consistently in :math:`w_p` and :math:`w_\theta`.
 Effective bias:
 
@@ -110,10 +110,10 @@ This is equivalent to the conventional HOD (cHOD) at the 1–2% level for
 :math:`w_p` and :math:`\Delta\Sigma` (verified in
 ``results/benchmarks/zumandelbaum2015_sdss/comparison_ihod_chod_wp_ds.png``).
 
-Implementation: :class:`~hod_mod.galaxies.hod.ZuMandelbaum15HODModel`
-whose :meth:`~hod_mod.galaxies.hod.ZuMandelbaum15HODModel.nc_ns` method
+Implementation: :class:`~hod_mod.connection.hod.ZuMandelbaum15HODModel`
+whose :meth:`~hod_mod.connection.hod.ZuMandelbaum15HODModel.nc_ns` method
 returns :math:`(N_c,\,N_s)` arrays consumed by
-:class:`~hod_mod.galaxies.clustering.FullHaloModelPrediction`.
+:class:`~hod_mod.observables.clustering.FullHaloModelPrediction`.
 
 .. admonition:: Pedagogical figures and tutorial notebook
    :class: tip
@@ -147,9 +147,9 @@ The SHMR is written as **halo mass as a function of stellar mass**
 where :math:`M_1 = 10^{\mathtt{lg\_m1h}}` and
 :math:`M_{*,0} = 10^{\mathtt{lg\_m0star}}` are the pivot halo and stellar
 masses.
-Implemented in :func:`~hod_mod.galaxies.hod._mh_from_mstar_zu15`.
+Implemented in :func:`~hod_mod.connection.hod._mh_from_mstar_zu15`.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq01_shmr_forward.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq01_shmr_forward.png
    :width: 90%
    :align: center
 
@@ -169,12 +169,12 @@ bisection over :math:`\log_{10}(M_*/M_\odot) \in [4, 13]`:
 
    M_*^\mathrm{c}(M_h) = \mathrm{SHMR}^{-1}(M_h)
 
-implemented in :func:`~hod_mod.galaxies.hod._mstar_from_mh_zu15`.
+implemented in :func:`~hod_mod.connection.hod._mstar_from_mh_zu15`.
 The 60-iteration bisection converges to :math:`\lesssim 10^{-17}` dex
 precision; in practice the output is accurate to machine precision for any
 :math:`M_h \in [10^{10},\,10^{15.5}]\,M_\odot/h`.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq02_shmr_inverse.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq02_shmr_inverse.png
    :width: 90%
    :align: center
 
@@ -198,9 +198,9 @@ The log-normal scatter in stellar mass at fixed halo mass varies with
 
 :math:`\eta < 0` encodes decreasing scatter toward cluster-scale halos
 (ZM15 best fit :math:`\eta = -0.04`).
-Implemented in :func:`~hod_mod.galaxies.hod.sigma_lnmstar_zu15`.
+Implemented in :func:`~hod_mod.connection.hod.sigma_lnmstar_zu15`.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq03_scatter.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq03_scatter.png
    :width: 90%
    :align: center
 
@@ -236,7 +236,7 @@ satisfies :math:`M_* > M_{*,\mathrm{th}}` is:
 :math:`M_h = M_\mathrm{min} \equiv \mathrm{SHMR}^{-1}(M_{*,\mathrm{th}})`,
 the argument of erfc vanishes and
 :math:`\langle N_\mathrm{cen}\rangle = f_c/2`.
-Implemented in :func:`~hod_mod.galaxies.hod.n_cen_thresh_zu15`.
+Implemented in :func:`~hod_mod.connection.hod.n_cen_thresh_zu15`.
 
 .. note::
 
@@ -248,7 +248,7 @@ Implemented in :func:`~hod_mod.galaxies.hod.n_cen_thresh_zu15`.
    useful for flux-limited samples.  The ZM15 best-fit value (0.86) is
    adopted as the default.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq04_central.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq04_central.png
    :width: 90%
    :align: center
 
@@ -279,10 +279,10 @@ Then the satellite mass scale and cut-off mass follow:
      \left(\frac{M_\mathrm{min}}{10^{12}\,h^{-1}M_\odot}\right)^{\!\beta_\mathrm{cut}}
      \times 10^{12}\,h^{-1}M_\odot
 
-computed inside :func:`~hod_mod.galaxies.hod.n_sat_thresh_zu15` before the
+computed inside :func:`~hod_mod.connection.hod.n_sat_thresh_zu15` before the
 power-law occuption is evaluated.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq05_satellite_scales.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq05_satellite_scales.png
    :width: 90%
    :align: center
 
@@ -303,9 +303,9 @@ power-law occuption is evaluated.
 The satellite occupation inherits :math:`\langle N_\mathrm{cen}\rangle` as
 a prefactor, so it vanishes for halos that are too light to host a central
 galaxy above the threshold.
-Implemented in :func:`~hod_mod.galaxies.hod.n_sat_thresh_zu15`.
+Implemented in :func:`~hod_mod.connection.hod.n_sat_thresh_zu15`.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq06_satellite.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq06_satellite.png
    :width: 90%
    :align: center
 
@@ -329,9 +329,9 @@ is computed by subtraction of two threshold HODs at the bin edges
    \langle N(M_h \,|\, M_{*,\mathrm{th}} = M_{*,\mathrm{hi}})\rangle
 
 This is activated by passing ``log10m_star_max`` in ``hod_params`` to
-:meth:`~hod_mod.galaxies.hod.ZuMandelbaum15HODModel.nc_ns`.
+:meth:`~hod_mod.connection.hod.ZuMandelbaum15HODModel.nc_ns`.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq07_bin_hod.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq07_bin_hod.png
    :width: 90%
    :align: center
 
@@ -342,7 +342,7 @@ This is activated by passing ``log10m_star_max`` in ``hod_params`` to
 
 Once :math:`(N_c(M_h),\,N_s(M_h))` are in hand, all clustering
 predictions follow the standard halo-model framework — shared with the
-More+2015 path in :class:`~hod_mod.galaxies.clustering.FullHaloModelPrediction`:
+More+2015 path in :class:`~hod_mod.observables.clustering.FullHaloModelPrediction`:
 
 .. math::
 
@@ -359,12 +359,12 @@ The difference from a pure cHOD model is that
 For the BGS samples analysed here, the iHOD and cHOD predictions agree
 to ≲1–2% (see comparison figure in the SDSS benchmark section below).
 
-:meth:`~hod_mod.galaxies.clustering.FullHaloModelPrediction.wp`,
-:meth:`~hod_mod.galaxies.clustering.FullHaloModelPrediction.delta_sigma`,
-and :meth:`~hod_mod.galaxies.clustering.FullHaloModelPrediction.n_gal`
+:meth:`~hod_mod.observables.clustering.FullHaloModelPrediction.wp`,
+:meth:`~hod_mod.observables.clustering.FullHaloModelPrediction.delta_sigma`,
+and :meth:`~hod_mod.observables.clustering.FullHaloModelPrediction.n_gal`
 all follow this path.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq08_effective_bias.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq08_effective_bias.png
    :width: 90%
    :align: center
 
@@ -403,7 +403,7 @@ The power spectra and projected statistics follow the same formalism as
    \qquad
    P_{gm}^\mathrm{2h}(k) = b_\mathrm{eff}\,P_\mathrm{lin}(k)
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq09_power_spectra.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq09_power_spectra.png
    :width: 90%
    :align: center
 
@@ -421,7 +421,7 @@ The power spectra and projected statistics follow the same formalism as
    w_p(r_p) = 2\int_0^{\pi_\mathrm{max}}
    \xi_{gg}\!\left(\sqrt{r_p^2 + \pi^2}\right)\mathrm{d}\pi
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq10_wp.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq10_wp.png
    :width: 90%
    :align: center
 
@@ -440,9 +440,9 @@ The power spectra and projected statistics follow the same formalism as
    \quad [\mathrm{M}_\odot\,h\,\mathrm{pc}^{-2}]
 
 :math:`\xi(r)` is computed via the Ogata (2005) :math:`j_0` Hankel transform
-(DOI:`10.1145/1141885.1141895 <https://doi.org/10.1145/1141885.1141895>`_).
+(DOI:`10.2977/prims/1145474602 <https://doi.org/10.2977/prims/1145474602>`_).
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq11_delta_sigma.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq11_delta_sigma.png
    :width: 90%
    :align: center
 
@@ -477,7 +477,7 @@ Eqs. 21–22 above) are integrated against the halo mass function:
    \quad [h^3\,\mathrm{Mpc}^{-3}]
 
 implemented in
-:meth:`~hod_mod.galaxies.clustering.FullHaloModelPrediction.n_gal`
+:meth:`~hod_mod.observables.clustering.FullHaloModelPrediction.n_gal`
 (its ``hod_params["log10m_star_thresh"]`` entry *is*
 :math:`\log_{10}M_{*,\mathrm{th}}`, in :math:`\log_{10}(M_\odot\,h^{-1})`
 — see the parameter table below).
@@ -694,20 +694,20 @@ those parameters to within numerical precision.
      - :math:`8.98 \pm 1.18`
      - :math:`0.00\sigma`
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_sdss/benchmark_zumandelbaum2015_combined.png
+.. figure:: _images/benchmarks__zumandelbaum2015_sdss__benchmark_zumandelbaum2015_combined.png
    :width: 95%
    :alt: ZM15 combined wp and delta sigma
 
    MAP fit to SDSS DR7 :math:`\log_{10}(M_*/h^{-2}M_\odot) > 10.2`.
    *Top*: :math:`w_p(r_p)`.  *Bottom*: :math:`\Delta\Sigma(R)`.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_sdss/benchmark_zumandelbaum2015_hod.png
+.. figure:: _images/benchmarks__zumandelbaum2015_sdss__benchmark_zumandelbaum2015_hod.png
    :width: 70%
    :alt: ZM15 HOD occupation functions
 
    HOD occupation functions vs halo mass at the MAP parameters.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_sdss/comparison_ihod_chod_wp_ds.png
+.. figure:: _images/benchmarks__zumandelbaum2015_sdss__comparison_ihod_chod_wp_ds.png
    :width: 80%
    :alt: iHOD vs cHOD comparison
 
@@ -733,7 +733,7 @@ the ZM15 iHOD is extended with a gas density component and an AGN component.
 
 Reference: Oppenheimer et al. 2025
 (`arXiv:2505.14782 <https://arxiv.org/abs/2505.14782>`_),
-implemented in :class:`~hod_mod.cosmology.gas_profiles.GasDensityDPM`.
+implemented in :class:`~hod_mod.gas.GasDensityDPM`.
 
 The electron density profile uses a generalised NFW shape
 (arXiv:2505.14782 Eq. 1):
@@ -747,10 +747,10 @@ The electron density profile uses a generalised NFW shape
 where :math:`x = r/R_s` and :math:`R_s = R_{200}/c(M,z)`.
 The concentration :math:`c(M,z)` follows Diemer & Joyce 2019
 (`arXiv:1809.07326 <https://arxiv.org/abs/1809.07326>`_),
-via :func:`~hod_mod.cosmology.concentration.c_diemer15`,
+via :func:`~hod_mod.core.concentration.c_diemer15`,
 the same relation used for the NFW galaxy profile.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq12_gnfw_shape.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq12_gnfw_shape.png
    :width: 80%
    :align: center
 
@@ -810,7 +810,7 @@ The temperature at radius :math:`r` is derived from the ideal gas law:
 
    T(r, M, z) = \frac{P(r, M, z)}{n_e(r, M, z)} \quad [\mathrm{keV}]
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq13_gas_profiles.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq13_gas_profiles.png
    :width: 75%
    :align: center
 
@@ -830,7 +830,7 @@ the band-integrated APEC cooling function (AtomDB, via `soxs
 <https://hea-www.cfa.harvard.edu/soxs/>`_ + pyXSIM), precomputed over a
 log-spaced :math:`(T, Z)` grid at initialisation and evaluated by 2D
 log-log interpolation at runtime
-(:class:`~hod_mod.cosmology.gas_profiles.ApecCoolingTable`).
+(:class:`~hod_mod.gas.ApecCoolingTable`).
 The factor 0.83 converts from the :math:`n_e n_H` APEC convention to
 :math:`n_e^2` (:math:`n_H \approx 0.83\,n_e` for solar-abundance plasma).
 
@@ -859,7 +859,7 @@ Reference values (0.5–2 keV, AtomDB 3.1.3, ``abund_table="angr"``):
 An overall amplitude :math:`A_\mathrm{gas}` is a free parameter fitted
 jointly with the HOD parameters.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq14_cooling.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq14_cooling.png
    :width: 95%
    :align: center
 
@@ -873,7 +873,7 @@ References: Aird et al. 2015, ApJ 815, 66
 (`arXiv:1503.01120 <https://arxiv.org/abs/1503.01120>`_) — LADE hard XLF;
 Comparat et al. 2019, A&A 622, A12
 (`arXiv:1901.10866 <https://arxiv.org/abs/1901.10866>`_) — obscuration model;
-implemented in :class:`~hod_mod.galaxies.agn_ham.HamAGNModel`.
+implemented in :class:`~hod_mod.agn.ham.HamAGNModel`.
 
 The HAM pipeline assigns a hard X-ray luminosity to each halo by
 abundance-matching the cumulative halo number density (from the iHOD SHMR)
@@ -900,7 +900,7 @@ with luminosity-dependent density evolution (LADE):
 and slopes :math:`\gamma_1 = 0.48`, :math:`\gamma_2 = 2.27`
 (Comparat+2019 eqs. 2–3 fit to Aird+2015).
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq16_xlf.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq16_xlf.png
    :width: 70%
    :align: center
 
@@ -989,7 +989,7 @@ Comparat+2019 eq. 11):
    f_{\mathrm{type\text{-}2}} = f_\mathrm{obsc} - f_{CT}, \qquad
    f_{\mathrm{CT}} \text{ as above}
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq17_obscuration.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq17_obscuration.png
    :width: 95%
    :align: center
 
@@ -1036,119 +1036,17 @@ AGN are unresolved point sources, so their angular template is the PSF
    \left[1 + \left(\frac{\theta}{\theta_c}\right)^2\right]^{-\alpha_\mathrm{King}},
    \quad \alpha_\mathrm{King} = 1.5
 
-.. rubric:: HOD AGN model (HODAgnModel)
-
-References: More et al. 2015, ApJ 806, 2
-(`arXiv:1407.1856 <https://arxiv.org/abs/1407.1856>`_) — HOD form;
-Aird et al. 2015 — XLF; Lau et al. 2024
-(`arXiv:2410.22397 <https://arxiv.org/abs/2410.22397>`_) — X-ray power-spectrum
-formalism; implemented in :class:`~hod_mod.galaxies.agn_hod.HODAgnModel`.
-
-This is an alternative, conceptually distinct AGN component.  Rather than
-abundance-matching halo mass directly to :math:`L_X` (as
-:class:`~hod_mod.galaxies.agn_ham.HamAGNModel` does), it places AGN with an
-explicit HOD and then assigns luminosities by a flux/optically-selected
-abundance match.  Unlike the HAM model it provides its **own** AGN occupation
-:math:`N_\mathrm{cen}^\mathrm{AGN}(M)`, :math:`N_\mathrm{sat}^\mathrm{AGN}(M)`,
-which drives an occupation-weighted X-ray auto/cross power spectrum.
-
-**1. AGN HOD with a constant duty cycle.** A 5-parameter More+2015 occupation
-with a mass-independent duty cycle :math:`f_\mathrm{inc}` multiplying the whole
-occupation uniformly (:class:`~hod_mod.galaxies.hod.MoreConstFincHODModel`):
-
-.. math::
-
-   N_\mathrm{cen}^\mathrm{AGN}(M) &= f_\mathrm{inc}\,\tfrac{1}{2}\,
-   \mathrm{erfc}\!\left[\frac{\log_{10}M_\mathrm{min} - \log_{10}M}{\sigma_{\log M}}\right]\\
-   N_\mathrm{sat}^\mathrm{AGN}(M) &= N_\mathrm{cen}^\mathrm{AGN}(M)
-   \left(\frac{M - \kappa M_\mathrm{min}}{M_1}\right)^{\alpha}
-   \quad (M > \kappa M_\mathrm{min})
-
-with defaults :math:`\log_{10}M_\mathrm{min}=12.5`, :math:`\sigma_{\log M}=0.8`,
-:math:`\alpha=0.8`, :math:`\log_{10}M_1=14.0\,(=\log_{10}M_\mathrm{min}+1.5)`,
-:math:`\kappa=0.3`, :math:`f_\mathrm{inc}=0.1`.
-
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq18_agn_hod.png
-   :width: 70%
-   :align: center
-
-   AGN HOD occupation :math:`N_c^\mathrm{AGN}`, :math:`N_s^\mathrm{AGN}` and the
-   total, with the mass-independent duty cycle :math:`f_\mathrm{inc}` scaling the
-   whole occupation. Cosmology-independent.
-
-**2. Host stellar masses.** The Zu & Mandelbaum 2015 SHMR (above) maps each
-AGN-host halo mass to a stellar mass for centrals and satellites.
-
-**3. Modified abundance matching** (at the sample mean redshift):
-
-- From the Aird+2015 XLF, build the luminosity distribution down to
-  :math:`\log_{10}L_X = 39`.
-- Convert hard-band :math:`L_X` to observed soft (0.5–2 keV) luminosity via the
-  obscuration-weighted K-correction (shared with HamAGNModel), then to flux
-  :math:`F_X = L_X^\mathrm{soft}/(4\pi d_L^2)`.
-- Predict the r-band magnitude :math:`r = -7 - 2\log_{10}F_X` and keep
-  :math:`16 \le r \le 19.5`.
-- Rank-order match the selected :math:`L_X` distribution onto the
-  (:math:`f_\mathrm{inc}`-suppressed) AGN-host stellar-mass distribution.  The
-  matching is done on cumulative number **densities** (the volume cancels), so
-  it is deterministic — the noise-free limit of drawing a finite array.
-
-This yields a monotonic :math:`\log_{10}M_* \to \log_{10}L_X^{0.5-2,\mathrm{obs}}`
-mapping (``mean_agn_log10lx``) and the sample-averaged observed luminosity/flux
-(``mean_observed_lx`` / ``mean_observed_fx``).
-
-**4. Occupation-weighted X-ray power spectra** (Lau+2024 App. A).  In
-:meth:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra._pk_tables_gX` and
-``_pk_tables_XX`` the AGN luminosity is placed by the AGN occupation —
-central at the halo centre, satellites on the NFW profile — instead of the
-galaxy HOD point-source weighting used for HamAGNModel/XrayAGNModel.  The
-auto-power AGN term then carries the central–satellite and satellite–satellite
-pair structure, luminosity-weighted, plus the gas×AGN cross term.  This branch
-activates automatically when the supplied ``agn_model`` exposes ``nc_ns_agn``.
-
-.. admonition:: Duty cycle and the abundance match
-
-   The AGN-host number density scales with :math:`f_\mathrm{inc}`.  At
-   :math:`f_\mathrm{inc}=0.1` it (:math:`\sim 3\times10^{-4}\,(h/\mathrm{Mpc})^3`
-   for S1) is :math:`\sim 30\times` larger than the optically/flux-selected AGN
-   density (:math:`\sim 10^{-5}`), so most low-mass hosts match to the faint
-   selection edge (``_frac_clamped`` :math:`\approx 0.97`).  Lowering
-   :math:`f_\mathrm{inc}` brings the two abundances into agreement — for S1 the
-   faint-edge clamped fraction falls to :math:`\approx 0.66` at
-   :math:`f_\mathrm{inc}=0.01` and to :math:`0` near :math:`f_\mathrm{inc}\approx
-   0.003`, while the predicted mean observed :math:`\log_{10}L_X` rises from
-   :math:`42.5` to :math:`43.4`.  The default for the fits is therefore
-   :math:`f_\mathrm{inc}=0.01` (configurable); the clamped fraction is reported
-   as a diagnostic.
-
-.. rubric:: Use in the BGS×eROSITA fit (fit_comparat2025)
-
-When run with ``--agn-model hod`` (the default), the AGN term of the
-:math:`w_\theta` fit in :mod:`hod_mod.scripts.fitting.fit_comparat2025` is the
-Hankel transform of the **predicted** HODAgnModel cross-power
-:math:`C_\ell^{gX,\mathrm{agn}}` (PSF-convolved), not a free-shape King PSF.
-A per-sample ``HODAgnModel`` is built from the sample's :math:`z_\mathrm{mean}`,
-:math:`z_\mathrm{max}` and ``--agn-finc`` (default 0.01).  The free parameter
-:math:`\log_{10}A_\mathrm{AGN}` then acts as a **fudge factor** on this
-physically-predicted amplitude (the PSF normalisation in the cross-correlation),
-rather than absorbing the entire AGN flux scale.  The legacy free-amplitude King
-PSF behaviour remains available via ``--agn-model ham``.
-
-A demo driver is provided in
-:mod:`hod_mod.scripts.galaxies.run_agn_hod_cl`
-(``--sample S1`` / ``--sample S5``).
-
 .. rubric:: Prediction pipeline — from profiles to :math:`w_\theta(\theta)`
 
 The six steps below go from the DPM profile parameters to the observable
 angular cross-correlation.  All steps are implemented in
-:class:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra`.
+:class:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra`.
 
 **Step 1 — Emissivity profile Fourier transform** :math:`\tilde{X}(k|M,z)`
 
 The key quantity linking the 3D profile to the halo model is the spherical
 Fourier transform of the per-halo emissivity (implemented in
-:meth:`~hod_mod.cosmology.gas_profiles.GasDensityDPM.emissivity_full_uk`):
+:meth:`~hod_mod.gas.GasDensityDPM.emissivity_full_uk`):
 
 .. math::
 
@@ -1158,7 +1056,7 @@ Fourier transform of the per-halo emissivity (implemented in
 
 where :math:`j_0(x) = \sin(x)/x`.
 :math:`T(r) = P(r)/n_e(r)` [keV] from the ideal gas law (Step 1 of
-:meth:`~hod_mod.cosmology.gas_profiles.temperature_from_profiles`).
+:meth:`~hod_mod.gas.temperature_from_profiles`).
 The radial integral uses 200-point Gauss-Legendre quadrature up to
 :math:`r_\mathrm{max} = 3\,R_{200}`.
 
@@ -1166,7 +1064,7 @@ At :math:`k \to 0`, :math:`\tilde{X}(0|M,z)` equals the total
 halo emissivity :math:`L_X^\mathrm{gas}(M,z)/\Lambda_\mathrm{ref}` in
 volume units :math:`[\mathrm{Mpc}/h]^3\,\mathrm{cm}^{-6}`.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq15_emissivity.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq15_emissivity.png
    :width: 95%
    :align: center
 
@@ -1174,7 +1072,7 @@ volume units :math:`[\mathrm{Mpc}/h]^3\,\mathrm{cm}^{-6}`.
    for three halo masses. *Right*: the spherical Fourier transform
    :math:`\tilde X(k|M,z)` that links the 3D emissivity to the halo model.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq20_emissivity_sensitivity.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq20_emissivity_sensitivity.png
    :width: 75%
    :align: center
 
@@ -1188,7 +1086,7 @@ volume units :math:`[\mathrm{Mpc}/h]^3\,\mathrm{cm}^{-6}`.
 **Step 2 — 3D galaxy × X-ray power spectrum** :math:`P_{gX}(k,z)`
 
 The halo model splits :math:`P_{gX}` into 1-halo and 2-halo contributions
-(:meth:`~hod_mod.galaxies.cross_spectra.HaloModelCrossSpectra._pk_tables_gX`):
+(:meth:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra._pk_tables_gX`):
 
 *1-halo term* (galaxies and X-ray emission in the same halo):
 
@@ -1201,7 +1099,7 @@ The halo model splits :math:`P_{gX}` into 1-halo and 2-halo contributions
 
 where :math:`\tilde{u}(k|M)` is the NFW dark-matter profile Fourier transform,
 and :math:`N_c,\,N_s` are the central/satellite occupation from
-:class:`~hod_mod.galaxies.hod.ZuMandelbaum15HODModel`.
+:class:`~hod_mod.connection.hod.ZuMandelbaum15HODModel`.
 
 *2-halo term* (galaxies in one halo, X-ray emission from a different halo,
 correlated by large-scale structure):
@@ -1287,7 +1185,7 @@ where :math:`K_\nu` is the modified Bessel function and :math:`C` normalises
 :math:`\ell\,\theta_c \approx 1.08` so :math:`B_\ell \approx 0.5`: the PSF
 suppresses but does not eliminate signal at :math:`\theta = 8''`.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_equations/eq19_psf.png
+.. figure:: _images/benchmarks__zumandelbaum2015_equations__eq19_psf.png
    :width: 95%
    :align: center
 
@@ -1721,15 +1619,11 @@ free X-ray/gas/AGN parameters are selected with ``--free-params``:
    * - ``agn-models``
      - 4
      - :math:`\log_{10}A_\mathrm{gas},\ \beta_\mathrm{gas},\ \beta_P,\ \log_{10}A_\mathrm{AGN}`
-     - = ``all``; run under ``--agn-model hod|ham|xray`` to compare models
+     - = ``all``; the AGN is the free-amplitude King PSF (``--agn-model ham``)
    * - ``agn-lum``
      - 7
      - ``agn-models`` + :math:`\sigma_{L_X},\ \log_{10}A_\mathrm{kcorr},\ \log_{10}A_\mathrm{dc}`
      - HamAGNModel luminosity overrides (needs ``--agn-model ham``)
-   * - ``agn-occ``
-     - 8
-     - ``agn-models`` + :math:`f_\mathrm{inc},\ \log_{10}M_\mathrm{min},\ \sigma_{\log M},\ \alpha`
-     - HODAgnModel occupation (needs ``--agn-model hod``)
 
 An explicit subset of registry names may also be passed, e.g.
 ``--free-params log10_A_gas beta_gas alpha_out_gas``.
@@ -1737,13 +1631,12 @@ An explicit subset of registry names may also be passed, e.g.
 .. admonition:: Cost and identifiability (w_θ-only fit)
    :class: note
 
-   The ``gas-*`` and ``agn-occ`` presets rebuild the DPM gas profiles / AGN
-   abundance-match **per likelihood evaluation** (seconds each); the ``gas-*``
-   presets additionally switch on the full APEC emissivity path
+   The ``gas-*`` presets rebuild the DPM gas profiles **per likelihood
+   evaluation** (seconds each) and switch on the full APEC emissivity path
    (:math:`\varepsilon = n_e^2\,\Lambda(T,Z)`) so the pressure/temperature/
    metallicity parameters take effect.  Because the likelihood is :math:`w_\theta`
-   **only**, the *shape* parameters (gas :math:`\alpha`/:math:`\beta` slopes, and
-   the AGN-HOD occupation in ``agn-occ``) reshape the prediction, but the
+   **only**, the *shape* parameters (gas :math:`\alpha`/:math:`\beta` slopes)
+   reshape the prediction, but the
    *normalisation* parameters (:math:`n_{e,0.3}`) and the ``agn-lum`` AGN-luminosity
    parameters are **degenerate** with :math:`\log_{10}A_\mathrm{gas}/\log_{10}A_\mathrm{AGN}`
    — they run as flat directions and stay near their seeds.  They are exposed for
@@ -1758,27 +1651,23 @@ An explicit subset of registry names may also be passed, e.g.
    * - Option
      - Class
      - Behaviour
-   * - ``hod`` (default)
-     - :class:`~hod_mod.galaxies.agn_hod.HODAgnModel`
-     - Physically-predicted, occupation-weighted AGN cross-power
-       :math:`C_\ell^{gX,\mathrm{agn}}` (PSF-convolved);
-       :math:`\log_{10}A_\mathrm{AGN}` is a *fudge factor* on this amplitude.
-       Per-sample duty cycle ``--agn-finc`` (default 0.01).
-   * - ``ham``
-     - :class:`~hod_mod.galaxies.agn_ham.HamAGNModel`
-     - Free-amplitude King PSF point source
-       (:math:`\theta_c = 8.64''`); :math:`\log_{10}A_\mathrm{AGN}` sets the
-       whole AGN flux scale.  (HamAGNModel's HAM precompute is incompatible with
-       the CSST emulator HMF, so it falls back to its own Tinker08 HMF.)
-   * - ``xray``
-     - :class:`~hod_mod.galaxies.agn.XrayAGNModel`
-     - Parametric :math:`L_X(M_*)` point source (Girelli+2020 SHMR + a
-       hard-band :math:`L_X`–:math:`M_*` polynomial); King-PSF template like ``ham``.
+   * - ``ham`` — PSF amplitude
+     - :class:`~hod_mod.agn.ham.HamAGNModel`
+     - The AGN is an unresolved point source, so its angular template is the
+       eROSITA King PSF (:math:`\theta_c = 8.64''`) and the fit varies **only its
+       amplitude** :math:`\log_{10}A_\mathrm{AGN}`, which sets the whole AGN flux
+       scale.
+   * - ``duty_cycle`` — new model
+     - :class:`~hod_mod.agn.duty_cycle.DutyCycleAGNModel`
+     - ZuMandelbaum15 occupation (fixed from the :math:`w_p+\bar n_g` MAP fit)
+       :math:`\times` a free duty cycle :math:`10^{\log_{10}DC}`, with the
+       :math:`W_\mathrm{AGN}(z)` X-ray-flux kernel (Eq. A9).  The duty cycle is
+       the *only* free AGN parameter.  See the dedicated section below.
 
 The **gas** component is the DPM model-2 stack in every case
-(:class:`~hod_mod.cosmology.gas_profiles.GasDensityDPM` +
+(:class:`~hod_mod.gas.GasDensityDPM` +
 ``PressureProfileDPM`` + ``MetallicityProfileDPM`` +
-:class:`~hod_mod.cosmology.gas_profiles.ApecCoolingTable`).  By default only the
+:class:`~hod_mod.gas.ApecCoolingTable`).  By default only the
 :math:`\beta_\mathrm{gas}`/:math:`\beta_P` mass-slope tilts (Step 3 above) are
 free; the ``gas-shape``/``gas-temp``/``gas-full`` presets additionally expose the
 gNFW profile shapes, normalisations and metallicity (see the preset table above).
@@ -1800,10 +1689,10 @@ gNFW profile shapes, normalisations and metallicity (see the preset table above)
        --sample S1 --fix-zm15 --mode map --free-params gas-shape \
        --out-dir results/fits/comparat2025_fixedZM15_gas-shape
 
-   # compare AGN models at fixed gas (amplitude-only AGN)
+   # free-amplitude King PSF AGN at fixed gas (PSF-amplitude model)
    JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_comparat2025 \
-       --sample S1 --fix-zm15 --mode map --free-params agn-models --agn-model xray \
-       --out-dir results/fits/comparat2025_fixedZM15_agn-models_xray
+       --sample S1 --fix-zm15 --mode map --free-params agn-models --agn-model ham \
+       --out-dir results/fits/comparat2025_fixedZM15_agn-models_ham
 
 Results (MAP json + best-fit / diagnostics / gas-diagnostics figures) are
 written to ``results/fits/comparat2025_fixedZM15/`` (overridable per run with
@@ -1845,6 +1734,286 @@ neither clobbers the other.
    * - :math:`\chi^2/\mathrm{dof}`
      - 6.51
      - 31 :math:`w_\theta` points − 4 params = 27 dof; ZM15 fixed from the binned :math:`w_p+\bar n_g` fit (not re-tuned to the S1 threshold sample)
+
+----
+
+Duty-cycle AGN cross-correlation model
+--------------------------------------
+
+:class:`~hod_mod.agn.duty_cycle.DutyCycleAGNModel` predicts the
+galaxy :math:`\times` unresolved-AGN X-ray-emission cross-correlation
+:math:`w(\theta)` by populating galaxies with AGN at a free **duty cycle** and
+weighting their X-ray emission with a luminosity-function kernel.  It follows
+the Appendix-A formalism of **Lau et al. 2025** (ApJ 983, 8;
+`arXiv:2410.22397 <https://arxiv.org/abs/2410.22397>`_), specialized to the
+LS10-BGS sample **S1** (:math:`M_*>10^{10}\,M_\odot`, :math:`\bar z = 0.135`).
+The galaxy occupation is the Zu & Mandelbaum (2015) occupation, held **fixed**
+at the joint :math:`w_p+\bar n_g` MAP fit
+(``results/bgs_zm15_joint_wp_ngal/map_result.json``).  Implementation:
+:mod:`hod_mod.agn.duty_cycle`; figures from
+:mod:`hod_mod.scripts.galaxies.plot_agn_duty_cycle_model`.
+
+Step 1 — the X-ray luminosity function (Eqs. A4–A6)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The mean comoving AGN number density per :math:`\ln L_X` is the Aird et al.
+(2015) LADE **hard**-band (2–10 keV) XLF (the same model as the HAM AGN model,
+:func:`~hod_mod.agn.ham._aird15_lade_np`):
+
+.. math::
+
+   \Phi_\mathrm{AGN}(L_X, z) = K(z)\left[(L_X/L_*(z))^{\gamma_1}
+   + (L_X/L_*(z))^{\gamma_2}\right]^{-1},
+
+with the luminosity- and density-evolution terms :math:`L_*(z)`, :math:`K(z)`
+(Comparat+2019 parameterisation).
+
+.. figure:: _images/agn_duty_cycle__fig_dc_01_xlf.png
+   :width: 70%
+   :align: center
+
+   Hard-band XLF :math:`\Phi_\mathrm{AGN}(L_X,z)` at several redshifts.
+
+Step 2 — hard :math:`L_X` :math:`\to` observed soft flux
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each hard luminosity is mapped to an **observed soft (0.5–2 keV) flux** by going
+through the same steps as the HAM AGN model: an obscuration distribution
+(Comparat+2019) sets an obscuration-weighted K-correction
+:math:`k_\mathrm{eff}(L_X,z)` (XSPEC table,
+:func:`~hod_mod.agn.ham.mean_k_eff`), giving
+:math:`S_X = 10^{\log_{10}L_X + \log_{10}k_\mathrm{eff}} / (4\pi d_L^2)`.
+
+The cross-correlation is between the galaxies and **all** X-ray events, so **no
+optical (r-band) selection is applied** — every AGN whose k-corrected soft flux
+lies in the range :math:`[10^{-20}, 10^{-10}]\,\mathrm{erg\,s^{-1}cm^{-2}}`
+(Lau+2025) contributes.  The flux completeness is taken as :math:`f(S_X)=1`
+(unlike Lau et al. 2025, who use a logistic flux-limit curve, Eq. A11).
+
+.. figure:: _images/agn_duty_cycle__fig_dc_02_selection.png
+   :width: 90%
+   :align: center
+
+   K-correction :math:`k_\mathrm{eff}` and the observed soft flux
+   :math:`S_X(L_X)` at the sample mean redshift; no r-band cut is applied.
+
+Step 3 — the :math:`W_\mathrm{AGN}(z)` kernel (Eq. A9)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The X-ray-flux-weighted redshift kernel is
+
+.. math::
+
+   W_\mathrm{AGN}(z) = \int \mathrm{d}\ln L_X\;
+       \Phi_\mathrm{AGN}(L_X, z)\, S_X(L_X, z)\, f(S_X),
+
+integrated over all AGN in the k-corrected flux range (no optical selection),
+with the number density
+:math:`n_\mathrm{AGN}(z) = \int \mathrm{d}\ln L_X\,\Phi_\mathrm{AGN}\,f`
+and the number-weighted mean flux
+:math:`\langle S_X\rangle(z) = W_\mathrm{AGN}(z)/n_\mathrm{AGN}(z)`.  This is
+computed **once per sample** and stored, with all integrand components, to
+``results/agn_duty_cycle/W_AGN_<sample>.h5`` (skipped if it exists):
+
+.. code-block:: bash
+
+   python -m hod_mod.scripts.galaxies.precompute_w_agn --sample S1
+
+.. figure:: _images/agn_duty_cycle__fig_dc_03_kernel.png
+   :width: 95%
+   :align: center
+
+   The kernel :math:`W_\mathrm{AGN}(z)`, the selected number density
+   :math:`n_\mathrm{AGN}(z)`, and the mean selected flux
+   :math:`\langle S_X\rangle(z)` for S1.
+
+Step 4 — occupation :math:`\times` duty cycle
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The AGN occupation is the **fixed** ZM15 occupation (centrals + satellites, Eqs.
+21–22) scaled by a single duty cycle :math:`DC = 10^{\log_{10}DC}` with the
+physical prior :math:`DC \in [0.001, 0.5]` (i.e. :math:`\log_{10}DC \in
+[-3, -0.301]`; the AGN-host fraction is between 0.1 % and 50 %), times a
+**high-mass cutoff** :math:`C(M_h)`:
+
+.. math::
+
+   N_c^\mathrm{AGN}(M_h) = DC\,C(M_h)\,\langle N_c^{>M_*}\rangle, \qquad
+   N_s^\mathrm{AGN}(M_h) = DC\,C(M_h)\,\langle N_s^{>M_*}\rangle .
+
+Because ZM15 satellites scale with the centrals, putting the duty cycle in front
+of the central occupation propagates to the satellites.  The cutoff
+:math:`C(M_h)` is a smooth cosine taper that is 1 below :math:`10^{14}\,M_\odot/h`
+and declines to 0 at :math:`2\times10^{14}\,M_\odot/h`, so that X-ray AGN are
+**not hosted by the most massive (cluster-scale) halos** — both the central and
+satellite AGN occupation vanish above :math:`\log_{10}M_h \simeq 14.3`.  This
+removes the cluster-scale AGN contribution from the cross-power (mainly the
+1-halo satellite and two-halo terms on medium/large scales); the galaxy
+occupation itself is unchanged.
+
+.. figure:: _images/agn_duty_cycle__fig_dc_04_occupation.png
+   :width: 65%
+   :align: center
+
+   AGN occupation = ZM15 :math:`\times` high-mass cutoff (× duty cycle).  The
+   grey curves are the raw ZM15 (no cutoff); the black/coloured curves drop to
+   zero across the shaded band (:math:`10^{14}`–:math:`2\times10^{14}\,M_\odot/h`).
+
+Step 5 — cross-power and :math:`w(\theta)` (Eqs. A7/A8 for the cross)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Lau et al. 2025 1-/2-halo AGN power spectra (Eqs. A7/A8) are modified for the
+galaxy :math:`\times` AGN-emission **cross**-correlation by replacing the AGN
+auto-occupation with the **product** of the galaxy and AGN occupations, with
+:math:`u_\mathrm{AGN} = u_\mathrm{NFW}`.  The per-AGN soft luminosity is
+mass-independent, :math:`\langle L_X\rangle(z) = \langle S_X\rangle(z)\,
+4\pi d_L^2(z)`, so the cross-power is **linear in the duty cycle**:
+
+.. math::
+
+   P_{gX}^\mathrm{1h}(k,z) \propto \frac{DC}{\bar n_g}\int \mathrm{d}M\,
+   \frac{\mathrm{d}n}{\mathrm{d}M}\,\langle L_X\rangle\,
+   \big(N_c^g + N_s^g u\big)\big(N_c^A + N_s^A u\big).
+
+with :math:`u_\mathrm{AGN}` the NFW Fourier transform (Eq. A10).  The cross is
+realised through the existing
+:meth:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra.angular_cl_gX`
+path (Limber + eROSITA King PSF, :math:`\theta_c = 8.64''`), so the AGN and gas
+contributions are summed in consistent internal units; :math:`w(\theta)` follows
+from the Hankel transform of :math:`C_\ell`.
+
+.. admonition:: The flux :math:`\to` count conversion is computed, not fitted
+   :class: important
+
+   The Comparat 2025 GALxEVT :math:`w(\theta)` is a **count ratio** (the
+   Davis–Peebles estimator :math:`w = (S^G_X-S^R_X)/S^R_X`), converted to a
+   physical surface brightness by multiplying by the background
+   :math:`S^R_X` (``beckground`` column, in
+   :math:`\mathrm{erg\,kpc^{-2}\,s^{-1}}`).  Rather than absorb the flux
+   :math:`\to` count conversion into a free amplitude, we **compute it from the
+   real eROSITA instrument**: each component is folded through the true
+   energy-conversion factor (ECF) from the DR1 **TM0 survey ARF + RMF**
+   (:class:`~hod_mod.gas.ErositaResponse`), tabulated band-averages over
+   0.5–2 keV for the gas (APEC at the halo temperature :math:`kT(M)`) and the
+   AGN (absorbed power law :math:`\Gamma=1.9`).  The model :math:`\to` data gas
+   normalisation :math:`C_\mathrm{total}` (the amplitude the *fiducial*-density
+   gas produces) then follows from the cooling function :math:`\Lambda`, the
+   ECF, and :math:`S^R_X` (:math:`C_\mathrm{total}\propto1/S^R_X`), anchored once
+   on S1 where the fiducial DPM density reproduces the data.  **This removes the
+   free normalisation factors** ``log10_A_gas`` and ``log10_A_AGN``: the gas leg
+   is parametrised directly by the physical central density
+   :math:`\log_{10}n_{e,0.3}` (:math:`A_\mathrm{gas}=C_\mathrm{total}\,
+   (n_e/n_e^\mathrm{fid})^2`) and the AGN leg by the duty cycle
+   :math:`\log_{10}DC` (:math:`A_\mathrm{AGN}=10^{\log_{10}DC+C_\mathrm{obs}}`).
+
+.. figure:: _images/agn_duty_cycle__fig_dc_05_wtheta.png
+   :width: 75%
+   :align: center
+
+   S1 prediction with the gas fixed at the data-validated fixed-ZM15 MAP
+   (:math:`\log_{10}A_\mathrm{gas}=3.87`, :math:`\beta_\mathrm{gas}=0.25`,
+   :math:`\beta_P=0.86`) and the **duty-cycle AGN** added for
+   :math:`\log_{10}DC = -4,-3,-2,-1`.  :math:`\log_{10}DC=-2` tracks the data;
+   :math:`-1` over-predicts the small-scale signal and :math:`-4,-3` reduce to
+   gas-only.  The shaded band (:math:`\theta<8''`) is inside the PSF and excluded
+   from the fit.
+
+.. rubric:: Running the baseline MAP fit (physical parameters)
+
+The baseline MAP fit (:mod:`hod_mod.scripts.fitting.fit_agn_duty_cycle_baseline`)
+holds the ZM15 galaxy occupation **fixed** at the multi-mass-bin MAP and varies
+the five **physical** parameters
+:math:`\{\log_{10}n_{e,0.3}, \beta_\mathrm{gas}, p_2, r_\mathrm{max},
+\log_{10}DC\}` over :math:`\theta\in[8,300]''`.  There are **no free normalisation
+factors**: the gas amplitude is :math:`A_\mathrm{gas}=C_\mathrm{total}\,
+(n_e/n_e^\mathrm{fid})^2` with the computed conversion :math:`C_\mathrm{total}`,
+and the AGN amplitude is :math:`A_\mathrm{AGN}=10^{\log_{10}DC+C_\mathrm{obs}}`.
+The two linear amplitudes are still solved analytically (bounded least squares,
+now bounded to the **physical priors** :math:`n_e/n_e^\mathrm{fid}\in[0.1,10]`
+and :math:`DC\in[0.001,0.5]`), so the optimizer searches only the
+:math:`(\beta_\mathrm{gas}, p_2, r_\mathrm{max})` shape:
+
+.. code-block:: bash
+
+   JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_agn_duty_cycle_baseline \
+       --sample S1 --map-only        # add --nsteps for the MCMC
+
+Results are written to ``results/agn_duty_cycle/baseline/<sample>_baseline_map.json``.
+The same fixed ZM15 is used for every sample; only the stellar-mass threshold and
+:math:`n(z)` change.
+
+.. list-table:: Baseline MAP, physical parameters, :math:`\theta\in[8,300]''`
+   :header-rows: 1
+   :widths: 8 10 12 10 10 10 12 12
+
+   * - Sample
+     - :math:`\log_{10}M_*^\mathrm{min}`
+     - :math:`n_e/n_e^\mathrm{fid}`
+     - :math:`\beta_\mathrm{gas}`
+     - :math:`p_2`
+     - :math:`\log_{10}DC`
+     - :math:`DC`
+     - :math:`\chi^2/\mathrm{dof}`
+   * - S1
+     - 10.00
+     - 10 (rail)
+     - 1.63
+     - 0.60
+     - −1.95
+     - 0.011
+     - 1.63
+   * - S3
+     - 10.50
+     - **1.5**
+     - 1.60
+     - 1.20
+     - −1.66
+     - 0.022
+     - **1.56**
+   * - S5
+     - 11.00
+     - 10 (rail)
+     - 0.40
+     - 2.40
+     - −1.67
+     - 0.021
+     - 4.88
+   * - S7
+     - 11.50
+     - 10 (rail)
+     - 1.60
+     - 0.78
+     - −3.0 (rail)
+     - 0.001
+     - 111.7
+
+.. figure:: _images/agn_duty_cycle__baseline__baseline_bestfit_allsamples.png
+   :width: 95%
+   :align: center
+
+   Best-fit :math:`w(\theta)` decomposition (data, gas, AGN, total) for
+   S1/S3/S5/S7 and the physical parameters vs stellar-mass threshold.  The gas
+   dominates; the density prior rails at :math:`10\times` fiducial for S1/S5/S7
+   while S3 sits cleanly at :math:`1.5\times`; S7 under-predicts the data at
+   :math:`\theta>30''`.
+
+.. admonition:: Open issue — the gas amplitude wants to run away at high mass
+   :class: important
+
+   With **physical** density priors the fit is clean only for the low
+   thresholds (S3 :math:`\chi^2/\mathrm{dof}=1.56`, :math:`n_e=1.5\,
+   n_e^\mathrm{fid}`).  For the higher-mass samples the gas density rails at
+   :math:`10\times` fiducial and the fit degrades sharply (S5 :math:`4.9`, S7
+   :math:`112`): the data require **much more gas than 10× fiducial**.  Two
+   effects contribute and define the way forward: (i) the model :math:`\to` data
+   conversion :math:`C_\mathrm{total}` is **anchored on S1** and transferred by
+   :math:`1/S^R_X` only — it must be **calibrated per sample** from each sample's
+   own fiducial-gas prediction (the galaxy density :math:`n_g`, bias and
+   :math:`n(z)` differ with the threshold); and (ii) the galaxy :math:`\times`
+   gas and galaxy :math:`\times` AGN cross-powers are nearly degenerate in
+   :math:`\theta`-shape over :math:`[8,300]''`, so breaking the degeneracy needs
+   either the X-ray auto-power, the stacked surface-brightness profile, or an
+   external gas-density prior (e.g. the :math:`L_X`–:math:`M` scaling relation).
 
 ----
 
@@ -1961,7 +2130,7 @@ AGN luminosity calibration check
 ``log10_A_AGN`` is a free linear amplitude on a normalized PSF template
 (:func:`~hod_mod.scripts.fitting.fit_comparat2025._psf_template`), fit
 directly against the dimensionless :math:`w(\theta)` data. By construction it
-has **no built-in link** to :class:`~hod_mod.galaxies.agn_ham.HamAGNModel`'s
+has **no built-in link** to :class:`~hod_mod.agn.ham.HamAGNModel`'s
 predicted mean soft X-ray AGN luminosity — so "``log10_A_AGN`` close to 0"
 is not, by itself, evidence that the model's AGN luminosity is correct.
 
@@ -2145,13 +2314,13 @@ recommended next step; not implemented here. See
 ``results/fits/comparat2025/ham_agn_calibration.json`` for full per-sample
 detail and :mod:`hod_mod.scripts.fitting.calibrate_ham_agn_lx`.
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_sdss/benchmark_zumandelbaum2015_wp.png
+.. figure:: _images/benchmarks__zumandelbaum2015_sdss__benchmark_zumandelbaum2015_wp.png
    :width: 85%
    :alt: ZM15 wp benchmark
 
    SDSS DR7 :math:`w_p(r_p)` at MAP (ZM15 published parameters).
 
-.. figure:: ../results/benchmarks/zumandelbaum2015_sdss/benchmark_zumandelbaum2015_ds.png
+.. figure:: _images/benchmarks__zumandelbaum2015_sdss__benchmark_zumandelbaum2015_ds.png
    :width: 85%
    :alt: ZM15 delta sigma benchmark
 
@@ -2237,3 +2406,62 @@ each call for correct asynchronous-GPU timing):
 
    # include lensing (ESD) in the timed workload
    python -m hod_mod.scripts.timing.bench_bgs_zm15_joint --both --surveys HSC DES KIDS
+
+----
+
+References and external resources
+=================================
+
+All links below were verified to resolve to the cited work.  References that the
+code uses but for which a stable preprint link could not be verified are listed
+by author/year only (no link), to avoid mis-citation.
+
+.. rubric:: Methods and models (verified preprints)
+
+* **Galaxy occupation (iHOD)** — Zu & Mandelbaum 2015,
+  `arXiv:1505.02781 <https://arxiv.org/abs/1505.02781>`_
+  ("Mapping stellar content to dark matter halos … SDSS DR7").
+* **Halo mass function** — Tinker et al. 2008,
+  `arXiv:0803.2706 <https://arxiv.org/abs/0803.2706>`_;
+  **halo bias** — Tinker et al. 2010,
+  `arXiv:1001.3162 <https://arxiv.org/abs/1001.3162>`_.
+* **Halo concentration** — Diemer & Joyce 2019,
+  `arXiv:1809.07326 <https://arxiv.org/abs/1809.07326>`_.
+* **Non-linear / beyond-linear bias (HMcode-2020)** — Mead et al. 2021,
+  `arXiv:2009.01858 <https://arxiv.org/abs/2009.01858>`_.
+* **Cosmological parameters** — Planck 2018,
+  `arXiv:1807.06209 <https://arxiv.org/abs/1807.06209>`_.
+* **Gas profiles (Descriptive Parametric Model, DPM)** —
+  `arXiv:2505.14782 <https://arxiv.org/abs/2505.14782>`_.
+* **Cluster pressure profile (A10 / REXCESS)** — Arnaud et al. 2010,
+  `arXiv:0910.1234 <https://arxiv.org/abs/0910.1234>`_.
+* **AGN X-ray luminosity function (LADE)** — Aird et al. 2015,
+  `arXiv:1503.01120 <https://arxiv.org/abs/1503.01120>`_.
+* **Galaxy × AGN/diffuse X-ray cross-power (Appendix A)** — Lau et al. 2025,
+  `arXiv:2410.22397 <https://arxiv.org/abs/2410.22397>`_.
+* **Galaxy × soft-X-ray cross-correlation (GALxEVT data + method)** —
+  Comparat et al. 2025,
+  `arXiv:2503.19796 <https://arxiv.org/abs/2503.19796>`_.
+* **SRG/eROSITA telescope** — Predehl et al. 2021,
+  `arXiv:2010.03477 <https://arxiv.org/abs/2010.03477>`_;
+  **eROSITA DR1** — Merloni et al. 2024,
+  `arXiv:2401.17274 <https://arxiv.org/abs/2401.17274>`_.
+
+.. rubric:: Data and software (verified)
+
+* **eROSITA-DE DR1** — https://erosita.mpe.mpg.de/dr1/ ; instrument responses
+  (ARF/RMF, TM0 survey + on-axis):
+  https://erosita.mpe.mpg.de/dr1/eSASS4DR1/eSASS4DR1_arfrmf/ .
+* **Legacy Surveys DR10 (LS10 galaxies)** — https://www.legacysurvey.org/dr10/ .
+* **GALxEVT cross-correlation measurements (data)** — Zenodo record 15111974,
+  https://doi.org/10.5281/zenodo.15111974 .
+* **AtomDB / APEC plasma emission** — https://hea-www.cfa.harvard.edu/AtomDB/ .
+* **SOXS (X-ray response folding, ARF/RMF, ECF)** —
+  https://hea-www.cfa.harvard.edu/soxs/ .
+
+.. rubric:: Cited by name only (no verified preprint link)
+
+* **X-ray scaling relations** used to validate the gas (:math:`L_X`–:math:`M`,
+  :math:`kT`–:math:`M`) — Lovisari et al. 2020; Bulbul et al. 2018;
+  Lovisari et al. 2015 (groups).  (The arXiv identifier recorded in the code for
+  Lovisari+2020 is incorrect and is **not** reproduced here.)

@@ -9,6 +9,7 @@ predictions and fitting.
 [![PyPI version](https://img.shields.io/pypi/v/hod-mod)](https://pypi.org/project/hod-mod/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://pypi.org/project/hod-mod/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Data DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21078473.svg)](https://doi.org/10.5281/zenodo.21078473)
 
 ## Overview
 
@@ -43,21 +44,36 @@ source ~/.bashrc
 mamba env create -f environment.yml
 mamba activate hod_mod
 pip install -e .
+pre-commit install          # optional: blocks committing large files / results/
 ```
 
-### Install with Guix (no conda)
+## Data and benchmark results
 
-For a conda-free, reproducible environment using [GNU Guix](https://guix.gnu.org/),
-see [INSTALL_GUIX.md](INSTALL_GUIX.md). In short:
+Small reference data needed to run the models ships inside the package. Large
+inputs and the curated benchmark results (final MCMC chains, headline figures)
+are archived on Zenodo and fetched **on demand** — the git repository stays lean.
 
-```bash
-# time-machine pins Guix to channels.scm -> Python 3.11 (required for camb 1.4.0)
-guix time-machine -C channels.scm -- shell --container --network -m manifest.scm
-python -m venv .venv-guix && source .venv-guix/bin/activate
-export LD_LIBRARY_PATH="$GUIX_ENVIRONMENT/lib"     # so wheels find libz/libstdc++/…
-pip install -r requirements-guix.txt               # validated pinned versions
-pip install --no-build-isolation --no-deps -e .
+- **Dataset:** [10.5281/zenodo.21078473](https://doi.org/10.5281/zenodo.21078473) (concept DOI — always resolves to the latest version)
+- Downloads are checksum-verified and cached locally with
+  [`pooch`](https://www.fatiando.org/pooch/) (a dependency, installed automatically).
+
+```python
+from hod_mod.data_io import fetch
+
+# downloads from Zenodo + verifies the checksum on first call; cache hit afterwards
+chain = fetch("results/benchmarks/more2015_logM11_12/flatchain.npz")
 ```
+
+Optional configuration via environment variables:
+
+| Variable | Purpose |
+|---|---|
+| `HOD_MOD_DATA_DOI` | pin a specific Zenodo version for reproducibility (default: pinned in code) |
+| `HOD_MOD_DATA_DIR` | read from a local mirror directory instead of downloading |
+| `HOD_MOD_DATA_CACHE` | override the download cache location |
+
+See [docs/data_hosting.rst](docs/data_hosting.rst) for the full strategy and the
+upload/registry workflow.
 
 ## Tests
 
@@ -223,6 +239,9 @@ If you use `hod_mod` in published work, cite:
 
 and this repository URL.  Depending on the model used, additionally cite the
 relevant HOD or gas profile paper(s) from the tables above.
+
+If you use the archived benchmark data or curated results, also cite the
+dataset: [10.5281/zenodo.21078473](https://doi.org/10.5281/zenodo.21078473).
 
 ---
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hod_mod"
-version = "0.0.6"
+version = "0.1.0"
 description = "HOD galaxy clustering and weak lensing prediction and fitting"
 authors = [{name = "Johan Comparat", email = "johan.comparat@pm.me"}]
 readme = "README.md"
@@ -21,8 +21,13 @@ dependencies = [
     "h5py",
     "jax",
     "jaxlib",
+    "pooch",
+    "platformdirs",
     "AletheiaCosmo",
 ]
+
+[project.scripts]
+hod-mod = "hod_mod.cli.__main__:main"
 
 [project.optional-dependencies]
 fitting   = ["emcee", "pyyaml", "pandas"]
@@ -36,15 +41,24 @@ where = ["."]
 include = ["hod_mod*"]
 
 [tool.setuptools.package-data]
+"hod_mod.data_io" = ["registry.txt"]
 "hod_mod.data.agn" = ["*.txt", "*.ascii"]
 "hod_mod.data.benchmarks" = ["*.csv", "*.json"]
 "hod_mod.data.bnl" = ["*.npy", "*.txt"]
+"hod_mod.data.erosita" = ["*.npz"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (build the CAMB static cache / JAX JIT); deselect with -m 'not slow'",
+]
 
 [tool.coverage.run]
 omit = ["*/hod_mod/scripts/*"]
 
 [tool.coverage.report]
 omit = ["*/hod_mod/scripts/*"]
+# Floor enforced when coverage is reported (CI: `pytest -m "" --cov=hod_mod`).
+# Full suite reaches ~85%; the margin covers environments where the
+# soxs/CEmulator-gated `slow` tests skip. Not applied to plain `pytest`.
+fail_under = 82

@@ -1,6 +1,7 @@
 """HOD fitting: MAP + MCMC via emcee, unified FitConfig, Planck 2018 prior."""
 
-from .hod_wp import (
+from .models import HOD_MODELS
+from .config import (
     FitConfig,
     WpFitConfig,
     JointFitConfig,
@@ -8,11 +9,17 @@ from .hod_wp import (
     load_config,
     load_joint_config,
     load_fits_config,
+    _sigma8_to_lnAs,
+)
+from .fitters import (
     WpFitter,
     JointFitter,
     DeltaSigmaFitter,
     WpFitterFITS,
-    HOD_MODELS,
+    _assemble_hod_params,
+    log_prob_wp,
+    log_prob_joint,
+    _CachedPkLinear,
 )
 from .planck_prior import (
     PLANCK18_MEANS,

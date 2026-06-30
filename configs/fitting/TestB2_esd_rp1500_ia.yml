@@ -1,0 +1,35 @@
+# Test B2 — ESD-only, More+2015 + NLA intrinsic alignment, R > 1.5 Mpc/h
+# Add A_IA to absorb large-scale IA signal from BGS lens sample
+# n_free = 6: log10mmin, sigma_logm, log10m1, alpha, kappa, A_IA
+#
+# python hod_mod/scripts/fitting/run_fit.py configs/fitting/TestB2_esd_rp1500_ia.yml --map-only
+
+description: "Test B2 — ESD-only More+2015 6-param R>1.5 Mpc/h (+ IA)"
+
+data:
+  mstar_lo:   10.0
+  mstar_hi:   12.0
+  probes:     [esd_hsc]
+  rp_min_wp:  1.5          # not used for ESD-only fit; sets rp-tag in dir name
+  rp_min_hsc: 1.5
+  rp_max_esd: 10.0
+  esd_sn_min: 5.0
+  pi_max:     100.0
+
+model:
+  hod_model:           more2015
+  profile:             nfw
+  use_bnl:             true
+  use_ia:              true
+  use_offcentering:    false
+  use_baryon_fraction: false
+  use_stellar_mass:    false
+  use_incompleteness:  false
+  use_free_cosmo:      false
+  use_full_cov:        false
+
+fitting:
+  method: map
+
+output:
+  base_dir: results/bgs_comparat2025

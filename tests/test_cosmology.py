@@ -5,16 +5,16 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum, eisenstein_hu_pk
-from hod_mod.cosmology.nonlinear import NonLinearPowerSpectrum
-from hod_mod.cosmology.halo_profiles import (
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, eisenstein_hu_pk
+from hod_mod.core.nonlinear import NonLinearPowerSpectrum
+from hod_mod.core.halo_profiles import (
     nfw_rho, nfw_mass, nfw_sigma, nfw_delta_sigma, nfw_mean_sigma,
     nfw_uk, nfw_uk_jax, einasto_rho, einasto_uk, satellite_nfw_uk,
     HaloProfile, concentration_dutton14_jax,
     _si_jax, _ci_jax,
 )
-from hod_mod.cosmology.halo_model import HaloModelPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import (
+from hod_mod.core.halo_model import HaloModelPowerSpectrum
+from hod_mod.core.halo_mass_function import (
     tinker08_fsigma, tinker10_bias,
     fsigma_press74, fsigma_sheth99, fsigma_jenkins01, fsigma_warren06,
     fsigma_angulo12, fsigma_crocce10, fsigma_watson13, fsigma_bhattacharya11,
@@ -23,7 +23,7 @@ from hod_mod.cosmology.halo_mass_function import (
     fsigma_yung24, fsigma_yung25,
     delta_vir_flat_jax, HaloMassFunction, make_hmf,
 )
-from hod_mod.cosmology.distances import (
+from hod_mod.core.distances import (
     hubble_e, comoving_distance, angular_diameter_distance,
     luminosity_distance, distance_modulus,
     comoving_distance_z1z2, angular_diameter_distance_z1z2,
@@ -577,14 +577,14 @@ class TestMakeHmf:
     def test_aemulusnu_backend_key(self, pk_func):
         """make_hmf('aemulusnu') returns AemulusNuHaloMassFunction."""
         pytest.importorskip("aemulusnu_hmf")
-        from hod_mod.cosmology.halo_mass_function import AemulusNuHaloMassFunction
+        from hod_mod.core.halo_mass_function import AemulusNuHaloMassFunction
         hmf = make_hmf("aemulusnu", pk_func=pk_func)
         assert isinstance(hmf, AemulusNuHaloMassFunction)
 
     def test_csst_backend_key(self):
         """make_hmf('csst') returns CsstHaloMassFunction."""
         pytest.importorskip("CEmulator")
-        from hod_mod.cosmology.halo_mass_function import CsstHaloMassFunction
+        from hod_mod.core.halo_mass_function import CsstHaloMassFunction
         hmf = make_hmf("csst")
         assert isinstance(hmf, CsstHaloMassFunction)
 
@@ -649,7 +649,7 @@ class TestAemulusNuHaloMassFunction:
         assert jnp.all(b > 0)
 
     def test_no_pk_func_sigma_raises(self, theta):
-        from hod_mod.cosmology.halo_mass_function import AemulusNuHaloMassFunction
+        from hod_mod.core.halo_mass_function import AemulusNuHaloMassFunction
         hmf_nopk = AemulusNuHaloMassFunction(pk_func=None)
         with pytest.raises(RuntimeError, match="pk_func"):
             hmf_nopk.sigma(jnp.array([1e14]), 0.0, theta)
@@ -1111,7 +1111,7 @@ class TestHaloProfileClass:
 
     def test_rho_s_and_rs_r_s_from_c(self, hp_colossus):
         """r_delta = c * r_s must hold: check r_s = r_delta / c."""
-        from hod_mod.cosmology.halo_profiles import _RHO_CRIT0
+        from hod_mod.core.halo_profiles import _RHO_CRIT0
         rho_s, r_s = hp_colossus.rho_s_and_rs(_MASS_ARR, z=0.0, theta_cosmo=_THETA_COSMO)
         c = hp_colossus.concentration(_MASS_ARR, z=0.0)
         delta, rho_ref = hp_colossus._mdef_delta_rho(0.0, _THETA_COSMO)

@@ -255,17 +255,17 @@ Implementation Notes
 --------------------
 
 The non-linear 2-halo term is enabled via the ``nl_2halo`` flag in
-:class:`~hod_mod.galaxies.clustering.FullHaloModelPrediction`:
+:class:`~hod_mod.observables.clustering.FullHaloModelPrediction`:
 
 .. code-block:: python
 
-   from hod_mod.cosmology.nonlinear import HALOFITSpectrum, CachedPkNonlinear
-   from hod_mod.galaxies.clustering import FullHaloModelPrediction
+   from hod_mod.core.nonlinear import HALOFITSpectrum, CachedPkNonlinear
+   from hod_mod.observables.clustering import FullHaloModelPrediction
 
    pk_nl = CachedPkNonlinear(HALOFITSpectrum("mead2020"))
    pred  = FullHaloModelPrediction(pk_lin, hod, hp, pk_nl=pk_nl, nl_2halo=True)
 
-:class:`~hod_mod.cosmology.nonlinear.CachedPkNonlinear` caches CAMB evaluations
+:class:`~hod_mod.core.nonlinear.CachedPkNonlinear` caches CAMB evaluations
 keyed on :math:`(z, \Omega_m, \ln 10^{10}A_s, h)` so repeated calls during
 optimisation do not re-run CAMB.
 

@@ -1,14 +1,14 @@
 """hod_mod — HOD galaxy clustering and weak lensing prediction and fitting."""
 
-__version__ = "0.0.6"
+__version__ = "0.1.0"
 
-from .cosmology import (
+from .core import (
     LinearPowerSpectrum,
     HaloMassFunction,
     make_hmf,
     HaloProfile,
 )
-from .galaxies import (
+from .connection import (
     HODBase,
     HODModel,
     MoreHODModel,
@@ -21,12 +21,14 @@ from .galaxies import (
     Zacharegkas25HODModel,
     VanUitert16CSMFModel,
     Leauthaud12HODModel,
-    HODClusteringPrediction,
-    FullHaloModelPrediction,
     SHAMModel,
     CLFModel,
     VanDenBosch13CLFModel,
     BASILISKCLFModel,
+)
+from .observables import (
+    HODClusteringPrediction,
+    FullHaloModelPrediction,
 )
 from .fitting import (
     FitConfig,

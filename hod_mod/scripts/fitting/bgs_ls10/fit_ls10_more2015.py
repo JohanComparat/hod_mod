@@ -3,7 +3,7 @@
 Reads the projected correlation function measured by ``sum_stat`` from the
 DESI Legacy Survey DR10 (LS10) volume-limited galaxy samples.  Each sample
 selects galaxies above a stellar mass threshold (``--mstar``) and is fit
-with the :class:`~hod_mod.galaxies.hod.MoreHODModel`.
+with the :class:`~hod_mod.connection.hod.MoreHODModel`.
 
 Cosmological parameters are held fixed at Planck 2018 values unless
 ``--vary-cosmo`` is set, in which case h, Ω_m, Ω_b, n_s, and ln10As are
@@ -49,14 +49,15 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 import numpy as np
 
-from hod_mod.cosmology.power_spectrum import LinearPowerSpectrum
-from hod_mod.cosmology.halo_mass_function import make_hmf
-from hod_mod.cosmology.halo_profiles import HaloProfile
-from hod_mod.galaxies.hod import MoreHODModel
-from hod_mod.galaxies.clustering import FullHaloModelPrediction
-from hod_mod.fitting.hod_wp import WpFitConfig, WpFitter
+from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.halo_mass_function import make_hmf
+from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.connection.hod import MoreHODModel
+from hod_mod.observables.clustering import FullHaloModelPrediction
+from hod_mod.fitting import WpFitConfig, WpFitter
 from hod_mod.fitting.planck_prior import PLANCK18_MEANS, PLANCK18_SIGMAS, PLANCK18_3SIGMA
 from hod_mod.data_io.sum_stat_reader import SumStatReader
+from hod_mod.paths import results_root
 
 # ---------------------------------------------------------------------------
 # Lookup table: LS10 bins with sys-comb wp files
@@ -174,7 +175,7 @@ def main():
     parser.add_argument("--n-steps",   type=int, default=2000)
     parser.add_argument("--n-burnin",  type=int, default=500)
     parser.add_argument("--plot", action="store_true")
-    parser.add_argument("--output-dir", default=os.path.join(repo_root, "results", "bgs_ls10"))
+    parser.add_argument("--output-dir", default=os.path.join(results_root(), "bgs_ls10"))
     args = parser.parse_args()
 
     info = LS10_BINS[args.mstar]
