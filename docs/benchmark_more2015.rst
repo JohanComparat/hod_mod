@@ -10,7 +10,7 @@ BOSS CMASS z\ :sub:`eff` = 0.52.
 All variants fit :math:`w_p(r_p)` and :math:`\Delta\Sigma(R)` jointly using the
 beyond-linear halo bias correction
 (:class:`~hod_mod.core.beyond_linear_bias.BeyondLinearBiasMead21`).
-See :ref:`benchmarks` for the summary table.
+See the benchmark suite for the summary table.
 
 ----
 

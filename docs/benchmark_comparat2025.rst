@@ -392,7 +392,7 @@ The script ``hod_mod/scripts/validate_comparat2025.py`` (once complete) will:
 
 Reproduce with::
 
-    cd /home/comparat/software/hod_mod
+    cd $HOD_MOD_REPO
     python -m hod_mod.scripts.validate_comparat2025
 
 References

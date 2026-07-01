@@ -42,7 +42,7 @@ import matplotlib.pyplot as plt
 from hod_mod.fitting import load_config, WpFitter
 from hod_mod.paths import repo_root
 
-CONFIG = os.path.join(repo_root(), "configs", "more2015_boss_cmass.yml")
+CONFIG = os.path.join(repo_root(), "configs", "hod_fit_more2015_cmass.yml")
 
 
 def main():

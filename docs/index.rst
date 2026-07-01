@@ -37,6 +37,7 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    :caption: Pipeline — Galaxy × X-ray
 
    direct_prediction_gal_gas
+   xray_joint_fit
 
 .. toctree::
    :maxdepth: 2
@@ -49,7 +50,6 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    :caption: Benchmarks
 
    benchmark_more2015
-   benchmark_zumandelbaum2015
    benchmark_zumandelbaum2015_multisample
 
 .. toctree::
