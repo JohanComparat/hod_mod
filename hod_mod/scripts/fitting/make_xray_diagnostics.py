@@ -181,6 +181,44 @@ def fig_band_params_vs_mass():
     fig.tight_layout(); _save(fig, "bands_params_vs_mass")
 
 
+def fig_phaseA_vs_B():
+    """Compare the broad-band (Phase A) and energy-band (Phase B) posteriors for the
+    parameters they share, per sample, with the grid bounds marked (rail check)."""
+    keys = ["beta_gas", "p2", "r_max", "log10DC"]
+    bounds = {"beta_gas": (J._BOUNDS[1, 0], J._BOUNDS[1, 1]),
+              "p2": (J._BOUNDS[2, 0], J._BOUNDS[2, 1]),
+              "r_max": (J._BOUNDS[3, 0], J._BOUNDS[3, 1]),
+              "log10DC": (J._BOUNDS[4, 0], J._BOUNDS[4, 1])}
+    A, Bd = {}, {}
+    for s in _SAMPLES:
+        fa = os.path.join(J._OUT_DIR, f"{s}_bb_summary.json")
+        fb = os.path.join(JB._OUT_DIR, f"{s}_bands_summary.json")
+        if os.path.isfile(fa):
+            A[s] = json.load(open(fa))
+        if os.path.isfile(fb):
+            Bd[s] = json.load(open(fb))
+    if not A or not Bd:
+        print("  (need both Phase-A and Phase-B summaries - skipping comparison)", flush=True)
+        return
+    ss = [s for s in _SAMPLES if s in A and s in Bd]
+    ms = [F.SAMPLES[s]["log10ms_min"] for s in ss]
+    fig, axs = plt.subplots(2, 2, figsize=(11, 7))
+    for a, key in zip(axs.ravel(), keys):
+        for lab, D, c, dx in [("Phase A (broad)", A, "C0", -0.01), ("Phase B (bands)", Bd, "C2", 0.01)]:
+            med = [D[s]["posterior"][key]["median"] for s in ss]
+            lo = [D[s]["posterior"][key]["lo"] for s in ss]
+            hi = [D[s]["posterior"][key]["hi"] for s in ss]
+            a.errorbar(np.array(ms) + dx, med, yerr=[lo, hi], fmt="o-", capsize=3,
+                       color=c, label=lab)
+        for b in bounds[key]:
+            a.axhline(b, color="grey", ls=":", lw=0.8)
+        a.set_xlabel(r"$\log_{10}(M_\star^{\rm thr}/M_\odot)$"); a.set_ylabel(key, fontsize=9)
+        a.legend(fontsize=7)
+    fig.suptitle("Phase A (broad-band) vs Phase B (energy-band) posteriors "
+                 "(dotted = grid bounds)", fontsize=11)
+    fig.tight_layout(); _save(fig, "phaseA_vs_B")
+
+
 def _save(fig, name):
     os.makedirs(_OUT, exist_ok=True)
     p = os.path.join(_OUT, name + ".png")
@@ -197,6 +235,7 @@ def main():
     fig_band_ratios(SS)
     fig_band_validation(SS)
     fig_band_params_vs_mass()
+    fig_phaseA_vs_B()
     print(f"Done -> {_OUT}", flush=True)
 
 

@@ -27,6 +27,19 @@ autodoc_default_options = {
 }
 autosummary_generate = True
 
+# Safety net for the ReadTheDocs build: if a heavy runtime dependency fails to
+# import at doc-build time, mock it so autodoc can still import the modules.
+# Only optional / non-JAX backends are mocked — JAX is left real so that
+# jax.jit-decorated functions keep their signatures in the API docs.
+autodoc_mock_imports = [
+    "camb",
+    "colossus",
+    "AletheiaCosmo",
+    "CEmulator",
+    "aemulusnu_hmf",
+    "soxs",
+]
+
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 napoleon_use_param = False
