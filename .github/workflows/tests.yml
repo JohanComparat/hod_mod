@@ -24,6 +24,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install numpy scipy astropy matplotlib h5py pandas pyyaml tqdm
+          pip install pooch platformdirs
           pip install "jax[cpu]"
           pip install emcee
           pip install camb colossus
