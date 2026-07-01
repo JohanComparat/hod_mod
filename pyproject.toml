@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hod_mod"
-version = "0.1.2"
+version = "0.1.3"
 description = "HOD galaxy clustering and weak lensing prediction and fitting"
 authors = [{name = "Johan Comparat", email = "johan.comparat@pm.me"}]
 readme = "README.md"
@@ -32,9 +32,11 @@ hod-mod = "hod_mod.cli.__main__:main"
 [project.optional-dependencies]
 fitting   = ["emcee", "pyyaml", "pandas"]
 dev       = ["pytest", "pytest-cov", "sphinx", "sphinx-rtd-theme", "numpydoc"]
-csst      = ["CEmulator @ git+https://github.com/czymh/csstemu"]
-aemulusnu = ["aemulusnu_hmf @ git+https://github.com/DelonShen/aemulusnu_hmf"]
-emulators = ["hod_mod[csst,aemulusnu]"]
+# Optional emulator backends are git-only (not on PyPI). They are NOT declared as
+# extras here because PyPI forbids direct-URL dependencies in uploaded metadata.
+# Install them manually when you need make_hmf("csst") / make_hmf("aemulusnu"):
+#   pip install git+https://github.com/czymh/csstemu
+#   pip install git+https://github.com/DelonShen/aemulusnu_hmf
 
 [tool.setuptools.packages.find]
 where = ["."]

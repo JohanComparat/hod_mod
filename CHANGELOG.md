@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] — 2026-07-01
+
+Packaging fix so the project can be published to PyPI.
+
+- Removed the ``csst`` / ``aemulusnu`` / ``emulators`` optional-dependency extras:
+  they referenced git-only packages via direct ``git+https`` URLs, which PyPI
+  forbids in uploaded metadata (400 Bad Request). These emulator backends are
+  documented as manual installs instead
+  (``pip install git+https://github.com/czymh/csstemu`` etc.; see
+  ``docs/cosmology.rst``). No runtime behaviour change.
+
 ## [0.1.2] — 2026-07-01
 
 Documentation now mirrors the refactored repository; all links verified.
