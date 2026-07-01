@@ -1,3 +1,5 @@
+:orphan:
+
 BGS M10 MAP Fits — Linear vs Non-Linear 2-Halo Models
 ======================================================
 

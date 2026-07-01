@@ -28,7 +28,7 @@ Overview
 This benchmark tests the ``ZuMandelbaum15HODModel`` against **real digitized measurements**
 from Figure 6 of Zu & Mandelbaum 2015, for each of the 7 iHOD stellar-mass bins
 simultaneously.  Unlike the threshold-sample benchmark
-(:ref:`benchmark_zumandelbaum2015`), which used model-anchored data, here the data
+(the single-threshold Zu & Mandelbaum 2015 benchmark), which used model-anchored data, here the data
 are actual digitized point estimates from the paper figure.
 
 The model uses the *bin HOD*: for bin :math:`[M_\mathrm{lo}, M_\mathrm{hi}]`,
@@ -331,4 +331,4 @@ All commands assume ``PYTHONPATH=/path/to/hod_mod`` and the ``halomod`` conda en
     # 5. Joint MCMC (slow)
     python hod_mod/scripts/benchmarks/run_zm15_joint_all.py --mcmc
 
-See :ref:`benchmarks` for the full benchmark suite summary.
+See the other benchmark pages for the full suite summary.

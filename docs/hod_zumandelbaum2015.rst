@@ -1219,7 +1219,7 @@ amplitudes.  AGN are treated as unresolved point sources so their template is
 :math:`C_\ell^{gX,\mathrm{AGN}}`), avoiding a spurious 2-halo hump at large
 :math:`\theta` in the AGN component.
 
-.. figure:: ../_images/direct_prediction_S1_fig7_wtheta-1.png
+.. figure:: _images/direct_prediction_S1_fig7_wtheta-1.png
    :width: 90%
    :alt: BGS S1 w_theta decomposition
 
