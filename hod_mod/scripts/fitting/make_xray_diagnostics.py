@@ -155,6 +155,32 @@ def fig_band_validation(SS):
     fig.tight_layout(); _save(fig, "band_validation")
 
 
+def fig_band_params_vs_mass():
+    """Phase-B params vs stellar mass — only if the band-fit summaries exist."""
+    r = JB._OUT_DIR
+    rows = {}
+    for s in _SAMPLES:
+        f = os.path.join(r, f"{s}_bands_summary.json")
+        if os.path.isfile(f):
+            rows[s] = json.load(open(f))
+    if len(rows) < 2:
+        print("  (band-fit summaries not found - skipping Phase-B params figure; "
+              "run fit_xray_joint_bands --mcmc first)", flush=True)
+        return
+    ss = list(rows)
+    ms = [F.SAMPLES[s]["log10ms_min"] for s in ss]
+    keys = JB._PARAMS
+    fig, axs = plt.subplots(2, 3, figsize=(11, 6.5))
+    for a, key in zip(axs.ravel(), keys):
+        med = [rows[s]["posterior"][key]["median"] for s in ss]
+        lo = [rows[s]["posterior"][key]["lo"] for s in ss]
+        hi = [rows[s]["posterior"][key]["hi"] for s in ss]
+        a.errorbar(ms, med, yerr=[lo, hi], fmt="o-", capsize=3, color="C2")
+        a.set_xlabel(r"$\log_{10}(M_\star^{\rm thr}/M_\odot)$"); a.set_ylabel(key, fontsize=9)
+    fig.suptitle("Energy-band (Phase B) fit: physical parameters vs sample", fontsize=11)
+    fig.tight_layout(); _save(fig, "bands_params_vs_mass")
+
+
 def _save(fig, name):
     os.makedirs(_OUT, exist_ok=True)
     p = os.path.join(_OUT, name + ".png")
@@ -170,6 +196,7 @@ def main():
     fig_band_energy(SS)
     fig_band_ratios(SS)
     fig_band_validation(SS)
+    fig_band_params_vs_mass()
     print(f"Done -> {_OUT}", flush=True)
 
 
