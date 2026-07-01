@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] — 2026-07-01
+
+Documentation now mirrors the refactored repository; all links verified.
+
+- ``docs/scripts.rst`` rewritten to the current ``scripts/`` layout — removed
+  ~15 references to scripts deleted in the refactor (demos, ``run_pipeline``/
+  ``run_inference``, ``utils/``, ``gama/``/``cosmos/`` fits).
+- Replaced all remaining hardcoded paths in the docs with the ``$HOD_MOD_*``
+  env-var forms; fixed ``paper_reproductions/more2015_boss_cmass.py`` to read the
+  real ``configs/hod_fit_more2015_cmass.yml``.
+- Verified **all links** with a Sphinx build: fixed a broken ``../_images`` figure
+  ref, a missing ``bgs_ls10_wp_survey`` label, a toctree entry to an excluded page,
+  5 dangling ``:ref:`` cross-references, and a dead external repo link; every other
+  internal cross-reference, figure, and external URL resolves.
+
 ## [0.1.1] — 2026-06-30
 
 Repository hygiene and reproducible paths. No public-API symbol changes.

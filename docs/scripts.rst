@@ -2,11 +2,9 @@ Scripts
 =======
 
 All runnable entry-points live under ``scripts/``, organised by topic.
-Demo scripts are self-contained and produce a matplotlib figure.
-Fitting scripts read survey data and write results to ``results/``.
-
-The legacy ``scripts/nb_*.py`` and the old batch shells (``run_fit_*.sh``)
-are deprecated; use the per-campaign scripts described here instead.
+Figure-generating scripts are self-contained and produce a matplotlib figure;
+fitting scripts read survey data and write results to ``results_root()``
+(``$HOD_MOD_RESULTS``, outside the repo — see :ref:`data_hosting`).
 
 ---
 
@@ -16,41 +14,24 @@ Directory map
 .. code-block:: text
 
     scripts/
-    ├── cosmology/               demo scripts — cosmological quantities
-    ├── galaxies/                demo scripts — HOD, SHAM, clustering
-    ├── agn/                     demo scripts — AGN luminosity functions
+    ├── cosmology/               P(k), HMF and bias documentation figures
+    ├── galaxies/                HOD / AGN / gas figures, K-correction + eROSITA tables
     ├── fitting/
     │   ├── bgs_ls10/            HOD fitting on BGS/LS10 real data
     │   ├── mocks/               HOD fitting on Uchuu mock data
-    │   ├── gama/                SMF visualisation + SHAM overlay for GAMA
-    │   ├── cosmos/              SMF visualisation + SHAM overlay for COSMOS
     │   └── paper_reproductions/ reproduce published HOD fits
-    ├── utils/                   batch helpers and diagnostic tools
-    ├── run_pipeline.py          one-shot forward-model evaluation
-    ├── run_inference.py         numpyro HMC posterior sampling
-    └── fit_hod_wp.py            thin wrapper around WpFitter (legacy configs)
+    ├── benchmarks/              benchmark reproductions and their plots
+    ├── data/                    data extraction + Zenodo registry helpers
+    ├── figures/                 documentation-figure generators
+    ├── timing/                  CPU/GPU timing benchmarks
+    ├── validate_*.py            gas-profile / cross-correlation validation
+    ├── fit_hod_wp.py            thin wrapper around WpFitter
+    └── direct_prediction_gal_gas_agn.py   galaxy × gas × AGN forward prediction
 
 ---
 
-Cosmology demos
----------------
-
-``scripts/cosmology/demo_distances.py``
-    Computes and plots comoving distance :math:`\chi(z)`, angular diameter distance
-    :math:`D_A(z)`, luminosity distance :math:`D_L(z)`, and lookback time for the
-    Planck 2018 cosmology.
-    **Runtime**: < 5 s.
-
-``scripts/cosmology/demo_power_spectrum.py``
-    Plots the linear matter power spectrum :math:`P(k,z)` from CAMB and the
-    Eisenstein-Hu 1998 fitting formula, and the non-linear :math:`P(k)` from the
-    Aletheia emulator.
-    **Runtime**: 30–60 s (CAMB run).
-
-``scripts/cosmology/demo_power_spectrum_diff.py``
-    Computes logarithmic derivatives :math:`d\ln P / d\ln\theta_i` by finite
-    differences around the Planck 2018 best-fit for each cosmological parameter.
-    **Runtime**: 2–4 min (one CAMB run per parameter).
+Cosmology figures
+-----------------
 
 ``hod_mod/scripts/cosmology/plot_nonlinear_power_spectrum.py``
     Generates ``docs/_images/fig01b_nonlinear_power_spectrum.png`` comparing all
@@ -70,31 +51,10 @@ Cosmology demos
     **Runtime**: < 60 s.
     Run as: ``JAX_PLATFORMS=cpu python -m hod_mod.scripts.cosmology.plot_hmf_bias``
 
-``scripts/cosmology/demo_halo_mass_function.py``
-    Plots :math:`dn/dM`, :math:`\sigma(M)`, and halo bias :math:`b(M)` at several
-    redshifts using the Tinker+2008 multiplicity function.
-    **Runtime**: < 30 s.
-
-``scripts/cosmology/demo_halo_profiles.py``
-    Plots NFW and Einasto 3D density profiles :math:`\rho(r)`, projected surface
-    density :math:`\Sigma(R)`, and excess surface density :math:`\Delta\Sigma(R)`.
-    **Runtime**: < 30 s.
-
 ---
 
-Galaxy / HOD demos
-------------------
-
-``scripts/galaxies/demo_hod_models.py``
-    Compares the central occupation :math:`\langle N_{\rm cen}(M)\rangle` and satellite
-    occupation :math:`\langle N_{\rm sat}(M)\rangle` for the five main HOD parametrisations
-    (Zheng+2007, More+2015, Guo+2018, ZM15 iHOD) as a function of halo mass.
-    **Runtime**: < 10 s.
-
-``scripts/galaxies/demo_clustering_full.py``
-    Predicts :math:`w_p(r_p)` and :math:`\Delta\Sigma(R)` using
-    ``FullHaloModelPrediction`` (1-halo + 2-halo) for a BOSS CMASS-like HOD.
-    **Runtime**: 1–2 min.
+Galaxy / HOD / AGN figures
+--------------------------
 
 ``scripts/galaxies/plot_agn_ham_model.py``
     Verification script for :class:`~hod_mod.agn.ham.HamAGNModel`.
@@ -133,9 +93,9 @@ Galaxy / HOD demos
     Fitted parameters: :math:`\theta_c = 8.64''`, :math:`\alpha = 1.502`,
     FWHM = 13.2'' (on-axis).
     Requires the CalDB files at
-    ``/home/comparat/data/erosita/caldb_221121v03/caldb/srv-0500-2000/tm{1..7}_2dpsf_221121v03.fits``
+    ``$HOD_MOD_DATA_DIR/erosita/caldb_221121v03/caldb/srv-0500-2000/tm{1..7}_2dpsf_221121v03.fits``
     and ``astropy`` in the active environment.
-    Output: ``results/psf/erosita_psf_king_fit.png``.
+    Output: ``$HOD_MOD_RESULTS/psf/erosita_psf_king_fit.png``.
     **Runtime**: ~30 s.
 
 ---
@@ -188,7 +148,7 @@ BGS/LS10 real data — More+2015 HOD
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Input data: ``sum_stat`` HDF5 files in
-``~/software/sum_stat/data/twopcf/``.
+``$HOD_MOD_SUMSTAT/twopcf/``.
 File pattern::
 
     LS10_VLIM_ANY_Mstar{MSTAR_LO}-12.0_z{Z_MIN}-{Z_MAX}-wp-pimax100-sys-comb.h5
@@ -234,7 +194,7 @@ Uchuu mock data — More+2015 HOD with Planck prior
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Input data: ``sum_stat`` HDF5 files in
-``~/software/sum_stat/data/mocks/twopcf/``.
+``$HOD_MOD_SUMSTAT/mocks/twopcf/``.
 File pattern::
 
     MOCK_VLIM_ANY_Mstar{MSTAR}_{Z_MIN}-{Z_MAX}-wp-pimax100.h5
@@ -256,35 +216,12 @@ Outputs::
     results/mocks/mstar{XX}/map_result.json
     results/mocks/mstar{XX}/flatchain.npz
 
-GAMA stellar mass functions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Loads FITS files from ``~/software/sum_stat/data/GAMA/`` and overlays a
-Moster+2013 SHAM prediction on the observed SMF::
-
-    python scripts/fitting/gama/fit_gama_smf_wp.py
-    python scripts/fitting/gama/fit_gama_smf_wp.py --output results/gama/smf_comparison.pdf
-
-.. note::
-   A full HOD-based SMF fit requires a differential conditional stellar mass
-   function (CSMF) predictor that integrates the HOD over the HMF.  This component
-   is planned for a future release.  The current script is a data-exploration and
-   validation tool.
-
-COSMOS stellar mass functions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Same approach over six COSMOS photometric redshift bins (z = 0.2–3.0)::
-
-    python scripts/fitting/cosmos/fit_cosmos_smf_wp.py
-    python scripts/fitting/cosmos/fit_cosmos_smf_wp.py --output results/cosmos/smf_comparison.pdf
-
 Paper reproductions
 ~~~~~~~~~~~~~~~~~~~
 
 ``scripts/fitting/paper_reproductions/more2015_boss_cmass.py``
     Reproduces the More+2015 HOD fit to BOSS CMASS :math:`w_p(r_p)`.
-    Reads ``configs/more2015_boss_cmass.yml``.
+    Reads ``configs/hod_fit_more2015_cmass.yml``.
     **Runtime**: MAP ~ 3 min; MAP + MCMC (300 steps × 64 walkers) ~ 2 h.
 
 ---
@@ -433,38 +370,20 @@ galaxy × gas cross-correlation measurements.
 
 ---
 
-Core pipeline scripts
----------------------
-
-``scripts/run_pipeline.py``
-    Evaluates the full ``GGAPipeline`` forward model at the default Planck 2018
-    cosmology and prints :math:`n_{\rm gal}`, :math:`b_{\rm eff}`, and array shapes::
-
-        python scripts/run_pipeline.py --z 0.3 --hmf tinker08 --plot
-
-``scripts/run_inference.py``
-    Runs numpyro NUTS HMC posterior sampling::
-
-        python scripts/run_inference.py --num-warmup 500 --num-samples 1000
+Other scripts
+-------------
 
 ``scripts/fit_hod_wp.py``
-    Thin CLI wrapper around ``WpFitter`` for use with legacy YAML configs::
+    Thin CLI wrapper around :class:`~hod_mod.fitting.fitters.WpFitter` for a single
+    YAML config::
 
-        python scripts/fit_hod_wp.py configs/hod_fit_more2015_cmass.yml --plot
+        python -m hod_mod.scripts.fit_hod_wp configs/hod_fit_more2015_cmass.yml --plot
 
----
+``scripts/direct_prediction_gal_gas_agn.py``
+    One-shot galaxy × gas × AGN forward prediction for a chosen BGS sample, writing
+    the seven diagnostic figures shown in :doc:`direct_prediction_gal_gas` under
+    ``$HOD_MOD_RESULTS``.
 
-Utility scripts
----------------
-
-``scripts/utils/gather_inputs_sum_stat.py``
-    Scans the ``sum_stat`` data directory and builds a manifest of available HDF5
-    files with their stellar-mass and redshift ranges.
-
-``scripts/utils/make_result_figures.py``
-    Post-processing script that reads ``results/*/flatchain.npz`` and produces
-    corner plots and bestfit overlays.
-
-``scripts/utils/measure_timing.py``
-    Profiles the wall-clock time of each pipeline stage (CAMB, HMF, NFW projection,
-    HOD integral, w_p Limber integral) with and without JAX JIT warm-up.
+``scripts/timing/time_joint_model.py`` and ``scripts/timing/bench_bgs_zm15_joint.py``
+    CPU/GPU wall-clock benchmarks of the joint forward model (see
+    :ref:`timing_joint_model`).

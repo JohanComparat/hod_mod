@@ -114,7 +114,7 @@ must stay deliberate), with two helper scripts to do the heavy lifting:
 
       python hod_mod/scripts/data/upload_zenodo.py --sandbox --from-registry
       python hod_mod/scripts/data/upload_zenodo.py --from-registry \
-          --extra ~/data/zenodo/LSDR10_GALxEVT
+          --extra $HOD_MOD_DATA_DIR/zenodo/LSDR10_GALxEVT
 
    Review the draft in the Zenodo web UI and click **Publish**.
 

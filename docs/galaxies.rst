@@ -417,7 +417,7 @@ along the line of sight — analogous to :math:`W_g(\chi)` in
 the absence of a dedicated eROSITA survey window, the galaxy redshift kernel
 :math:`n(z)` of the cross-correlated sample is used as a proxy for
 :math:`W_X`, so this is a forward-model prediction with no associated data
-(see :ref:`benchmark_comparat2025`, § *Diagnostic predictions*).
+(see the Comparat+2025 benchmark, § *Diagnostic predictions*).
 
 Observable projections
 ~~~~~~~~~~~~~~~~~~~~~~

@@ -1,3 +1,5 @@
+:orphan:
+
 BGS M10 Non-Linear 2-Halo Survey — All HOD Models × :math:`P_{\rm nl}` Backends
 ===================================================================================
 

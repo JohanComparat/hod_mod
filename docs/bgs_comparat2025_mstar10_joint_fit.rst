@@ -22,7 +22,7 @@ Data file::
 (Johnston+2007), CDM+gas baryon-fraction split (Mead+2015/IllustrisTNG), point-mass stellar
 term, free More+2015 incompleteness.  14 free parameters in total; fixed Planck 2018 cosmology.
 
-See :ref:`benchmarks_joint` for the benchmark context.
+See the joint benchmark suite for the benchmark context.
 
 ----
 
