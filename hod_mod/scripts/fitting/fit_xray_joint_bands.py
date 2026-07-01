@@ -280,6 +280,73 @@ def _anchor_c_total_S1(S):
     return best[1], best[0]
 
 
+def _components_bands(p, S):
+    """Gas and AGN (Nb, Ntheta) model for band params p on sample S."""
+    ln, kt, beta, p2, rmax, dc = p
+    gas = (S["c_total"] * (10.0 ** (ln - np.log10(_NE03_FID))) ** 2
+           * S["interp"]([[p2, rmax, beta, kt]])[0].reshape(_NB, -1))
+    agn = 10.0 ** dc * S["c_obs_total"] * (S["fb"][:, None] * S["agn_dc1"][None, :])
+    return gas, agn
+
+
+def _figures_bands(tag, samples, flat, chain_full, lp_full, nburn, map_p, out_dir):
+    """Complete band-fit diagnostics: traces, corner, and per-sample band spectra
+    (data w_b vs energy + model) and soft/hard band-ratio vs theta."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    ecen = np.array([0.5 * (lo + hi) for lo, hi in _BAND_EDGES])
+    np_ = len(_PARAMS)
+
+    # traces
+    fig, axs = plt.subplots(np_ + 1, 1, figsize=(8, 1.5 * (np_ + 1)), sharex=True)
+    for i, p in enumerate(_PARAMS):
+        axs[i].plot(chain_full[:, :, i], color="C0", alpha=0.12, lw=0.5)
+        axs[i].set_ylabel(p, fontsize=8); axs[i].axvline(nburn, color="C3", ls=":")
+    axs[-1].plot(lp_full, color="C0", alpha=0.12, lw=0.5)
+    axs[-1].set_ylabel("log prob", fontsize=8); axs[-1].axvline(nburn, color="C3", ls=":")
+    axs[-1].set_xlabel("step")
+    axs[0].set_title(f"{tag}: band MCMC traces (red = burn-in {nburn})", fontsize=9)
+    fig.tight_layout(); fig.savefig(os.path.join(out_dir, f"{tag}_bands_traces.png"), dpi=110)
+    plt.close(fig)
+
+    # corner
+    try:
+        import corner
+        fig = corner.corner(flat, labels=_PARAMS, truths=list(map_p))
+        fig.savefig(os.path.join(out_dir, f"{tag}_bands_corner.png"), dpi=110); plt.close(fig)
+    except Exception as e:
+        print(f"  (corner skipped: {e})", flush=True)
+
+    # per-sample: band spectrum (w_b vs energy) at 2 angular scales + soft/hard ratio
+    for s, S in samples.items():
+        th = S["th_as"]; wd = S["wtheta"]; err = S["err"]
+        gas_m, agn_m = _components_bands(map_p, S); tot_m = gas_m + agn_m
+        fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 4.5))
+        for th0, c in [(10.0, "C0"), (40.0, "C1")]:
+            j = int(np.argmin(np.abs(th - th0)))
+            a1.errorbar(ecen, wd[:, j], yerr=err[:, j], fmt="o", ms=3, color=c,
+                        label=fr"data $\theta$≈{th[j]:.0f}″")
+            a1.plot(ecen, tot_m[:, j], "-", color=c)
+        a1.set_xlabel("band energy [keV]"); a1.set_ylabel(r"$w_b(\theta)$")
+        a1.set_title(f"{s}: band spectrum (pts=data, line=model)", fontsize=9)
+        a1.legend(fontsize=7); a1.axhline(0, color="grey", lw=0.5)
+        # soft/hard ratio vs theta: data vs model
+        m = S["mask"]
+        def ratio(w):
+            soft = np.nansum(w[0:4], axis=0); hard = np.nansum(w[10:15], axis=0)
+            return soft, hard
+        sd, hd = ratio(wd); sm, hm = ratio(tot_m)
+        good = m & np.isfinite(sd) & np.isfinite(hd) & (hd > 0)
+        a2.plot(th[good], (sd / hd)[good], "ko", ms=3, label="data")
+        a2.plot(th[good], (sm / hm)[good], "C0-", label="model")
+        a2.set_xscale("log"); a2.set_xlabel(r"$\theta$ [arcsec]")
+        a2.set_ylabel("soft(0.5-0.9)/hard(1.5-2.0)")
+        a2.set_title(f"{s}: band ratio (temperature)", fontsize=9); a2.legend(fontsize=8)
+        fig.tight_layout(); fig.savefig(os.path.join(out_dir, f"{s}_bands_spectrum.png"), dpi=110)
+        plt.close(fig)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--samples", nargs="+", default=list(F.SAMPLES))
@@ -287,7 +354,13 @@ def main(argv=None):
     ap.add_argument("--f-sys", type=float, default=0.05)
     ap.add_argument("--grid-tiny", action="store_true", help="2^4 grid smoke test")
     ap.add_argument("--map-only", action="store_true")
+    ap.add_argument("--mcmc", action="store_true",
+                    help="after the MAP, run emcee over the shared band params")
+    ap.add_argument("--nwalkers", type=int, default=64)
+    ap.add_argument("--nsteps", type=int, default=8000)
+    ap.add_argument("--nburn", type=int, default=2000)
     args = ap.parse_args(argv)
+    tag = "_".join(args.samples)   # per-run tag so parallel runs do not clobber
 
     p2g, rg, bg_, ktg = _grids(args.grid_tiny)
     fb = _agn_band_fractions()
@@ -302,7 +375,7 @@ def main(argv=None):
         samples[s] = dict(interp=interp, agn_dc1=agn_dc1, wtheta=bd["wtheta"], err=err,
                           mask=mask, fb=fb, c_obs_total=J._c_obs_total(s),
                           srx=float(F.load_data(s)["beckground"][0]),
-                          axes=(p2g, rg, bg_, ktg),
+                          axes=(p2g, rg, bg_, ktg), th_as=bd["theta_arcsec"],
                           n_pts=int(mask.sum()) * _NB)
         print(f"[{s}] band grid ready, n_pts={samples[s]['n_pts']}", flush=True)
 
@@ -346,7 +419,7 @@ def main(argv=None):
     out["chi2"] = chi2; out["ndof"] = ndof; out["chi2_per_dof"] = chi2 / ndof
     out["chi2_per_sample"] = {s: float(_chi2_sample(map_p, S)) for s, S in samples.items()}
     os.makedirs(_OUT_DIR, exist_ok=True)
-    outf = os.path.join(_OUT_DIR, "joint_bands_map.json")
+    outf = os.path.join(_OUT_DIR, f"joint_bands_map_{tag}.json")
     with open(outf, "w") as fh:
         json.dump(out, fh, indent=2)
     print("\n=== JOINT BAND MAP ===")
@@ -357,6 +430,47 @@ def main(argv=None):
     for s, v in out["chi2_per_sample"].items():
         print(f"    {s}: chi2={v:.1f} ({samples[s]['n_pts']} pts)")
     print(f"\nSaved -> {outf}", flush=True)
+
+    if args.map_only or not args.mcmc:
+        return out
+
+    # ---- MCMC over the shared band params (cached-grid likelihood: fast) ----
+    import emcee
+    ndim = len(_PARAMS); nw = args.nwalkers
+    rng = np.random.default_rng(42)
+    p0 = map_p + 1e-3 * rng.standard_normal((nw, ndim)) * np.ptp(bnds, axis=1)
+    p0 = np.clip(p0, bnds[:, 0] + 1e-6, bnds[:, 1] - 1e-6)
+
+    def logp(p):
+        v = nlp(p)
+        return -v if v < 1e29 else -np.inf
+
+    sampler = emcee.EnsembleSampler(nw, ndim, logp)
+    print(f"\nBAND MCMC: {nw} walkers × {args.nsteps} steps ({tag}) ...", flush=True)
+    t0 = time.time()
+    sampler.run_mcmc(p0, args.nsteps, progress=False)
+    print(f"MCMC done in {time.time()-t0:.0f}s; mean acceptance="
+          f"{np.mean(sampler.acceptance_fraction):.2f}", flush=True)
+
+    flat = sampler.get_chain(discard=args.nburn, flat=True)
+    np.savez(os.path.join(_OUT_DIR, f"{tag}_bands_chain.npz"),
+             flatchain=flat, log_prob=sampler.get_log_prob(discard=args.nburn, flat=True),
+             chain=sampler.get_chain(), lp=sampler.get_log_prob(), params=_PARAMS,
+             nburn=args.nburn, c_total={s: S["c_total"] for s, S in samples.items()})
+    pct = np.percentile(flat, [16, 50, 84], axis=0)
+    post = {p: dict(median=float(pct[1, i]), lo=float(pct[1, i] - pct[0, i]),
+                    hi=float(pct[2, i] - pct[1, i])) for i, p in enumerate(_PARAMS)}
+    with open(os.path.join(_OUT_DIR, f"{tag}_bands_summary.json"), "w") as fh:
+        json.dump(dict(samples=args.samples, map=out,
+                       acceptance=float(np.mean(sampler.acceptance_fraction)),
+                       posterior=post), fh, indent=2)
+    print("Posterior (median +hi -lo):", flush=True)
+    for i, p in enumerate(_PARAMS):
+        print(f"  {p:12s} = {pct[1,i]:.3f} +{pct[2,i]-pct[1,i]:.3f} -{pct[1,i]-pct[0,i]:.3f}",
+              flush=True)
+    _figures_bands(tag, samples, flat, sampler.get_chain(), sampler.get_log_prob(),
+                   args.nburn, map_p, _OUT_DIR)
+    print(f"Saved BAND MCMC chain/summary/figures -> {_OUT_DIR}", flush=True)
     return out
 
 

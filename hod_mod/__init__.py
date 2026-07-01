@@ -1,6 +1,6 @@
 """hod_mod — HOD galaxy clustering and weak lensing prediction and fitting."""
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 from .core import (
     LinearPowerSpectrum,
