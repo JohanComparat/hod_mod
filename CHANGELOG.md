@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.5] — 2026-07-01
+
+- ``docs/conf.py`` sets ``autodoc_mock_imports`` for the heavy/optional backends
+  (``camb``, ``colossus``, ``AletheiaCosmo``, ``CEmulator``, ``aemulusnu_hmf``,
+  ``soxs``) so a ReadTheDocs build still succeeds if one fails to import at
+  build time. JAX is intentionally left real so ``jax.jit``-decorated functions
+  keep their signatures in the API docs. Local build verified: 29 pages, no
+  autodoc import failures.
+
 ## [0.1.4] — 2026-07-01
 
 - ``docs/Makefile`` now invokes ``python -m sphinx`` (via a ``PYTHON`` variable)
