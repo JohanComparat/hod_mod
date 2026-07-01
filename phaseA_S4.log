@@ -1,0 +1,36 @@
+nohup: ignoring input
+soxs : [WARNING  ] 2026-07-01 07:55:09,475 Setting 'soxs_data_dir' to /home/comparat/.cache/soxs for this session. Please update your configuration if you want it somewhere else.
+Building APEC cooling table (takes ~10 s) ...
+  APEC table ready.
+[S4] grid ready, n_pts=31
+
+Full-APEC anchor on S4: c_total=8.090e+01 (best shape p2/r_max/beta=(0.6, 5.0, 0.9), unconstrained chi2=30.5); density-only B._c_total=4.815e-08
+
+Joint MAP over 1 samples, 31 data points, 5 shared params ...
+  start [-4.31  0.9   2.    3.   -2.  ] -> chi2=25.2
+  start [-4.01  0.6   1.5   3.5  -1.5 ] -> chi2=25.1
+  start [-4.61  1.6   2.4   3.   -2.5 ] -> chi2=346.9
+  start [-4.31  1.2   3.    5.   -1.  ] -> chi2=2000000000000000039769249677312.0
+  start [-3.81  0.4   1.5   2.5  -2.  ] -> chi2=2000000000000000039769249677312.0
+
+=== JOINT MAP ===
+  log10_ne_03    = -3.8925
+  beta_gas       = +0.6762
+  p2             = +0.2048
+  r_max          = +4.8896
+  log10DC        = -1.4932
+  density_norm   = 2.630
+  chi2/dof       = 25.1/26 = 0.967
+    S4: chi2=25.1 (31 pts)
+
+Saved -> /home/comparat/data/hod_mod_results/xray_joint/joint_map_S4.json
+
+MCMC: 64 walkers × 8000 steps (S4) ...
+MCMC done in 48s; mean acceptance=0.18
+Posterior (median +hi -lo):
+  log10_ne_03  = -3.945 +0.119 -0.119
+  beta_gas     = 0.673 +0.148 -0.170
+  p2           = 0.249 +0.091 -0.047
+  r_max        = 4.002 +0.694 -0.696
+  log10DC      = -1.508 +0.027 -0.028
+Saved MCMC chain/summary/figures -> /home/comparat/data/hod_mod_results/xray_joint

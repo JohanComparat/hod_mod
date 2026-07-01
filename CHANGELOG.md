@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] — 2026-07-01
+
+- ``docs/Makefile`` now invokes ``python -m sphinx`` (via a ``PYTHON`` variable)
+  instead of the bare ``sphinx-build`` console script, so ``make html`` works
+  whenever the active Python has Sphinx — no dependency on the console script
+  being on ``$PATH``. Override with ``make html PYTHON=/path/to/python``.
+
 ## [0.1.3] — 2026-07-01
 
 Packaging fix so the project can be published to PyPI.
