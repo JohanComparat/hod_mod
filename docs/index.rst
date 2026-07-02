@@ -20,6 +20,8 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
 
    overview
    forward_model_showcase
+   sensitivity_fisher
+   stage4_forecast
    data_formats
    data_hosting
    scripts
