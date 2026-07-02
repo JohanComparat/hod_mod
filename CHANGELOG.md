@@ -2,6 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] — 2026-07-02
+
+The **differentiable sensitivity / Fisher forecast** of the full
+ZM15 + X-ray gas + AGN pipeline, plus the physical AGN X-ray luminosity-function
+model it uses, and a large test-coverage extension of the new code.
+
+### Added
+
+- **`hod_mod.forecast`** — a pure-JAX forward model whose whole chain (cosmology
+  included, via the analytic Eisenstein & Hu 1998 transfer function instead of
+  CAMB) is one differentiable function, so the Fisher Jacobian
+  `∂d/∂θ` is a single `jax.jacfwd`:
+  - `forward_jax.ForwardModel` — 31-parameter → 12-observable forward model
+    (`w_p`, `ΔΣ`, `C_ℓ^{gX,gy,XX,κκ,κκ_c,gκ_c,κκ_c}`, `Φ(L_X)`, `n_gal`, `Φ(M_*)`),
+    with a shared hot-gas/baryon sector linking the ΔΣ/cosmic-shear baryon split to
+    the X-ray and tSZ amplitudes, and an optional energy-closure baryon mode.
+  - `pk_eisenstein_hu.EisensteinHu98PkLinear` — σ8-parameterised, differentiable
+    EH98 linear `P(k)`.
+  - `fisher` — Fisher assembly (diagonal or full analytic covariance), eigen-floored
+    constraints, figure of merit, degeneracy ranking, principal directions and
+    per-probe decomposition; `covariance` — analytic Gaussian covariance with the
+    lensing-triplet cross-correlations; `params` — fiducials/priors/labels;
+    `tomography.TomographicForecast` — shared-cosmology, per-bin-HOD multi-sample
+    Jacobian.
+- **`hod_mod.agn.powell.PowellAGNModel`** — the physical Powell (2022) AGN–halo
+  model forward-modelling the AGN X-ray luminosity function (ZM15 SHMR → free
+  `M_BH`–`M_*` relation → universal Ananna 2022 Eddington-ratio distribution),
+  validated standalone against the Aird+2015 hard XLF; added as the 7-parameter
+  `xlf` observable of the forecast.
+- **`hod_mod.scripts.forecasts`** — `run_sensitivity_study`, `make_sensitivity_figures`,
+  `make_forward_diagram` (the structure-of-the-prediction diagram) and
+  `run_stage4_forecast`; `scripts.fitting.fit_powell_agn`.
+- **Documentation** — two new pages wired into the toctree: `sensitivity_fisher`
+  (the pedagogical scale-cut/degeneracy-breaking study, with a new appendix that
+  writes out the forward model *equation by equation* and a colour-coded flow
+  diagram linking the 31 equations) and `stage4_forecast` (realistic multi-survey
+  error budget).
+
+### Tests
+
+- 59 new tests for the forecast/AGN code: `test_forecast_fisher`,
+  `test_forecast_params`, `test_forecast_covariance`, `test_forecast_pk_eh98`,
+  `test_forecast_tomography` and `test_forecast_forward` (fast primitives + a
+  tiny-grid `ForwardModel` smoke test asserting every observable is finite and the
+  exact active-fraction identity `∂lnΦ/∂log10 f_ERDF = ln 10`), plus
+  `test_powell_agn` (ERDF shape, XLF positivity/decline, convolution-vs-Monte-Carlo,
+  occupation/bias/emissivity). These run in the default `tests/` suite (the heavy
+  production-match / finite-difference validation stays in
+  `hod_mod/forecast/tests/`).
+
 ## [0.1.5] — 2026-07-01
 
 - ``docs/conf.py`` sets ``autodoc_mock_imports`` for the heavy/optional backends
