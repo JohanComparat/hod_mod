@@ -169,26 +169,31 @@ def fig_band_params_vs_mass():
         return
     ss = list(rows)
     ms = [F.SAMPLES[s]["log10ms_min"] for s in ss]
-    keys = JB._PARAMS
-    fig, axs = plt.subplots(2, 3, figsize=(11, 6.5))
+    # v2: the 4 free scaling-relation params + p2/r_max/log10DC; mark GAS.py centrals.
+    keys = [k for k in JB._PARAMS if k in rows[ss[0]]["posterior"]]
+    ncol = 4; nrow = int(np.ceil(len(keys) / ncol))
+    ref = dict(zip(["lx_norm", "lx_slope", "kt_norm", "kt_slope"], JB._PRIOR_MU)) \
+        if hasattr(JB, "_PRIOR_MU") else {}
+    fig, axs = plt.subplots(nrow, ncol, figsize=(3 * ncol, 3 * nrow))
     for a, key in zip(axs.ravel(), keys):
         med = [rows[s]["posterior"][key]["median"] for s in ss]
         lo = [rows[s]["posterior"][key]["lo"] for s in ss]
         hi = [rows[s]["posterior"][key]["hi"] for s in ss]
         a.errorbar(ms, med, yerr=[lo, hi], fmt="o-", capsize=3, color="C2")
+        if key in ref:
+            a.axhline(ref[key], color="grey", ls="--", lw=0.9, label="GAS.py")
+            a.legend(fontsize=6)
         a.set_xlabel(r"$\log_{10}(M_\star^{\rm thr}/M_\odot)$"); a.set_ylabel(key, fontsize=9)
-    fig.suptitle("Energy-band (Phase B) fit: physical parameters vs sample", fontsize=11)
+    for a in axs.ravel()[len(keys):]:
+        a.axis("off")
+    fig.suptitle("Energy-band fit: free LX-M & kT-M relation params vs sample "
+                 "(dashed = GAS.py central)", fontsize=11)
     fig.tight_layout(); _save(fig, "bands_params_vs_mass")
 
 
 def fig_phaseA_vs_B():
     """Compare the broad-band (Phase A) and energy-band (Phase B) posteriors for the
     parameters they share, per sample, with the grid bounds marked (rail check)."""
-    keys = ["beta_gas", "p2", "r_max", "log10DC"]
-    bounds = {"beta_gas": (J._BOUNDS[1, 0], J._BOUNDS[1, 1]),
-              "p2": (J._BOUNDS[2, 0], J._BOUNDS[2, 1]),
-              "r_max": (J._BOUNDS[3, 0], J._BOUNDS[3, 1]),
-              "log10DC": (J._BOUNDS[4, 0], J._BOUNDS[4, 1])}
     A, Bd = {}, {}
     for s in _SAMPLES:
         fa = os.path.join(J._OUT_DIR, f"{s}_bb_summary.json")
@@ -201,8 +206,15 @@ def fig_phaseA_vs_B():
         print("  (need both Phase-A and Phase-B summaries - skipping comparison)", flush=True)
         return
     ss = [s for s in _SAMPLES if s in A and s in Bd]
+    # compare only params present in BOTH parametrisations (Phase B v2 dropped beta_gas)
+    keys = [k for k in ["p2", "r_max", "log10DC"]
+            if k in A[ss[0]]["posterior"] and k in Bd[ss[0]]["posterior"]]
+    bounds = {"p2": (J._BOUNDS[2, 0], J._BOUNDS[2, 1]),
+              "r_max": (J._BOUNDS[3, 0], J._BOUNDS[3, 1]),
+              "log10DC": (J._BOUNDS[4, 0], J._BOUNDS[4, 1])}
     ms = [F.SAMPLES[s]["log10ms_min"] for s in ss]
-    fig, axs = plt.subplots(2, 2, figsize=(11, 7))
+    fig, axs = plt.subplots(1, len(keys), figsize=(4 * len(keys), 4), squeeze=False)
+    axs = axs.ravel()
     for a, key in zip(axs.ravel(), keys):
         for lab, D, c, dx in [("Phase A (broad)", A, "C0", -0.01), ("Phase B (bands)", Bd, "C2", 0.01)]:
             med = [D[s]["posterior"][key]["median"] for s in ss]
@@ -217,6 +229,72 @@ def fig_phaseA_vs_B():
     fig.suptitle("Phase A (broad-band) vs Phase B (energy-band) posteriors "
                  "(dotted = grid bounds)", fontsize=11)
     fig.tight_layout(); _save(fig, "phaseA_vs_B")
+
+
+def fig_scaling_relations():
+    """Posterior GAS (LX-M500c, kT-M500c) and AGN (duty cycle) scaling relations
+    from the energy-band fit, each drawn over the sample's applicable halo-mass
+    range (emission-weighted), vs the GAS.py centrals."""
+    rr = JB._OUT_DIR
+    have = [s for s in _SAMPLES
+            if os.path.isfile(os.path.join(rr, f"{s}_bands_chain.npz"))
+            and os.path.isfile(os.path.join(rr, f"{s}_transfer.npz"))]
+    if not have:
+        print("  (no band chains - skipping scaling relations)", flush=True)
+        return
+    fig, axs = plt.subplots(1, 3, figsize=(15, 4.6))
+    cols = dict(zip(_SAMPLES, ["C0", "C1", "C2", "C3", "C4", "C5", "C6"]))
+    dc_x, dc_y, dc_e = [], [], []
+    rng = np.random.default_rng(0)
+    for s in have:
+        ch = np.load(os.path.join(rr, f"{s}_bands_chain.npz"), allow_pickle=True)
+        flat = ch["flatchain"]; par = [str(p) for p in ch["params"]]
+        idx = {p: par.index(p) for p in par}
+        tr = np.load(os.path.join(rr, f"{s}_transfer.npz"))
+        lm = tr["log10_m500c"]; ez = float(tr["ez"]); Ggrid = tr["G_grid"]
+        th = JB.load_band_data(s)["theta_arcsec"]; m = (th >= 8) & (th <= 300)
+        # median (p2,r_max) -> emission-weighted applicable mass range
+        med = np.median(flat, axis=0)
+        Gi = RegularGridInterpolator((tr["p2_grid"], tr["rmax_grid"]),
+                                     Ggrid.reshape(tr["p2_grid"].size, tr["rmax_grid"].size, -1),
+                                     bounds_error=False, fill_value=None)
+        G = Gi([[med[idx["p2"]], med[idx["r_max"]]]])[0].reshape(th.size, lm.size)
+        LXm = JB.LX_of_M(lm, ez, med[idx["lx_norm"]], med[idx["lx_slope"]])
+        contrib = np.abs(LXm * np.sum(np.abs(G[m]), axis=0))
+        cdf = np.cumsum(contrib) / np.sum(contrib)
+        lo, hi = lm[np.searchsorted(cdf, 0.02)], lm[min(np.searchsorted(cdf, 0.98), lm.size - 1)]
+        sel = (lm >= lo) & (lm <= hi); x = lm[sel]
+        # posterior bands from the chain (pivot-consistent relation helpers)
+        sub = flat[rng.choice(len(flat), size=min(800, len(flat)), replace=False)]
+        kT = JB.kT_of_M(x[None, :], ez, sub[:, idx["kt_slope"]][:, None], sub[:, idx["kt_norm"]][:, None])
+        LX = JB.LX_of_M(x[None, :], ez, sub[:, idx["lx_norm"]][:, None], sub[:, idx["lx_slope"]][:, None])
+        for a, Y in [(axs[0], kT), (axs[1], LX)]:
+            q = np.percentile(Y, [16, 50, 84], axis=0)
+            a.fill_between(x, q[0], q[2], color=cols[s], alpha=0.25)
+            a.plot(x, q[1], color=cols[s], lw=1.6, label=s)
+        # AGN duty cycle vs effective halo mass (median M500c of the emission)
+        mhalo = float(np.average(lm, weights=contrib))
+        dcp = np.percentile(sub[:, idx["log10DC"]], [16, 50, 84])
+        dc_x.append(mhalo); dc_y.append(dcp[1]); dc_e.append([dcp[1] - dcp[0], dcp[2] - dcp[1]])
+    # GAS.py central relations
+    xr = np.linspace(12.5, 15.2, 50)
+    axs[0].plot(xr, JB.kT_of_M(xr, 1.069, 0.6, 0.4), "k--", lw=1, label="GAS.py")   # 0.6·logM−8 ⇒ +0.4 @10^14
+    axs[1].plot(xr, JB.LX_of_M(xr, 1.069, 44.7, 1.61), "k--", lw=1, label="GAS.py")
+    axs[0].set_yscale("log"); axs[0].set_ylabel("kT [keV]"); axs[0].set_ylim(0.3, 60)
+    axs[0].set_title("Gas kT-M500c (posterior; note: runs hot vs GAS.py)")
+    axs[1].set_yscale("log"); axs[1].set_ylabel(r"$L_X$ 0.5-2 keV [erg/s]"); axs[1].set_title("Gas LX-M500c (posterior)")
+    for a in axs[:2]:
+        a.set_xlabel(r"$\log_{10}(M_{500c}/M_\odot)$"); a.legend(fontsize=7)
+    de = np.array(dc_e).T
+    axs[2].errorbar(dc_x, dc_y, yerr=de, fmt="o", capsize=3, color="C3")
+    for xx, yy, s in zip(dc_x, dc_y, have):
+        axs[2].annotate(s, (xx, yy), fontsize=7, xytext=(3, 3), textcoords="offset points")
+    axs[2].set_xlabel(r"$\log_{10}(M_{500c}^{\rm eff}/M_\odot)$")
+    axs[2].set_ylabel(r"$\log_{10}$ DC (AGN duty cycle)")
+    axs[2].set_title("AGN duty-cycle scaling (posterior)")
+    fig.suptitle("Posterior scaling relations from the energy-band fit "
+                 "(bands = 16-84%, over each sample's applicable mass range)", fontsize=11)
+    fig.tight_layout(); _save(fig, "scaling_relations")
 
 
 def _save(fig, name):
@@ -236,6 +314,7 @@ def main():
     fig_band_validation(SS)
     fig_band_params_vs_mass()
     fig_phaseA_vs_B()
+    fig_scaling_relations()
     print(f"Done -> {_OUT}", flush=True)
 
 
