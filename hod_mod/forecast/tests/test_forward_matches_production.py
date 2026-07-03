@@ -241,7 +241,8 @@ def test_tomography_shared_cosmology():
     """Multi-bin tomography: shared cosmology + per-bin HOD, correct stacked Jacobian."""
     from hod_mod.forecast.tomography import TomographicForecast
     tf = TomographicForecast([("A", 0.15, 10.0), ("B", 0.25, 10.6)], n_k=64, n_m=96)
-    assert len(tf.global_names) == 22 + 9 * 2          # 22 shared + 9 HOD per bin
+    from hod_mod.forecast.forward_jax import PARAM_NAMES as _PN
+    assert len(tf.global_names) == (len(_PN) - 9) + 9 * 2   # shared + 9 HOD per bin
     fg = tf.fiducial()
     f, rb, ro, rx = tf.data_vector_fn(["wp", "n_gal"])
     J = np.asarray(jax.jacfwd(f)(jnp.asarray(fg)))

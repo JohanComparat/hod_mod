@@ -48,6 +48,7 @@ include = ["hod_mod*"]
 "hod_mod.data.benchmarks" = ["*.csv", "*.json"]
 "hod_mod.data.bnl" = ["*.npy", "*.txt"]
 "hod_mod.data.erosita" = ["*.npz"]
+"hod_mod.data.apec_bands" = ["*.npz"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

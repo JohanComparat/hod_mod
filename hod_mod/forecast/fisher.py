@@ -63,7 +63,7 @@ def fisher_matrix(d0, J, rel_err=None, prior_sigma=None, cov=None):
     return F
 
 
-def constraints(F, ridge=0.0, rcond=1e-10):
+def constraints(F, ridge=0.0, rcond=1e-10, scale=None):
     """Invert F → (cov, sigma, corr) via eigenvalue-floored pseudo-inversion.
 
     Symmetrises F and drops eigen-directions with eigenvalue below
@@ -71,8 +71,20 @@ def constraints(F, ridge=0.0, rcond=1e-10):
     analytically degenerate ``fc``), which would otherwise make the plain
     inverse blow up.  Those directions get an effectively infinite variance;
     the well-constrained sub-space is unaffected.
+
+    ``scale`` (optional, e.g. the broad-prior widths): eigendecompose the
+    dimensionless ``S F S`` (S = diag(scale)) instead of ``F`` — parameters
+    spanning many decades of natural units (b_sat ~ 100 vs Ω_b ~ 5e-4) then
+    contribute comparably to the eigenvalue floor.  Recommended for the
+    61-parameter tier-2 vector.
     """
     F = 0.5 * (np.asarray(F, dtype=float) + np.asarray(F, dtype=float).T)
+    if scale is not None:
+        s = np.asarray(scale, dtype=float)
+        s = np.where(np.isfinite(s) & (s > 0), s, 1.0)
+        cov_s, sigma_s, corr = constraints(F * np.outer(s, s), ridge=ridge,
+                                           rcond=rcond)
+        return cov_s * np.outer(s, s), sigma_s * s, corr
     if ridge > 0:
         F = F + ridge * np.diag(np.abs(np.diag(F)) + 1e-300)
     w, V = np.linalg.eigh(F)
