@@ -187,7 +187,7 @@ def test_dlx_quenched_only_touches_quenched_gas(fid):
 # ---------------------------------------------------------------- Phase D --
 
 def test_rlf_identity_with_xlf(fid):
-    """(ξ_RX, ξ_RM, b_R, σ_R) = (1, 0, 0, 0) collapses the FP onto L_X."""
+    """(ξ_RX, ξ_RM, b_R, σ_R) = (1, 0, 0, 0), jets off, collapses onto L_X."""
     from hod_mod.forecast.forward_jax import ForwardModel, _IDX
     grid = np.linspace(42.0, 45.0, 7)
     m = ForwardModel(z_eff=_Z, loglr_rlf=grid, **_TINY)
@@ -196,6 +196,7 @@ def test_rlf_identity_with_xlf(fid):
     th[_IDX["agn_xi_rm"]] = 0.0
     th[_IDX["agn_b_r"]] = 0.0
     th[_IDX["agn_sig_r"]] = 0.0
+    th[_IDX["f_loud0"]] = 0.0            # wave 3: remove the jet component
     th = jnp.asarray(th)
     rlf = np.asarray(m._rlf(m._theta_eff(th)))
     xlf = np.asarray(m._xlf_at(m._theta_eff(th), jnp.asarray(grid)))
@@ -205,14 +206,26 @@ def test_rlf_identity_with_xlf(fid):
 def test_rlf_amplitude_identity_and_plumbing(model, fid):
     from hod_mod.forecast.forward_jax import _IDX
     f = lambda t: model.predict(t, ["rlf"])["rlf"]
-    d0 = np.asarray(f(fid))
-    J = np.asarray(jax.jacfwd(f)(fid))
+    # with jets off, Φ_R ∝ 10^ferdf exactly (the FP part is ERDF-tied)
+    th0 = np.asarray(fid).copy()
+    th0[_IDX["f_loud0"]] = 0.0
+    th0 = jnp.asarray(th0)
+    d0 = np.asarray(f(th0))
+    J = np.asarray(jax.jacfwd(f)(th0))
     assert np.all(d0 > 0) and np.all(np.isfinite(J))
-    # Φ_R ∝ 10^ferdf exactly
     np.testing.assert_allclose(J[:, _IDX["agn_log10_ferdf"]],
                                np.log(10.0) * d0, rtol=1e-8)
     for n in ("agn_xi_rx", "agn_xi_rm", "agn_b_r", "agn_sig_r"):
         assert np.abs(J[:, _IDX[n]]).max() > 0, n
+    # wave 3: the jet population ADDs radio sources and is NOT ERDF-tied —
+    # d ln Φ / d ferdf < ln10 once jets are on
+    d1 = np.asarray(f(fid))
+    assert np.all(d1 >= d0)
+    J1 = np.asarray(jax.jacfwd(f)(fid))
+    dln = J1[:, _IDX["agn_log10_ferdf"]] / d1
+    assert dln.max() < np.log(10.0) + 1e-9 and dln.min() < np.log(10.0) - 1e-4
+    for n in ("f_loud0", "beta_loud", "b_jet"):
+        assert np.abs(J1[:, _IDX[n]]).max() > 0, n
 
 
 # ---------------------------------------------------------------- Phase E --
@@ -271,9 +284,76 @@ def test_tier2_split_sfq_assembly(fid, tmp_path):
 def test_vector_and_sectors_extended():
     from hod_mod.forecast.forward_jax import PARAM_NAMES, N_PARAM, MISSING_PHYSICS
     from hod_mod.forecast.params import SECTORS
-    assert N_PARAM == 83 and len(MISSING_PHYSICS) == 22
+    assert N_PARAM == 90 and len(MISSING_PHYSICS) == 29
     flat = [n for sec in SECTORS.values() for n in sec]
     assert sorted(flat) == sorted(PARAM_NAMES)
+
+
+# ---------------------------------------------------------------- wave 3 --
+
+def test_ssfr_cut_selection(fid):
+    """sSFR-threshold samples: monotone, composable with the SF/Q split."""
+    from hod_mod.forecast.forward_jax import ForwardModel
+    kw = dict(z_eff=_Z, **_TINY)
+    n_of = lambda m: float(m.predict(fid, ["n_gal"])["n_gal"][0])
+    m_all = ForwardModel(**kw)
+    m_cut = ForwardModel(ssfr_cut=-10.5, **kw)
+    m_deep = ForwardModel(ssfr_cut=-30.0, **kw)
+    assert n_of(m_cut) < n_of(m_all)
+    np.testing.assert_allclose(n_of(m_deep), n_of(m_all), rtol=1e-10)
+    # additivity survives the cut: sf-cut + q-cut == mixture-cut
+    n_sf = n_of(ForwardModel(sfq="sf", ssfr_cut=-10.5, **kw))
+    n_q = n_of(ForwardModel(sfq="q", ssfr_cut=-10.5, **kw))
+    np.testing.assert_allclose(n_sf + n_q, n_of(m_cut), rtol=1e-10)
+    # a star-forming cut keeps mostly SF galaxies
+    assert n_sf > 10.0 * n_q
+
+
+def test_sfrd_observable(fid):
+    from hod_mod.forecast.forward_jax import ForwardModel, _IDX
+    kw = dict(z_eff=_Z, **_TINY)
+    m_all = ForwardModel(**kw)
+    v = lambda m: float(m.predict(fid, ["sfrd"])["sfrd"][0])
+    assert v(m_all) > 0
+    # SF + Q partition the SFR density exactly
+    v_sf = v(ForwardModel(sfq="sf", **kw))
+    v_q = v(ForwardModel(sfq="q", **kw))
+    np.testing.assert_allclose(v_sf + v_q, v(m_all), rtol=1e-10)
+    assert v_sf > v_q                     # SF galaxies dominate the SFRD
+    # ρ_SFR ∝ 10^{sSFR_MS} exactly (both populations scale with μ_MS)
+    f = lambda t: m_all.predict(t, ["sfrd"])["sfrd"]
+    J = np.asarray(jax.jacfwd(f)(fid))
+    d0 = np.asarray(f(fid))
+    np.testing.assert_allclose(J[:, _IDX["ssfr_ms_norm"]], np.log(10.0) * d0,
+                               rtol=1e-8)
+
+
+def test_oiilf_observable(model, fid):
+    from hod_mod.forecast.forward_jax import _IDX
+    f = lambda t: model.predict(t, ["oiilf"])["oiilf"]
+    d0 = np.asarray(f(fid))
+    J = np.asarray(jax.jacfwd(f)(fid))
+    assert np.all(d0 > 0) and np.all(np.isfinite(J))
+    # loii_norm and ssfr_ms_norm shift the same abscissa: identical columns
+    np.testing.assert_allclose(J[:, _IDX["loii_norm"]],
+                               J[:, _IDX["ssfr_ms_norm"]], rtol=1e-8)
+    # quenching removes [OII] emitters
+    assert np.abs(J[:, _IDX["log10_Mq_cen"]]).max() > 0
+
+
+def test_ilf_observable(model, fid):
+    from hod_mod.forecast.forward_jax import _IDX
+    f = lambda t: model.predict(t, ["ilf"])["ilf"]
+    d0 = np.asarray(f(fid))
+    J = np.asarray(jax.jacfwd(f)(fid))
+    assert np.all(d0 > 0) and np.all(np.isfinite(J))
+    # ERDF-tied: Φ_IR ∝ 10^ferdf exactly
+    np.testing.assert_allclose(J[:, _IDX["agn_log10_ferdf"]],
+                               np.log(10.0) * d0, rtol=1e-8)
+    # the bolometric correction moves it; the obscured fraction does NOT
+    # (IR is obscuration-robust by construction — the cross-band test)
+    assert np.abs(J[:, _IDX["agn_bc_ir"]]).max() > 0
+    assert np.abs(J[:, _IDX["agn_fabs"]]).max() == 0.0
 
 
 # ---------------------------------------------------------------- wave 2 --
@@ -360,13 +440,16 @@ def test_tier2_wave2_observables(fid, tmp_path):
         n_bands=[(0.5, 2.0)], n_shear_bins=2,
         agn_lx_bins=[(42.0, 43.0)], agn_z_centers=(0.25,),
         include_radio=True, include_hi=True, include_ssfr=True,
+        include_ir=True,
         n_k=32, n_m=32, n_gl=12, n_z=3,
         rp_wp=np.logspace(-1, 1.3, 4), rp_ds=np.logspace(-1, 1.2, 4),
         ell=np.logspace(1.0, 3.0, 4), rp_wp_agn=np.logspace(0.1, 1.3, 3))
     cell = next(b for b in t2.blocks if b.kind == "cell")
     shell = next(b for b in t2.blocks if b.label.endswith("_shell"))
     assert "cl_gHI" in cell.which and "ssfr" in cell.which
+    assert "sfrd" in cell.which
     assert "rlf" in shell.which and "himf" not in shell.which
+    assert "oiilf" in shell.which and "ilf" in shell.which
     hi_local = next(b for b in t2.blocks if b.label == "hi_local")
     assert hi_local.which == ("himf",) and hi_local.z_hi <= 0.1
     fidv = t2.fiducial()
@@ -374,7 +457,7 @@ def test_tier2_wave2_observables(fid, tmp_path):
                                        verbose=False)
     assert np.all(np.isfinite(d0)) and np.all(np.isfinite(J))
     sig = t2.noise_sigma(fidv, d0, meta, verbose=False)
-    for o in ("rlf", "himf", "cl_gHI", "ssfr"):
+    for o in ("rlf", "himf", "cl_gHI", "ssfr", "sfrd", "oiilf", "ilf"):
         s = sig[meta["obs"] == o]
         assert s.size > 0 and np.all(s > 0), o
         # at least part of each new observable carries finite noise
