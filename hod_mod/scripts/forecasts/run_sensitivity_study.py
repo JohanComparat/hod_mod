@@ -52,6 +52,9 @@ def main():
     ap.add_argument("--rmin", type=float, nargs="+", default=[0.1, 0.5, 2.5, 10.0])
     ap.add_argument("--observables", nargs="+", default=OBSERVABLES)
     ap.add_argument("--add-planck-prior", action="store_true")
+    ap.add_argument("--free-tier2", action="store_true",
+                    help="free the tier-2 extension parameters (formerly-fixed "
+                         "nuisances + z-slopes) instead of pinning them")
     ap.add_argument("--z-eff", type=float, default=0.2)
     ap.add_argument("--n-k", type=int, default=256)
     ap.add_argument("--n-m", type=int, default=256)
@@ -63,7 +66,10 @@ def main():
     fid = params.fiducial_vector()
     # Weakly-informative regularizing prior (bounds flat nuisance directions →
     # well-defined marginalised errors); tight Planck prior on Ω_m, σ8 optional.
-    prior = params.regularizing_prior(add_planck=args.add_planck_prior)
+    # The tier-2 extension parameters are pinned by default so this tier-1 study
+    # keeps its published fixed-nuisance meaning (see run_tier2_forecast).
+    fix = () if args.free_tier2 else tuple(params.TIER2_EXTENSION)
+    prior = params.regularizing_prior(add_planck=args.add_planck_prior, fix=fix)
 
     print(f"[setup] {len(names)} parameters, observables={args.observables}, z_eff={args.z_eff}")
     model = ForwardModel(z_eff=args.z_eff, n_k=args.n_k, n_m=args.n_m)

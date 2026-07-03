@@ -5,9 +5,9 @@ to a set of stellar-mass / redshift bins that **share** the cosmological, gas,
 AGN and baryon parameters but carry a **per-bin HOD**.  A single global parameter
 vector
 
-    [ 22 shared params | HOD(9) × N_bin ]
+    [ (N_PARAM − 9) shared params | HOD(9) × N_bin ]
 
-is unpacked (by a static gather index per bin) into each bin's 31-entry
+is unpacked (by a static gather index per bin) into each bin's ``PARAM_NAMES``
 ``ForwardModel`` parameter vector, so one ``jax.jacfwd`` of the concatenated
 multi-bin data vector yields the full tomographic Jacobian — the cross-bin
 sharing of cosmology is handled automatically by the chain rule.
