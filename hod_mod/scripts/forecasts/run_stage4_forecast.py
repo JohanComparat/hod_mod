@@ -143,6 +143,9 @@ def main():
     ap.add_argument("--n-m", type=int, default=256)
     ap.add_argument("--agn-pinned", action="store_true",
                     help="externally pin the 7 Powell AGN params (unlocks the XLF's cosmology).")
+    ap.add_argument("--free-tier2", action="store_true",
+                    help="free the tier-2 extension parameters (formerly-fixed "
+                         "nuisances + z-slopes) instead of pinning them")
     ap.add_argument("--covariance", choices=["diagonal", "gaussian"], default="diagonal",
                     help="diagonal per-bin errors, or the analytic Gaussian covariance "
                          "with lensing-triplet cross-observable correlations.")
@@ -170,11 +173,15 @@ def main():
         cov_full = covariance.gaussian_covariance(model, fid, d0, row_obs, row_x, relerr)
         print("[covariance] analytic Gaussian (lensing-triplet cross-terms) built")
 
-    # priors: LSS-only (regularizing) and LSS+Planck (tight Ω_m, σ8)
+    # priors: LSS-only (regularizing) and LSS+Planck (tight Ω_m, σ8).  The
+    # tier-2 extension parameters are pinned by default so this Stage-IV study
+    # keeps its fixed-nuisance meaning (free them via run_tier2_forecast).
     fix_agn = ("agn_mu_bh", "agn_al_bh", "agn_sig_bh", "agn_log10_lstar",
                "agn_delta1", "agn_delta2", "agn_log10_ferdf") if args.agn_pinned else ()
-    prior_lss = params.regularizing_prior(add_planck=False, fix=fix_agn)
-    prior_cmb = params.regularizing_prior(add_planck=True, fix=fix_agn)
+    fix_t2 = () if args.free_tier2 else tuple(params.TIER2_EXTENSION)
+    fix = tuple(fix_agn) + fix_t2
+    prior_lss = params.regularizing_prior(add_planck=False, fix=fix)
+    prior_cmb = params.regularizing_prior(add_planck=True, fix=fix)
 
     # cumulative probe build-up, grouped by data type:
     # clustering (wp, ds) → abundances (n_gal, smf) → lensing/CMB-lensing sector

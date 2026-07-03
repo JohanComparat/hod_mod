@@ -681,6 +681,13 @@ constrain them.
 Parameters that could be freed
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. admonition:: Now implemented — the tier-2 study
+
+   The 16 promotions below, plus redshift-evolution slopes and an X-ray
+   spectral sector, are now in the vector (61 parameters) and freed by the
+   :doc:`tier-2 forecast <tier2_forecast>`; the tier-1 scripts pin them to
+   their fiducials by default (``--free-tier2`` to release).
+
 Beyond the 31 in the vector, about **21 more parameters** could be freed: **16**
 currently-fixed nuisance shape parameters the machinery already supports (only a
 constant needs to become a ``theta[_IDX[...]]`` entry — taking the vector to 47),

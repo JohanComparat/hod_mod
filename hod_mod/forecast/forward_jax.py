@@ -24,10 +24,12 @@ an analytic L_X(M) amplitude, and an A10 GNFW pressure shape) — the
 sensitivity-relevant parameterisation — since the production emissivity /
 pressure FTs are numpy Gauss–Legendre and the full-APEC path is not JAX-traceable.
 
-Parameter vector (see :data:`PARAM_NAMES`), 19 entries::
-
-    Omega_m sigma8 | lg_m1h lg_m0star beta delta gamma sigma_lnmstar eta fc bsat
-                   | lx_norm lx_slope kt_norm kt_slope p2 r_max | log10DC beta_pressure
+Parameter vector: see :data:`PARAM_NAMES` (single source of truth for names,
+ordering and count).  The first 31 entries are the tier-1 vector (cosmology,
+ZM15 HOD, X-ray gas, duty cycle/pressure, baryon feedback, Powell AGN-XLF);
+the tier-2 extension (:data:`TIER2_EXTENSION`) appends the formerly-fixed
+nuisance shapes so that "nothing is fixed" studies can free them, while tier-1
+scripts pin them to their fiducials (σ=1e-4) to keep their published meaning.
 """
 
 from __future__ import annotations
@@ -50,7 +52,7 @@ from hod_mod.connection.hod.zumandelbaum15 import (
     sigma_lnmstar_zu15,
 )
 from jax import custom_jvp
-from jax.scipy.special import erfc
+from jax.scipy.special import erf, erfc
 from hod_mod.observables.clustering import _pk_to_xi
 from hod_mod.observables.baryon_fraction import BaryonFractionSigmoid, make_baryon_fraction
 from hod_mod.core.distances import comoving_distance
@@ -72,9 +74,40 @@ PARAM_NAMES = [
     # forward-model the AGN X-ray luminosity function (the "xlf" observable).
     "agn_mu_bh", "agn_al_bh", "agn_sig_bh",
     "agn_log10_lstar", "agn_delta1", "agn_delta2", "agn_log10_ferdf",
+    # ---- tier-2 promoted nuisances (fiducial == the former fixed constant, so
+    # fiducial predictions are unchanged; tier-1 scripts pin them by default) ----
+    "beta_sat", "bcut", "beta_cut", "alpha_sat",          # satellite HOD shape
+    "beta_b", "log10_M_eta", "beta_eta",                  # baryon-sector shape
+    "alpha_in_gas", "alpha_tr_gas",                       # gas emissivity slopes
+    "p0_pressure", "c500_pressure", "gamma_pressure",     # A10 GNFW pressure
+    "alpha_pressure", "beta_out_pressure",                # ("beta_pressure" is the tilt)
+    "agn_rho", "agn_sig_mstar",                           # AGN-XLF internals (Powell Model 2)
+    # ---- tier-2 redshift-evolution slopes: additive on the base parameter per
+    # ln[(1+z_eff)/(1+z_pivot)] (see ForwardModel._theta_eff); fiducial 0 ----
+    "lg_m1h_zs", "lg_m0star_zs", "sigma_lnmstar_zs",      # SHMR evolution
+    "lx_zs", "kt_zs",                                     # departures from self-similar E(z)
+    "agn_log10_ferdf_zs", "agn_log10_lstar_zs",           # AGN sector evolution
+    # ---- tier-2 X-ray spectral sector (multi-band APEC layer) ----
+    "t_prof_slope",                                       # radial T profile tilt (0 = isothermal)
+    "z_gas_norm", "z_gas_mslope", "z_gas_zs",             # ICM metallicity [Z_sun] + slopes
+    "agn_gamma", "agn_fabs",                              # AGN photon index + obscured fraction
+    "agn_mu_bh_zs",                                       # M_BH–M* zero-point evolution
 ]
 _IDX = {n: i for i, n in enumerate(PARAM_NAMES)}
 N_PARAM = len(PARAM_NAMES)
+
+# Tier-2 extension bookkeeping: names appended beyond the 31-entry tier-1 vector.
+TIER2_PROMOTED = PARAM_NAMES[31:47]
+TIER2_ZSLOPES = PARAM_NAMES[47:54]
+TIER2_SPECTRAL = PARAM_NAMES[54:61]
+TIER2_EXTENSION = list(PARAM_NAMES[31:])
+
+# base parameter → its ln(1+z) evolution slope (applied in ForwardModel._theta_eff)
+_Z_EVOL = {"lg_m1h": "lg_m1h_zs", "lg_m0star": "lg_m0star_zs",
+           "sigma_lnmstar": "sigma_lnmstar_zs", "lx_norm": "lx_zs",
+           "kt_norm": "kt_zs", "agn_log10_ferdf": "agn_log10_ferdf_zs",
+           "agn_log10_lstar": "agn_log10_lstar_zs", "agn_mu_bh": "agn_mu_bh_zs"}
+# (z_gas_zs acts on log10 Z inside _gas_log10Z — the base z_gas_norm is linear)
 
 OBSERVABLES = ["wp", "ds", "cl_gX", "cl_gy", "cl_XX", "cl_kk",
                "cl_kCMB", "cl_gkCMB", "cl_shear_kCMB", "xlf", "n_gal", "smf"]
@@ -128,6 +161,35 @@ _POWELL_LBOL_COEF = 1.26e38
 _POWELL_KBOL_HARD = 20.0
 _POWELL_LOGK = float(np.log10(_POWELL_LBOL_COEF / _POWELL_KBOL_HARD))  # log10 L_X/(M_BH·λ)
 _SIG_MSTAR_XLF = 0.20   # fixed log10 M* scatter entering the (shift-invariant) M_BH–M_halo width
+# hard(2-10 keV) → soft(0.5-2 keV) energy-flux ratio for a Γ≈1.8 power law
+# (hod_mod.agn.ham convention; becomes Γ-dependent in the multi-band layer).
+from hod_mod.agn.ham import _HARD_TO_SOFT_RATIO as _K_H2S_FID
+_LOG10_K_H2S = float(np.log10(_K_H2S_FID))
+# fiducial AGN photon index and the Γ=1.8 soft/hard power-law flux ratio used to
+# calibrate the differentiable k_h2s(Γ) so that k_h2s(1.8) == _K_H2S_FID exactly.
+_GAMMA_AGN_FID = 1.8
+_P_FID = 2.0 - _GAMMA_AGN_FID
+_R_H2S_FID = float((2.0 ** _P_FID - 0.5 ** _P_FID) / (10.0 ** _P_FID - 2.0 ** _P_FID))
+_NH_ABS = 1.0e22   # obscured-AGN absorption column [cm⁻²] for the t_b template
+
+
+def _bilinear_logtable(tab, lt_grid, lz_grid, lt, lz):
+    r"""10**bilinear interpolation of a log10 Λ(log10 T, log10 Z) table.
+
+    ``tab`` (nT, nZ); ``lt``/``lz`` broadcastable query arrays, clipped to the
+    grid (the clip freezes derivatives outside — only the >60 keV tail of the
+    most massive halos, negligible emission weight).  Differentiable in lt/lz.
+    """
+    lt, lz = jnp.broadcast_arrays(jnp.asarray(lt), jnp.asarray(lz))
+    lt = jnp.clip(lt, lt_grid[0], lt_grid[-1])
+    lz = jnp.clip(lz, lz_grid[0], lz_grid[-1])
+    it = jnp.clip(jnp.searchsorted(lt_grid, lt) - 1, 0, lt_grid.size - 2)
+    iz = jnp.clip(jnp.searchsorted(lz_grid, lz) - 1, 0, lz_grid.size - 2)
+    ft = (lt - lt_grid[it]) / (lt_grid[it + 1] - lt_grid[it])
+    fz = (lz - lz_grid[iz]) / (lz_grid[iz + 1] - lz_grid[iz])
+    v = (tab[it, iz] * (1.0 - ft) * (1.0 - fz) + tab[it + 1, iz] * ft * (1.0 - fz)
+         + tab[it, iz + 1] * (1.0 - ft) * fz + tab[it + 1, iz + 1] * ft * fz)
+    return 10.0 ** v
 
 
 # ---------------------------------------------------------------------------
@@ -266,11 +328,33 @@ class ForwardModel:
         z_src_mean: float = 0.8,
         z_src_sig: float = 0.30,
         n_z_shear: int = 12,
+        n_shear_bins: int = 1,
         energy_closure: bool = False,
         log10m_star_thresh: float = None,
+        log10m_star_bin: tuple = None,
         baryon_model: str = "sigmoid",
+        z_pivot_evol: float = 0.3,
+        agn_emission: str = "surrogate",
+        agn_lx_bins=None,
+        rp_wp_agn=None,
+        xray_bands=None,
+        xlf_band: str = "hard",
+        nh_abs: float = _NH_ABS,
     ):
         self.z_eff = float(z_eff)
+        # tier-2 z-evolution: static per-model lever arm ln[(1+z_eff)/(1+z_p)]
+        self.z_pivot_evol = float(z_pivot_evol)
+        self._x_evol = float(np.log((1.0 + self.z_eff) / (1.0 + self.z_pivot_evol)))
+        # tier-2 volume-limited M*-BIN sample [lo, hi): occupation = N(>lo) − N(>hi)
+        if log10m_star_bin is not None:
+            if log10m_star_thresh is not None:
+                raise ValueError("log10m_star_bin and log10m_star_thresh are mutually exclusive")
+            lo, hi = (float(log10m_star_bin[0]), float(log10m_star_bin[1]))
+            if not hi > lo:
+                raise ValueError("log10m_star_bin must satisfy hi > lo")
+            log10m_star_thresh, self._thr_hi = lo, hi
+        else:
+            self._thr_hi = None
         # per-bin stellar-mass threshold override (tomography); default = _FIXED_HOD
         self._thr = (float(log10m_star_thresh) if log10m_star_thresh is not None
                      else _FIXED_HOD["log10m_star_thresh"])
@@ -305,10 +389,45 @@ class ForwardModel:
         self.pi_max = 100.0
 
         # Cosmic-shear source distribution + lens-distance integration grid.
-        zs = np.linspace(0.03, max(2.0, z_src_mean + 3 * z_src_sig), n_z_shear)
-        ns = np.exp(-0.5 * ((zs - z_src_mean) / z_src_sig) ** 2)
-        self.z_shear = jnp.asarray(zs)
-        self.nz_src = jnp.asarray(ns / np.trapezoid(ns, zs))
+        # n_shear_bins == 1 (tier-1): a single Gaussian n_s(z) bin.
+        # n_shear_bins > 1 (tier-2): a Smail-type overall distribution
+        # n(z) ∝ z² exp[−(z/z0)^1.5] with ⟨z⟩ = z_src_mean, split into
+        # equal-number tomographic bins by photo-z (σ_z = 0.05(1+z)) selection.
+        self.n_shear_bins = int(n_shear_bins)
+        if self.n_shear_bins > 1 and n_z_shear < 3 * self.n_shear_bins:
+            raise ValueError(f"n_z_shear={n_z_shear} cannot resolve "
+                             f"{self.n_shear_bins} tomographic bins; "
+                             f"use n_z_shear >= {3 * self.n_shear_bins}")
+        if self.n_shear_bins == 1:
+            zs = np.linspace(0.03, max(2.0, z_src_mean + 3 * z_src_sig), n_z_shear)
+            ns = np.exp(-0.5 * ((zs - z_src_mean) / z_src_sig) ** 2)
+            self.z_shear = jnp.asarray(zs)
+            self.nz_src = jnp.asarray(ns / np.trapezoid(ns, zs))
+            self.nz_src_bins = [self.nz_src]
+        else:
+            import math
+            from scipy.special import erf as _np_erf
+            z0 = z_src_mean * math.gamma(2.0) / math.gamma(8.0 / 3.0)   # ⟨z⟩ = z0·Γ(8/3)/Γ(2)
+            zs_max = max(2.0, 3.3 * z_src_mean)
+            zf = np.linspace(0.01, zs_max, 400)                         # fine grid: bin edges
+            nf = zf ** 2 * np.exp(-((zf / z0) ** 1.5))
+            cdf = np.cumsum(nf); cdf = cdf / cdf[-1]
+            q = np.interp(np.linspace(0.0, 1.0, self.n_shear_bins + 1)[1:-1], cdf, zf)
+            edges = np.concatenate([[0.0], q, [zs_max + 1.0]])
+            zs = np.linspace(0.03, zs_max, n_z_shear)
+            n_true = zs ** 2 * np.exp(-((zs / z0) ** 1.5))
+            sig_z = 0.05 * (1.0 + zs)                                   # photo-z scatter
+            self.z_shear = jnp.asarray(zs)
+            self.nz_src = jnp.asarray(n_true / np.trapezoid(n_true, zs))
+            self.nz_src_bins = []
+            for i in range(self.n_shear_bins):
+                w = 0.5 * (_np_erf((edges[i + 1] - zs) / (np.sqrt(2.0) * sig_z))
+                           - _np_erf((edges[i] - zs) / (np.sqrt(2.0) * sig_z)))
+                nb = n_true * w
+                self.nz_src_bins.append(jnp.asarray(nb / np.trapezoid(nb, zs)))
+        # unique source-bin pairs (i ≤ j) — the cl_kk tomographic spectra order
+        self.shear_pairs = [(i, j) for i in range(self.n_shear_bins)
+                            for j in range(i, self.n_shear_bins)]
 
         # Powell-XLF grids: Eddington-ratio (log λ) integration grid over the
         # Ananna 2022 range, and the log10 L_X [erg/s] abscissa of the observable.
@@ -316,6 +435,45 @@ class ForwardModel:
         self.loglam = jnp.asarray(loglam)
         self.dlam = float(loglam[1] - loglam[0])
         self.loglx_xlf = jnp.asarray(np.linspace(42.0, 45.0, 7))
+
+        # AGN sector mode: "surrogate" keeps the tier-1 L∝M point-source term in
+        # C_gX/C_XX; "powell" replaces it with the Powell-chain mean emission so
+        # the X-ray spectra constrain the same AGN parameters as the XLF.
+        self.agn_emission = str(agn_emission).lower()
+        if self.agn_emission not in ("surrogate", "powell"):
+            raise ValueError("agn_emission must be 'surrogate' or 'powell'")
+        # wp_agn: projected clustering of complete L_X-selected AGN samples.
+        # Bins are SOFT-band (0.5-2 keV) log10 L_X edges (the survey selection);
+        # the Powell kernel is hard-band, so edges shift by log10(k_h2s).
+        bins = agn_lx_bins if agn_lx_bins is not None else \
+            [(42.0, 42.5), (42.5, 43.0), (43.0, 43.5), (43.5, 44.0)]
+        self.agn_lx_bins = [(float(a), float(b)) for a, b in bins]
+        self.rp_wp_agn = jnp.asarray(rp_wp_agn if rp_wp_agn is not None
+                                     else np.logspace(0.0, 1.5, 8))
+
+        # ---- tier-2 multi-band APEC X-ray layer -------------------------
+        # xray_bands=None keeps the tier-1 broad-band model; a list of (emin,
+        # emax) keV edges switches cl_gX/cl_XX to per-band stacks built from
+        # APEC Λ_b(T, Z) tables (distilled once via hod_mod.forecast.apec_bands).
+        self.xlf_band = str(xlf_band).lower()
+        if self.xlf_band not in ("hard", "soft"):
+            raise ValueError("xlf_band must be 'hard' or 'soft'")
+        from hod_mod.forecast import apec_bands as _AB
+        # broad soft-band transmission for the obscured-AGN XLF / point-source
+        # absorption (MM83 template at NH=nh_abs; no soxs needed).
+        self._t_soft = float(_AB.band_transmission([_AB.BROAD_BAND], nh=nh_abs,
+                                                   gamma=_GAMMA_AGN_FID)[0])
+        self.xray_bands = None
+        if xray_bands is not None:
+            self.xray_bands = [(float(a), float(b)) for a, b in xray_bands]
+            tabs = _AB.band_tables(self.xray_bands)
+            self._apec_lt = jnp.asarray(tabs["lt"])
+            self._apec_lz = jnp.asarray(tabs["lz"])
+            self._apec_tables = [jnp.asarray(t) for t in tabs["tables"][:-1]]
+            self._apec_broad = jnp.asarray(tabs["tables"][-1])
+            self._band_edges = np.asarray(self.xray_bands, dtype=float)
+            self._t_bands = jnp.asarray(_AB.band_transmission(
+                self.xray_bands, nh=nh_abs, gamma=_GAMMA_AGN_FID))
 
         # Stellar-mass-function abscissa (log10 M* [Msun/h]) for the SMF observable.
         self.logmstar_smf = jnp.asarray(np.linspace(10.0, 11.6, 9))
@@ -325,6 +483,25 @@ class ForwardModel:
         # captures the bulk — the high-z tail is negligible for ℓ<3000).
         self.z_star = 1089.0
         self.z_cmb = jnp.asarray(np.geomspace(0.03, 6.0, 14))
+
+    # ---- tier-2 redshift-evolution mapping ---------------------------
+    def _theta_eff(self, theta):
+        r"""Effective parameter vector at this model's ``z_eff``.
+
+        For each (base, slope) pair in :data:`_Z_EVOL`,
+
+        .. math:: \theta_{\rm eff}[{\rm base}] = \theta[{\rm base}]
+                  + \theta[{\rm slope}]\,\ln\frac{1+z_{\rm eff}}{1+z_{\rm pivot}}
+
+        At the fiducial (all slopes 0) this is the identity, so tier-1 results
+        are unchanged; ``jax.jacfwd`` through it yields exactly
+        ∂d/∂slope = ln[(1+z)/(1+z_p)]·∂d/∂base by the chain rule.  One shared
+        global vector thereby drives every (z, M*) cell of the tier-2 grid.
+        """
+        theta = jnp.asarray(theta)
+        for base, sl in _Z_EVOL.items():
+            theta = theta.at[_IDX[base]].add(self._x_evol * theta[_IDX[sl]])
+        return theta
 
     # ---- cosmology / HOD dicts from the flat vector ------------------
     def _cosmo(self, theta):
@@ -345,10 +522,12 @@ class ForwardModel:
         }
 
     def _hod(self, theta):
-        d = dict(_FIXED_HOD)
-        d["log10m_star_thresh"] = self._thr
+        d = {"log10m_star_thresh": self._thr}
+        # tier-2: the satellite-shape nuisances (beta_sat, bcut, beta_cut,
+        # alpha_sat) are now vector entries with fiducials == the old _FIXED_HOD.
         for n in ("lg_m1h", "lg_m0star", "beta", "delta", "gamma",
-                  "sigma_lnmstar", "eta", "fc", "bsat"):
+                  "sigma_lnmstar", "eta", "fc", "bsat",
+                  "beta_sat", "bcut", "beta_cut", "alpha_sat"):
             d[n] = theta[_IDX[n]]
         return d
 
@@ -368,18 +547,18 @@ class ForwardModel:
             # low-mass upturn (f_b_lo_amp below M_lo) is held at _UPTURN defaults.
             pars = {"f_b_min": _FIXED_BARYON["f_b_min"],
                     "log10_M_hi": theta[_IDX["log10_M_pivot"]],
-                    "beta_hi": _FIXED_BARYON["beta_b"],
+                    "beta_hi": theta[_IDX["beta_b"]],
                     "f_b_lo_amp": _UPTURN["f_b_lo_amp"],
                     "log10_M_lo": _UPTURN["log10_M_lo"],
                     "beta_lo": _UPTURN["beta_lo"]}
             fb = self._fb_model(self.m, c, pars)                        # (NM,)
         else:
             pars = {"log10_M_pivot": theta[_IDX["log10_M_pivot"]],
-                    "beta_b": _FIXED_BARYON["beta_b"], "f_b_min": _FIXED_BARYON["f_b_min"]}
+                    "beta_b": theta[_IDX["beta_b"]], "f_b_min": _FIXED_BARYON["f_b_min"]}
             fb = self._fb_model(self.m, c, pars)                        # (NM,)
         eta_min = 10.0 ** theta[_IDX["log10_eta_min"]]
-        M_eta = 10.0 ** _FIXED_BARYON["log10_M_eta"]
-        eta = 1.0 - (1.0 - eta_min) / (1.0 + (self.m / M_eta) ** _FIXED_BARYON["beta_eta"])
+        M_eta = 10.0 ** theta[_IDX["log10_M_eta"]]
+        eta = 1.0 - (1.0 - eta_min) / (1.0 + (self.m / M_eta) ** theta[_IDX["beta_eta"]])
         return fb, eta
 
     def _fb_energy(self, theta, c):
@@ -435,13 +614,7 @@ class ForwardModel:
         dndm = self._hmf.dndm(self.m, float(z), c)                     # (NM,)
         bias = self._hmf.bias(self.m, float(z), c)                     # (NM,)
 
-        hp = self._hod(theta)
-        thr = hp["log10m_star_thresh"]
-        nc = _n_cen(self.log10m, thr, hp["lg_m1h"], hp["lg_m0star"], hp["beta"],
-                    hp["delta"], hp["gamma"], hp["sigma_lnmstar"], hp["eta"], hp["fc"])
-        ns = _n_sat(self.log10m, thr, hp["lg_m1h"], hp["lg_m0star"], hp["beta"],
-                    hp["delta"], hp["gamma"], hp["sigma_lnmstar"], hp["eta"], hp["fc"],
-                    hp["bsat"], hp["beta_sat"], hp["bcut"], hp["beta_cut"], hp["alpha_sat"])
+        nc, ns = self._occ_sample(theta)
         nt = nc + ns
         n_gal = jnp.trapezoid(dndm * nt, self.m)
         b_eff = jnp.trapezoid(dndm * nt * bias, self.m) / n_gal
@@ -465,11 +638,12 @@ class ForwardModel:
         r_s/η, truncated at r_max·r200), so the gas that suppresses ΔΣ is the
         *same* hot gas the cross-statistics see.  (Nk, NM)."""
         p2 = theta[_IDX["p2"]]
-        alpha_out = _ALPHA_IN_GAS + 2.0 * p2
+        a_in, a_tr = theta[_IDX["alpha_in_gas"]], theta[_IDX["alpha_tr_gas"]]
+        alpha_out = a_in + 2.0 * p2
         r_max = theta[_IDX["r_max"]] * H["r_delta"]
         r_s = H["r_s"] / H["eta"]
         fn = _gnfw(r_max[:, None] * self.gx[None, :] / r_s[:, None],
-                   _ALPHA_IN_GAS, _ALPHA_TR_GAS, alpha_out)
+                   a_in, a_tr, alpha_out)
         return _profile_uk_normalized(self.k, r_max, fn, self.gx, self.gw)
 
     # ---- P(k) tables -------------------------------------------------
@@ -506,39 +680,107 @@ class ForwardModel:
         """
         p2 = theta[_IDX["p2"]]
         r_max_fac = theta[_IDX["r_max"]]
-        alpha_out = _ALPHA_IN_GAS + 2.0 * p2
+        a_in, a_tr = theta[_IDX["alpha_in_gas"]], theta[_IDX["alpha_tr_gas"]]
+        alpha_out = a_in + 2.0 * p2
         r_max = r_max_fac * H["r_delta"]                                # (NM,)
         # gas extent shared with the ΔΣ split: puffier gas (η<1) → larger r_s
         r_s = H["r_s"] / H["eta"]                                       # (NM,)
 
         def f_nodes(r):                                                 # r: (NM, Ngl)
-            return _gnfw_sq(r / r_s[:, None], _ALPHA_IN_GAS, _ALPHA_TR_GAS, alpha_out)
+            return _gnfw_sq(r / r_s[:, None], a_in, a_tr, alpha_out)
 
         u_shape = _profile_uk_normalized(self.k, r_max, f_nodes(r_max[:, None] * self.gx[None, :]),
                                          self.gx, self.gw)              # (Nk, NM)
-        # analytic L_X(M500c) amplitude and weak kT band weight.  The absolute
-        # X-ray amplitude is arbitrary for a relative-error Fisher (log-derivs),
-        # so lx_norm is referenced to 45 to keep values O(1) and float-safe while
-        # its derivative (d ln X / d lx_norm = ln10) is preserved exactly.
-        Om = self._cosmo(theta)["Omega_m"]
-        ez = jnp.sqrt(Om * (1.0 + H["z"]) ** 3 + (1.0 - Om))
-        log10_m500c = self.log10m + jnp.log10(0.72)                     # M500c ≈ 0.72 M200 (comoving)
-        lx = 10.0 ** (theta[_IDX["lx_norm"]] - 45.0
-                      + theta[_IDX["lx_slope"]] * (log10_m500c - _LX_PIVOT)) * ez ** 2
-        kT = 10.0 ** (theta[_IDX["kt_slope"]] * (log10_m500c - _KT_PIVOT)
-                      + theta[_IDX["kt_norm"]]) * ez ** (2.0 / 3.0)
+        lx, kT = self._lx_kt_of(theta, H["z"])
         w_band = jnp.maximum(kT, 1e-3) ** 0.25                          # weak band-response weight
         # n_e² emissivity ∝ (gas density)² ∝ f_b(M)²  → shared baryon sector
         amp = lx * w_band * H["fb"] ** 2                               # (NM,), O(1)
         return u_shape * amp[None, :]
 
+    def _lx_kt_of(self, theta, z):
+        r"""Analytic L_X(M500c) and kT(M500c) scaling relations, (NM,) each.
+
+        The absolute X-ray amplitude is arbitrary for a relative-error Fisher
+        (log-derivs), so lx_norm is referenced to 45 to keep values O(1) and
+        float-safe while d ln X / d lx_norm = ln10 is preserved exactly.
+        Self-similar E(z)² / E(z)^{2/3} scalings are hardcoded; the free lx_zs /
+        kt_zs slopes (via _theta_eff) parameterize departures from them.
+        """
+        Om = self._cosmo(theta)["Omega_m"]
+        ez = jnp.sqrt(Om * (1.0 + z) ** 3 + (1.0 - Om))
+        log10_m500c = self.log10m + jnp.log10(0.72)                     # M500c ≈ 0.72 M200 (comoving)
+        lx = 10.0 ** (theta[_IDX["lx_norm"]] - 45.0
+                      + theta[_IDX["lx_slope"]] * (log10_m500c - _LX_PIVOT)) * ez ** 2
+        kT = 10.0 ** (theta[_IDX["kt_slope"]] * (log10_m500c - _KT_PIVOT)
+                      + theta[_IDX["kt_norm"]]) * ez ** (2.0 / 3.0)
+        return lx, kT
+
+    def _gas_log10Z(self, theta):
+        r"""ICM metallicity log10 Z(M) [Z_sun], (NM,).
+
+        log10 Z = log10 z_gas_norm + z_gas_mslope·(log10 M500c − 14)
+                  + z_gas_zs·ln[(1+z_eff)/(1+z_p)]  (evolution applied here, in
+        log space, because the base z_gas_norm parameter is linear).
+        """
+        log10_m500c = self.log10m + jnp.log10(0.72)
+        return (jnp.log10(theta[_IDX["z_gas_norm"]])
+                + theta[_IDX["z_gas_mslope"]] * (log10_m500c - 14.0)
+                + theta[_IDX["z_gas_zs"]] * self._x_evol)
+
+    def _emissivity_uk_bands(self, theta, H):
+        r"""Per-band gas emissivity FTs [X_b(k|M)], each (Nk, NM), APEC-weighted.
+
+        .. math:: \varepsilon_b(r|M) \propto f_{\rm gNFW}(x)^2\,
+                  \Lambda_b\!\big(T(r|M),\,Z(M)\big),\qquad
+                  T(r|M) = kT(M)\,[f_{\rm gNFW}(x)/f_{\rm gNFW}(1)]^{\,\rm t\_prof\_slope}
+
+        The total amplitude is lx(M)·f_b(M)² — lx_norm keeps setting the 0.5–2
+        keV luminosity — partitioned by the emission-weighted band fractions
+        w_b = ∫ε_b r²dr / ∫ε_broad r²dr.  Because Σ_b Λ_b(T) = Λ_broad(T)
+        pointwise (APEC band additivity), Σ_b X_b equals the broad-band
+        prediction exactly, even with a temperature profile.
+        """
+        p2 = theta[_IDX["p2"]]
+        a_in, a_tr = theta[_IDX["alpha_in_gas"]], theta[_IDX["alpha_tr_gas"]]
+        alpha_out = a_in + 2.0 * p2
+        r_max = theta[_IDX["r_max"]] * H["r_delta"]                     # (NM,)
+        r_s = H["r_s"] / H["eta"]                                       # (NM,)
+        r_nodes = r_max[:, None] * self.gx[None, :]                     # (NM, Ngl)
+        x_nodes = r_nodes / r_s[:, None]
+        f_gas = _gnfw(x_nodes, a_in, a_tr, alpha_out)                   # (NM, Ngl)
+        f2 = f_gas ** 2
+        # radial temperature: polytropic-like tilt on the density shape,
+        # anchored at x = 1 (r = r_s) so kT(M) keeps its scaling-relation sense
+        lx, kT = self._lx_kt_of(theta, H["z"])
+        f_ref = _gnfw(jnp.asarray(1.0), a_in, a_tr, alpha_out)
+        lt_nodes = (jnp.log10(kT)[:, None]
+                    + theta[_IDX["t_prof_slope"]] * jnp.log10(f_gas / f_ref))
+        lz = self._gas_log10Z(theta)[:, None]                           # (NM, 1)
+        w_r = r_nodes ** 2 * (r_max[:, None] * self.gw[None, :])        # ∫ r² dr weights
+        amp = lx * H["fb"] ** 2                                         # (NM,)
+        lams = [_bilinear_logtable(tab, self._apec_lt, self._apec_lz,
+                                   lt_nodes, lz)                        # (NM, Ngl)
+                for tab in self._apec_tables]
+        # broad-band weighting = Σ_b of the interpolated band Λ's, so the
+        # amplitude partition Σ_b w_b = 1 is exact by construction (using the
+        # broad table's own interpolant would leak O(interp) amplitude).
+        den = jnp.sum(f2 * sum(lams) * w_r, axis=1)                     # (NM,)
+        outs = []
+        for lam_b in lams:
+            eps_b = f2 * lam_b
+            u_b = _profile_uk_normalized(self.k, r_max, eps_b, self.gx, self.gw)
+            w_b = jnp.sum(eps_b * w_r, axis=1) / den                    # (NM,)
+            outs.append(u_b * (amp * w_b)[None, :])
+        return outs
+
     def _pressure_uk(self, theta, H):
         """Normalised A10 GNFW pressure FT × P500(M) × mass tilt, (Nk, NM)."""
         r_max = 3.0 * H["r_delta"]
-        r_s = (H["r_delta"] / _A10["c500"]) / H["eta"]                  # shared gas extent
+        r_s = (H["r_delta"] / theta[_IDX["c500_pressure"]]) / H["eta"]  # shared gas extent
 
         def f_nodes(r):
-            return _gnfw_pressure(r / r_s[:, None], _A10["gamma"], _A10["alpha"], _A10["beta"])
+            return _gnfw_pressure(r / r_s[:, None], theta[_IDX["gamma_pressure"]],
+                                  theta[_IDX["alpha_pressure"]], theta[_IDX["beta_out_pressure"]])
 
         u_shape = _profile_uk_normalized(self.k, r_max, f_nodes(r_max[:, None] * self.gx[None, :]),
                                          self.gx, self.gw)
@@ -546,26 +788,61 @@ class ForwardModel:
         ez = jnp.sqrt(Om * (1.0 + H["z"]) ** 3 + (1.0 - Om))
         log10_m500c = self.log10m + jnp.log10(0.72)
         beta_p = 2.0 / 3.0 + 0.12 + theta[_IDX["beta_pressure"]]        # A10 self-similar + tilt
-        # thermal energy ∝ gas mass ∝ f_b(M)  → shared baryon sector
-        P500 = 10.0 ** (beta_p * (log10_m500c - 14.5)) * ez ** (8.0 / 3.0) * H["fb"]
+        # thermal energy ∝ gas mass ∝ f_b(M)  → shared baryon sector.  The GNFW
+        # amplitude enters as the ratio p0_pressure/P0_fid so the fiducial
+        # prediction is unchanged while ∂lnC_gy/∂P0 = 1/P0 is exact.
+        P500 = (10.0 ** (beta_p * (log10_m500c - 14.5)) * ez ** (8.0 / 3.0) * H["fb"]
+                * (theta[_IDX["p0_pressure"]] / _A10["P0"]))
         return u_shape * P500[None, :]
 
-    def _pk_gX(self, theta, H):
-        """galaxy × X-ray (gas + AGN), 1h+2h."""
-        X = self._emissivity_uk(theta, H)                              # (Nk, NM)
+    # ---- AGN spectral helpers (Γ power law + obscured fraction) ------
+    def _k_h2s(self, theta):
+        """Differentiable hard→soft flux ratio k_h2s(Γ), == _K_H2S_FID at Γ=1.8."""
+        p = 2.0 - theta[_IDX["agn_gamma"]]
+        r = (2.0 ** p - 0.5 ** p) / (10.0 ** p - 2.0 ** p)
+        return _K_H2S_FID * r / _R_H2S_FID
+
+    def _agn_band_fractions(self, theta):
+        """Energy-flux fraction of a Γ power law in each band, normalised over
+        the 0.5–2 keV soft band (so bands spanning it sum to 1), (Nb,)."""
+        p = 2.0 - theta[_IDX["agn_gamma"]]
+        lo, hi = self._band_edges[:, 0], self._band_edges[:, 1]
+        return (hi ** p - lo ** p) / (2.0 ** p - 0.5 ** p)
+
+    def _abs_survival_soft(self, theta):
+        """Mean broad-soft-band flux survival of the AGN population:
+        (1−f_abs) unabsorbed + f_abs transmitted through NH (MM83 template)."""
+        fabs = theta[_IDX["agn_fabs"]]
+        return (1.0 - fabs) + fabs * self._t_soft
+
+    def _abs_survival_bands(self, theta):
+        """Per-band AGN flux survival, (Nb,)."""
+        fabs = theta[_IDX["agn_fabs"]]
+        return (1.0 - fabs) + fabs * self._t_bands
+
+    # ---- X-ray / tSZ power spectra -----------------------------------
+    def _pk_gX_of(self, theta, H, X, Xa):
+        """galaxy × X-ray 1h+2h for one gas FT X (Nk, NM) + flat AGN term Xa (NM,)."""
         dndm, uk, nc, ns = H["dndm"], H["uk"], H["nc"], H["ns"]
         m, n_gal, b_eff, pk_lin, bias = self.m, H["n_gal"], H["b_eff"], H["pk_lin"], H["bias"]
         gal = nc[None, :] + ns[None, :] * uk
         P_1h = jnp.trapezoid(dndm[None, :] * gal * X, m, axis=1) / n_gal
         I_X = jnp.trapezoid(dndm[None, :] * bias[None, :] * X, m, axis=1)
         P_gas = P_1h + b_eff * pk_lin * I_X
-        # AGN point-source term scaled by duty cycle; L_AGN(M) ∝ M (flat in k)
-        dc = 10.0 ** theta[_IDX["log10DC"]]
-        l_agn = (self.m / 1e13) * 1.0e-1                               # O(1) surrogate amplitude
-        Xa = dc * l_agn                                               # (NM,)
         P_agn = jnp.trapezoid(dndm[None, :] * gal * Xa[None, :], m, axis=1) / n_gal \
             + b_eff * pk_lin * jnp.trapezoid(dndm[None, :] * bias[None, :] * Xa[None, :], m, axis=1)
         return P_gas + P_agn
+
+    def _pk_gX(self, theta, H):
+        """galaxy × X-ray (gas + AGN), 1h+2h; (Nk,) or (Nb, Nk) in band mode."""
+        if self.xray_bands is None:
+            return self._pk_gX_of(theta, H, self._emissivity_uk(theta, H),
+                                  self._agn_point_source(theta))
+        Xbs = self._emissivity_uk_bands(theta, H)
+        A = self._agn_emissivity_amp(theta)                             # (NM,) unabsorbed soft
+        wb = self._agn_band_fractions(theta) * self._abs_survival_bands(theta)
+        return jnp.stack([self._pk_gX_of(theta, H, Xbs[b], A * wb[b])
+                          for b in range(len(Xbs))])
 
     def _pk_gy(self, theta, H):
         Y = self._pressure_uk(theta, H)
@@ -576,17 +853,24 @@ class ForwardModel:
         I_Y = jnp.trapezoid(dndm[None, :] * bias[None, :] * Y, m, axis=1)
         return P_1h + b_eff * pk_lin * I_Y
 
+    def _pk_XX_of(self, theta, H, X, Xa):
+        """X-ray auto 1h+2h for one gas FT X (Nk, NM) + flat AGN term Xa (NM,)."""
+        dndm, bias = H["dndm"], H["bias"]
+        Xtot = X + Xa[None, :]                                          # gas + AGN per halo
+        P_1h = jnp.trapezoid(dndm[None, :] * Xtot ** 2, self.m, axis=1)
+        I = jnp.trapezoid(dndm[None, :] * bias[None, :] * Xtot, self.m, axis=1)
+        return P_1h + H["pk_lin"] * I ** 2
+
     def _pk_XX(self, theta, H):
-        X = self._emissivity_uk(theta, H)
-        dndm, uk, nc, ns = H["dndm"], H["uk"], H["nc"], H["ns"]
-        m, b_eff, pk_lin, bias = self.m, H["b_eff"], H["pk_lin"], H["bias"]
-        dc = 10.0 ** theta[_IDX["log10DC"]]
-        l_agn = (self.m / 1e13) * 1.0e-1
-        Xtot = X + dc * l_agn[None, :]                                 # gas + AGN emission per halo
-        P_1h = jnp.trapezoid(dndm[None, :] * Xtot ** 2, m, axis=1)
-        I = jnp.trapezoid(dndm[None, :] * bias[None, :] * Xtot, m, axis=1)
-        P_2h = pk_lin * I ** 2
-        return P_1h + P_2h
+        """X-ray auto (gas + AGN); (Nk,) or (Nb, Nk) band autos in band mode."""
+        if self.xray_bands is None:
+            return self._pk_XX_of(theta, H, self._emissivity_uk(theta, H),
+                                  self._agn_point_source(theta))
+        Xbs = self._emissivity_uk_bands(theta, H)
+        A = self._agn_emissivity_amp(theta)
+        wb = self._agn_band_fractions(theta) * self._abs_survival_bands(theta)
+        return jnp.stack([self._pk_XX_of(theta, H, Xbs[b], A * wb[b])
+                          for b in range(len(Xbs))])
 
     def _pk_mm(self, theta, H):
         """Halo-model matter power P_mm(k): 1-halo (baryon-split profile) + P_lin.
@@ -603,12 +887,15 @@ class ForwardModel:
         P_1h = jnp.trapezoid(dndm[None, :] * (m_over_rho[None, :] ** 2) * u_m ** 2, m, axis=1)
         return P_1h + H["pk_lin"]
 
-    def _lensing_kernel(self, theta):
+    def _lensing_kernel(self, theta, nz_src=None):
         r"""Weak-lensing efficiency W_κ(χ) on the shear grid, + χ(z) [Mpc/h].
 
         .. math::
             W_\kappa(\chi) = \tfrac32 \Omega_m (H_0/c)^2 \frac{\chi}{a}
                 \int_\chi^{\chi_H}\! d\chi'\, n_s(\chi')\,\frac{\chi'-\chi}{\chi'}
+
+        ``nz_src`` defaults to the overall source n(z); tomographic callers pass
+        one of ``self.nz_src_bins``.
         """
         c = self._cosmo(theta)
         h, Om = c["h"], c["Omega_m"]
@@ -617,7 +904,7 @@ class ForwardModel:
         a = 1.0 / (1.0 + z)
         # source distribution per unit χ (n_s(z) dz = n_s(χ) dχ), renormalised
         dz_dchi = jnp.gradient(z) / jnp.gradient(chi)
-        ns_chi = self.nz_src * dz_dchi
+        ns_chi = (self.nz_src if nz_src is None else nz_src) * dz_dchi
         ns_chi = ns_chi / jnp.trapezoid(ns_chi, chi)
         # lensing efficiency g(χ_i) = ∫_{χ_i} n_s(χ') (χ'-χ_i)/χ' dχ'
         dchi = jnp.gradient(chi)
@@ -641,11 +928,24 @@ class ForwardModel:
         return jnp.trapezoid(W1[None, :] * W2[None, :] / chi[None, :] ** 2 * Pz, chi, axis=1)
 
     def _cosmic_shear(self, theta, stack_shear=None):
-        """Convergence auto power spectrum C_ℓ^{κκ} via the lensing Limber integral."""
-        chi, W, _ = self._lensing_kernel(theta)
+        """Convergence power spectra C_ℓ^{κκ} via the lensing Limber integral.
+
+        Single-bin mode returns one spectrum (Nℓ,); tomographic mode returns
+        the stacked unique pairs {C_ij, i ≤ j} in ``self.shear_pairs`` order,
+        (n_pairs·Nℓ,).
+        """
         if stack_shear is None:
             stack_shear = self._pmm_logstack(theta, self.z_shear)
-        return self._limber_kernels(chi, W, W, stack_shear)
+        if self.n_shear_bins == 1:
+            chi, W, _ = self._lensing_kernel(theta)
+            return self._limber_kernels(chi, W, W, stack_shear)
+        chi = None
+        Ws = []
+        for nz in self.nz_src_bins:
+            chi, W, _ = self._lensing_kernel(theta, nz)
+            Ws.append(W)
+        return jnp.concatenate([self._limber_kernels(chi, Ws[i], Ws[j], stack_shear)
+                                for (i, j) in self.shear_pairs])
 
     def _cmb_kernel(self, theta, chi, z):
         r"""CMB-lensing efficiency W_{κ_CMB}(χ), single source plane at z*≈1089.
@@ -670,10 +970,20 @@ class ForwardModel:
         return self._limber_kernels(chi, dndchi, Wc, stack)
 
     def _cl_shear_kCMB(self, theta, stack_shear):
-        """Cosmic-shear × CMB-lensing C_ℓ (both lensing kernels, matter power)."""
-        chi, Wk, z = self._lensing_kernel(theta)
-        Wc = self._cmb_kernel(theta, chi, z)
-        return self._limber_kernels(chi, Wk, Wc, stack_shear)
+        """Cosmic-shear × CMB-lensing C_ℓ (both lensing kernels, matter power).
+
+        Tomographic mode returns one spectrum per source bin, concatenated.
+        """
+        if self.n_shear_bins == 1:
+            chi, Wk, z = self._lensing_kernel(theta)
+            Wc = self._cmb_kernel(theta, chi, z)
+            return self._limber_kernels(chi, Wk, Wc, stack_shear)
+        outs = []
+        for nz in self.nz_src_bins:
+            chi, Wk, z = self._lensing_kernel(theta, nz)
+            Wc = self._cmb_kernel(theta, chi, z)
+            outs.append(self._limber_kernels(chi, Wk, Wc, stack_shear))
+        return jnp.concatenate(outs)
 
     def _cl_kCMB(self, theta):
         """CMB-lensing auto C_ℓ^{κκ_CMB} over the high-z LOS grid."""
@@ -684,7 +994,7 @@ class ForwardModel:
         return self._limber_kernels(chi, Wc, Wc, stack)
 
     # ---- projections / Limber ---------------------------------------
-    def _wp(self, P_gg):
+    def _wp(self, P_gg, rp=None):
         r_tab = jnp.logspace(-2, 2.5, 512)
         xi_tab = _pk_to_xi(r_tab, self.log_k, jnp.log(jnp.maximum(P_gg, 1e-20)))
         pi_grid = jnp.linspace(0.0, self.pi_max, 512)
@@ -692,7 +1002,7 @@ class ForwardModel:
         def _one(rp_i):
             rr = jnp.sqrt(rp_i ** 2 + pi_grid ** 2)
             return 2.0 * jnp.trapezoid(jnp.interp(rr, r_tab, xi_tab), pi_grid)
-        return jax.vmap(_one)(self.rp_wp)
+        return jax.vmap(_one)(self.rp_wp if rp is None else rp)
 
     def _delta_sigma(self, P_gm, theta):
         r_tab = jnp.logspace(-2, 2.5, 512)
@@ -747,32 +1057,144 @@ class ForwardModel:
         ``log L_X − log k − ⟨log M_BH⟩(M_h)``.  Matches the validated numpy
         :class:`hod_mod.agn.powell.PowellAGNModel` (see that module + its tests).
         """
+        if self.xlf_band == "hard":
+            return self._xlf_at(theta, self.loglx_xlf)
+        # tier-2 soft-band observed XLF: intrinsic hard abscissa shifted by
+        # k_h2s(Γ), with the obscured fraction f_abs dimmed by the NH
+        # transmission (a two-component mixture — analytic and cheap).
+        shift = jnp.log10(self._k_h2s(theta))            # l_soft = l_hard + shift
+        labs = float(np.log10(self._t_soft))             # < 0
+        fabs = theta[_IDX["agn_fabs"]]
+        l_hard = self.loglx_xlf - shift
+        return ((1.0 - fabs) * self._xlf_at(theta, l_hard)
+                + fabs * self._xlf_at(theta, l_hard - labs))
+
+    def _xlf_at(self, theta, loglx_hard):
+        """Φ(log L_X^hard) at the given hard-band abscissas (the tier-1 kernel)."""
         c = self._cosmo(theta)
         z = self.z_eff
         dndm = self._hmf.dndm(self.m, float(z), c)                      # (NM,)
         dndlogm = dndm * self.m * _LN10                                 # (NM,) per dex(M_h)
 
-        hp = self._hod(theta)
-        log10ms = _inv_shmr(self.log10m, hp["lg_m1h"], hp["lg_m0star"],
-                            hp["beta"], hp["delta"], hp["gamma"])       # (NM,) ⟨log M_*⟩(M_h)
-        mu_bh, al_bh = theta[_IDX["agn_mu_bh"]], theta[_IDX["agn_al_bh"]]
-        sig_bh = theta[_IDX["agn_sig_bh"]]
-        mean_bh = mu_bh + al_bh * (log10ms - 11.0)                      # (NM,) ⟨log M_BH⟩(M_h)
-        sig_lm = jnp.sqrt(al_bh ** 2 * _SIG_MSTAR_XLF ** 2 + sig_bh ** 2)
-
-        lstar = theta[_IDX["agn_log10_lstar"]]
-        d1, d2 = theta[_IDX["agn_delta1"]], theta[_IDX["agn_delta2"]]
-        x = 10.0 ** (self.loglam - lstar)
-        erdf = 1.0 / (x ** d1 + x ** d2)                               # (Nlam,)
-        erdf = erdf / (jnp.sum(erdf) * self.dlam)                       # ∫ dlogλ = 1
-
+        mean_bh, sig_lm, erdf = self._agn_kernel_parts(theta)
         # K(logL_X | M_h) = Σ_λ ERDF(λ) dλ · N(logL_X − logk − ⟨logM_BH⟩ − λ ; σ_lm)
-        t = self.loglx_xlf[:, None, None] - _POWELL_LOGK - mean_bh[None, :, None]
+        t = loglx_hard[:, None, None] - _POWELL_LOGK - mean_bh[None, :, None]
         gk = jnp.exp(-0.5 * ((t - self.loglam[None, None, :]) / sig_lm) ** 2) \
             / (jnp.sqrt(2.0 * jnp.pi) * sig_lm)                        # (Nlx, NM, Nlam)
         K = jnp.sum(erdf[None, None, :] * gk, axis=2) * self.dlam      # (Nlx, NM)  pdf in dex(L_X)
         ferdf = 10.0 ** theta[_IDX["agn_log10_ferdf"]]                 # active fraction
         return jnp.trapezoid(dndlogm[None, :] * K * ferdf, self.log10m, axis=1)  # (Nlx,)
+
+    # ---- Powell AGN chain: shared kernel, occupation, emission, clustering --
+    def _agn_kernel_parts(self, theta):
+        r"""Shared pieces of the Powell chain: (⟨log M_BH⟩(M_h), σ_lm, ERDF).
+
+        ⟨log M_BH⟩ comes from the ZM15 SHMR ⟨log M_*⟩(M_h) through the free
+        M_BH–M_* relation; σ_lm is the halo-independent lognormal width
+        √(α_BH²σ_M*²(1−ρ) + σ_BH²) (Powell Model 2: ρ>0 aligns part of the M*
+        scatter with M_halo, shrinking the M_BH|M_halo width; unclipped — the
+        Fisher is local around the fiducial ρ=0); ERDF is the Ananna 2022
+        broken power law normalised to ∫ dlog10λ = 1 on the loglam grid.
+        """
+        hp = self._hod(theta)
+        log10ms = _inv_shmr(self.log10m, hp["lg_m1h"], hp["lg_m0star"],
+                            hp["beta"], hp["delta"], hp["gamma"])       # (NM,)
+        al_bh = theta[_IDX["agn_al_bh"]]
+        mean_bh = theta[_IDX["agn_mu_bh"]] + al_bh * (log10ms - 11.0)   # (NM,)
+        sig_lm = jnp.sqrt(al_bh ** 2 * theta[_IDX["agn_sig_mstar"]] ** 2
+                          * (1.0 - theta[_IDX["agn_rho"]])
+                          + theta[_IDX["agn_sig_bh"]] ** 2)
+        x = 10.0 ** (self.loglam - theta[_IDX["agn_log10_lstar"]])
+        erdf = 1.0 / (x ** theta[_IDX["agn_delta1"]] + x ** theta[_IDX["agn_delta2"]])
+        erdf = erdf / (jnp.sum(erdf) * self.dlam)                       # (Nlam,)
+        return mean_bh, sig_lm, erdf
+
+    def _agn_occupation(self, theta, l1, l2):
+        r"""⟨N_AGN(l1 < log10 L_X^hard < l2 | M_h)⟩ on the mass grid, (NM,).
+
+        Analytic Gaussian-CDF integral of P(log L_X|M_h) = ERDF ⊛ N(σ_lm) over
+        the HARD-band bin [l1, l2) — exact and cheap (no L_X quadrature):
+
+        .. math:: N = f_{\rm ERDF} \sum_\lambda {\rm ERDF}(\lambda)\Delta\lambda\;
+            \tfrac12\left[{\rm erf}\tfrac{l_2-\mu}{\sqrt2\sigma}
+                        - {\rm erf}\tfrac{l_1-\mu}{\sqrt2\sigma}\right],
+            \quad \mu = \log_{10}k + \langle\log M_{\rm BH}\rangle + \lambda.
+
+        Centrals only (every galaxy hosts one SMBH; satellites are a documented
+        refinement, matching powell.py), clipped to ≤ 1 like the numpy model.
+        """
+        mean_bh, sig_lm, erdf = self._agn_kernel_parts(theta)
+        mu = _POWELL_LOGK + mean_bh[:, None] + self.loglam[None, :]     # (NM, Nlam)
+        s = jnp.sqrt(2.0) * sig_lm
+        cdf = 0.5 * (erf((l2 - mu) / s) - erf((l1 - mu) / s))           # (NM, Nlam)
+        n = (10.0 ** theta[_IDX["agn_log10_ferdf"]]
+             * jnp.sum(erdf[None, :] * cdf, axis=1) * self.dlam)        # (NM,)
+        return jnp.minimum(n, 1.0)
+
+    def _agn_emissivity_amp(self, theta):
+        r"""Powell-mode mean AGN emission per halo, (NM,), in the 10^45-referenced
+        model units of the gas leg (SOFT band, full lognormal mean — the X-ray
+        map sees all AGN emission, no L_min cut):
+
+        .. math:: \langle L_X\rangle(M) = f_{\rm ERDF}\,k_{\rm h2s}\,
+            10^{\log k + \langle\log M_{\rm BH}\rangle}\,
+            e^{(\sigma_{lm}\ln 10)^2/2}\;\textstyle\sum_\lambda
+            {\rm ERDF}(\lambda)\,10^\lambda\,\Delta\lambda .
+        """
+        mean_bh, sig_lm, erdf = self._agn_kernel_parts(theta)
+        ferdf = 10.0 ** theta[_IDX["agn_log10_ferdf"]]
+        lam_mean = jnp.sum(erdf * 10.0 ** self.loglam) * self.dlam
+        lognorm = jnp.exp(0.5 * (sig_lm * _LN10) ** 2)
+        lx_hard = 10.0 ** (_POWELL_LOGK + mean_bh - 45.0) * lam_mean * lognorm
+        return ferdf * self._k_h2s(theta) * lx_hard                     # (NM,)
+
+    def _agn_point_source(self, theta):
+        """AGN point-source emission per halo for C_gX/C_XX, (NM,), model units.
+
+        "powell": the Powell-chain mean emission (shares the XLF parameters),
+        including the obscured-fraction flux survival in the soft band.
+        "surrogate": the tier-1 duty-cycle-scaled L∝M term (log10DC-driven).
+        """
+        if self.agn_emission == "powell":
+            return self._agn_emissivity_amp(theta) * self._abs_survival_soft(theta)
+        dc = 10.0 ** theta[_IDX["log10DC"]]
+        return dc * (self.m / 1e13) * 1.0e-1
+
+    def _wp_agn(self, theta, H):
+        r"""Projected AGN clustering w_p(r_p) per L_X bin, concatenated, 2-halo.
+
+        A Bernoulli central occupation has no self-pairs, so the 1-halo term
+        vanishes exactly: P_agn(k) = b_agn² P_lin(k) with
+
+        .. math:: b_{\rm agn} = \frac{\int dM\,\frac{dn}{dM}\,b(M)\,N_{\rm AGN}(M)}
+                                    {\int dM\,\frac{dn}{dM}\,N_{\rm AGN}(M)} .
+
+        The abundance (denominator) is what the XLF measures; the bias per
+        (L_X, z) bin is the new information — it breaks agn_rho, which shrinks
+        σ_lm and steepens the L_X-selection in halo mass at fixed XLF.
+        """
+        outs = []
+        for (l1, l2) in self.agn_lx_bins:
+            n = self._agn_occupation_obs(theta, l1, l2)                 # (NM,)
+            n_agn = jnp.trapezoid(H["dndm"] * n, self.m)
+            b_agn = jnp.trapezoid(H["dndm"] * H["bias"] * n, self.m) / n_agn
+            outs.append(self._wp(b_agn ** 2 * H["pk_lin"], rp=self.rp_wp_agn))
+        return jnp.concatenate(outs)
+
+    def _agn_occupation_obs(self, theta, l1_soft, l2_soft):
+        r"""AGN occupation for an OBSERVED soft-band L_X bin [l1, l2), (NM,).
+
+        The complete X-ray selection is by observed soft flux: unabsorbed AGN
+        enter at their intrinsic soft luminosity (hard + log10 k_h2s(Γ));
+        obscured AGN (fraction f_abs) are dimmed by the NH transmission t_soft,
+        so their intrinsic bin shifts up by −log10 t_soft.
+        """
+        shift = jnp.log10(self._k_h2s(theta))            # soft = hard + shift
+        labs = float(np.log10(self._t_soft))             # < 0, static template
+        fabs = theta[_IDX["agn_fabs"]]
+        n_un = self._agn_occupation(theta, l1_soft - shift, l2_soft - shift)
+        n_ab = self._agn_occupation(theta, l1_soft - shift - labs, l2_soft - shift - labs)
+        return (1.0 - fabs) * n_un + fabs * n_ab
 
     # ---- abundance observables: n_gal and the stellar-mass function --
     def _occ_above(self, theta, thr):
@@ -785,12 +1207,27 @@ class ForwardModel:
                     hp["bsat"], hp["beta_sat"], hp["bcut"], hp["beta_cut"], hp["alpha_sat"])
         return nc, ns
 
-    def _n_gal(self, theta, H):
-        """Comoving galaxy number density n̄_g [h³ Mpc⁻³] above the sample threshold.
+    def _occ_sample(self, theta):
+        """(N_c, N_s) occupation of THIS model's sample: threshold or M*-bin.
 
-        n̄_g ∝ f_c, so this observable is what breaks the otherwise-degenerate f_c.
+        Bin mode ([lo, hi)) is the exact difference of two threshold
+        occupations — each with its own M_min(thr)-derived msat/mcut — and both
+        differences are ≥ 0 because N_cen and N_sat decrease with the threshold.
         """
-        nc, ns = self._occ_above(theta, self._hod(theta)["log10m_star_thresh"])
+        nc, ns = self._occ_above(theta, self._thr)
+        if self._thr_hi is not None:
+            nc_hi, ns_hi = self._occ_above(theta, self._thr_hi)
+            nc, ns = nc - nc_hi, ns - ns_hi
+        return nc, ns
+
+    def _n_gal(self, theta, H):
+        """Comoving galaxy number density n̄_g [h³ Mpc⁻³] of the sample.
+
+        Threshold mode: n̄(>M*_thr); bin mode: the binned count density (which
+        IS the stellar-mass-function datum of the cell).  n̄_g ∝ f_c, so this
+        observable is what breaks the otherwise-degenerate f_c.
+        """
+        nc, ns = self._occ_sample(theta)
         return jnp.array([jnp.trapezoid(H["dndm"] * (nc + ns), self.m)])
 
     def _smf(self, theta, H):
@@ -809,9 +1246,10 @@ class ForwardModel:
     # ---- public: full prediction and data vector --------------------
     def predict(self, theta, which=None):
         """Return a dict of observable arrays on the full grids."""
+        theta = self._theta_eff(theta)      # tier-2 z-evolution (identity at fiducial)
         which = which or OBSERVABLES
         out = {}
-        if any(o in which for o in ("wp", "ds", "n_gal", "smf")):
+        if any(o in which for o in ("wp", "ds", "n_gal", "smf", "wp_agn")):
             H0 = self._halo_common(theta, self.z_eff)
             if "wp" in which or "ds" in which:
                 P_gg, P_gm = self._pk_gg_gm(H0, theta)
@@ -823,6 +1261,8 @@ class ForwardModel:
                 out["n_gal"] = self._n_gal(theta, H0)
             if "smf" in which:
                 out["smf"] = self._smf(theta, H0)
+            if "wp_agn" in which:
+                out["wp_agn"] = self._wp_agn(theta, H0)
         # Galaxy-window angular spectra (gas cross + galaxy×CMB-lensing) share the
         # per-z halo quantities on the galaxy n(z) grid.
         ang = [o for o in ("cl_gX", "cl_gy", "cl_XX") if o in which]
@@ -830,8 +1270,17 @@ class ForwardModel:
             Hs = [self._halo_common(theta, float(z)) for z in np.asarray(self.z_grid)]
             fns = {"cl_gX": self._pk_gX, "cl_gy": self._pk_gy, "cl_XX": self._pk_XX}
             for o in ang:
-                stack = jnp.stack([jnp.log(jnp.maximum(fns[o](theta, H), 1e-30)) for H in Hs])
-                out[o] = self._limber_from_stack(theta, stack)
+                if self.xray_bands is not None and o in ("cl_gX", "cl_XX"):
+                    # band mode: P is (Nb, Nk) per z → one Limber per band,
+                    # concatenated band-major (matches grid_of's tiled ℓ).
+                    Ps = jnp.stack([fns[o](theta, H) for H in Hs])      # (Nz, Nb, Nk)
+                    out[o] = jnp.concatenate([
+                        self._limber_from_stack(
+                            theta, jnp.log(jnp.maximum(Ps[:, b, :], 1e-30)))
+                        for b in range(len(self.xray_bands))])
+                else:
+                    stack = jnp.stack([jnp.log(jnp.maximum(fns[o](theta, H), 1e-30)) for H in Hs])
+                    out[o] = self._limber_from_stack(theta, stack)
             if "cl_gkCMB" in which:
                 out["cl_gkCMB"] = self._cl_gkCMB(theta, Hs)
         # Matter-power lensing spectra (cosmic shear + shear×CMB-lensing) share the
@@ -848,13 +1297,30 @@ class ForwardModel:
             out["xlf"] = self._xlf(theta)
         return out
 
+    def cl_gg_fiducial(self, theta):
+        """Galaxy angular auto C_ℓ over the cell window (fiducial-only helper
+        for the tier-2 noise module — the galaxy-side Knox term of C_gX etc.)."""
+        theta = self._theta_eff(jnp.asarray(theta))
+        Hs = [self._halo_common(theta, float(z)) for z in np.asarray(self.z_grid)]
+        stack = jnp.stack([jnp.log(jnp.maximum(self._pk_gg_gm(H, theta)[0], 1e-30))
+                           for H in Hs])
+        return self._limber_from_stack(theta, stack)
+
     def grid_of(self, name):
         """Return the abscissa grid (r_p, ℓ, or log10 L_X) for observable ``name``."""
         if name.startswith("cl_"):
+            if name in ("cl_gX", "cl_XX") and self.xray_bands is not None:
+                return jnp.asarray(np.tile(np.asarray(self.ell), len(self.xray_bands)))
+            if name == "cl_kk" and self.n_shear_bins > 1:
+                return jnp.asarray(np.tile(np.asarray(self.ell), len(self.shear_pairs)))
+            if name == "cl_shear_kCMB" and self.n_shear_bins > 1:
+                return jnp.asarray(np.tile(np.asarray(self.ell), self.n_shear_bins))
             return self.ell
         return {"wp": self.rp_wp, "ds": self.rp_ds,
                 "xlf": self.loglx_xlf, "n_gal": jnp.array([0.0]),
-                "smf": self.logmstar_smf}[name]
+                "smf": self.logmstar_smf,
+                "wp_agn": jnp.asarray(np.tile(np.asarray(self.rp_wp_agn),
+                                              len(self.agn_lx_bins)))}[name]
 
     def full_data_vector_fn(self, which=None):
         """Return ``f(theta) -> concat of all observables (full grids)`` + row metadata.
@@ -885,7 +1351,7 @@ class ForwardModel:
             jnp.asarray([self.z_eff]), _FIXED_COSMO["h"], 0.31)).ravel()[0]) * _FIXED_COSMO["h"]
         ell_max = chi_eff / float(rmin)
         row_obs = np.asarray(row_obs)
-        proj = np.isin(row_obs, ["wp", "ds"])
+        proj = np.isin(row_obs, ["wp", "ds", "wp_agn"])
         ang = np.array([str(o).startswith("cl_") for o in row_obs])
         keep = np.ones(len(row_obs), dtype=bool)          # abundance (xlf/n_gal/smf): always kept
         keep = np.where(proj, row_x > float(rmin), keep)
@@ -907,7 +1373,7 @@ class ForwardModel:
         idx = {}
         for name in which:
             g = np.asarray(self.grid_of(name))
-            if name in ("wp", "ds"):
+            if name in ("wp", "ds", "wp_agn"):
                 sel = np.where(g > float(rmin))[0]
             elif name in ("xlf", "n_gal", "smf"):
                 sel = np.arange(g.size)            # abundance: no scale cut

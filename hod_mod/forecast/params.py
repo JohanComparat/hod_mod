@@ -17,7 +17,14 @@ import os
 
 import numpy as np
 
-from hod_mod.forecast.forward_jax import PARAM_NAMES, _IDX, N_PARAM
+from hod_mod.forecast.forward_jax import (
+    PARAM_NAMES,
+    _IDX,
+    N_PARAM,
+    TIER2_PROMOTED,
+    TIER2_ZSLOPES,
+    TIER2_EXTENSION,
+)
 
 # --- hard-coded fallbacks (values read from the MAP JSONs, see module docstring)
 _FIDUCIAL_DEFAULT = {
@@ -33,6 +40,25 @@ _FIDUCIAL_DEFAULT = {
     "agn_mu_bh": 7.5184, "agn_al_bh": 0.8037, "agn_sig_bh": 0.2067,
     "agn_log10_lstar": -1.0120, "agn_delta1": 0.3123, "agn_delta2": 2.4761,
     "agn_log10_ferdf": -1.7243,
+    # --- tier-2 promoted nuisances: fiducial == the former fixed constant, so
+    # the fiducial prediction is bit-identical to the tier-1 model.
+    "beta_sat": 0.9, "bcut": 0.86, "beta_cut": 0.41, "alpha_sat": 1.0,   # _FIXED_HOD
+    "beta_b": 1.5, "log10_M_eta": 13.0, "beta_eta": 1.5,                 # _FIXED_BARYON
+    "alpha_in_gas": 0.9, "alpha_tr_gas": 2.0,                            # gas emissivity slopes
+    "p0_pressure": 8.403, "c500_pressure": 1.177, "gamma_pressure": 0.3081,
+    "alpha_pressure": 1.0510, "beta_out_pressure": 5.4905,               # A10 GNFW
+    "agn_rho": 0.0, "agn_sig_mstar": 0.20,                               # Powell Model 2 internals
+    # --- tier-2 z-evolution slopes (per ln(1+z), pivot z=0.3): fiducial 0 =
+    # the tier-1 no-evolution model (self-similar E(z) scalings untouched).
+    "lg_m1h_zs": 0.0, "lg_m0star_zs": 0.0, "sigma_lnmstar_zs": 0.0,
+    "lx_zs": 0.0, "kt_zs": 0.0,
+    "agn_log10_ferdf_zs": 0.0, "agn_log10_lstar_zs": 0.0,
+    # --- tier-2 X-ray spectral sector (multi-band APEC layer).  Fiducials
+    # reproduce the production conventions: isothermal halos (t_prof_slope=0),
+    # Z=0.3 Z_sun (DPM normalisation, gas/metallicity.py), Γ=1.8 AGN power law
+    # (fit_xray_joint_bands._GAMMA_AGN), ~30% obscured at NH=1e22.
+    "t_prof_slope": 0.0, "z_gas_norm": 0.3, "z_gas_mslope": 0.0, "z_gas_zs": 0.0,
+    "agn_gamma": 1.8, "agn_fabs": 0.3, "agn_mu_bh_zs": 0.0,
 }
 
 # Planck 2018 1σ priors (planck_prior.PLANCK18_SIGMAS) on the free cosmo params.
@@ -60,6 +86,20 @@ BROAD_PRIOR_SIGMA = {
     "agn_mu_bh": 0.30, "agn_al_bh": 0.24, "agn_sig_bh": 0.18,
     "agn_log10_lstar": 0.20, "agn_delta1": 0.15, "agn_delta2": 0.66,
     "agn_log10_ferdf": 1.0,
+    # Tier-2 promoted nuisances — plausible-range widths (regularizing only).
+    "beta_sat": 1.0, "bcut": 5.0, "beta_cut": 1.0, "alpha_sat": 0.5,
+    "beta_b": 1.0, "log10_M_eta": 1.0, "beta_eta": 1.0,
+    "alpha_in_gas": 0.5, "alpha_tr_gas": 1.0,
+    "p0_pressure": 4.0, "c500_pressure": 0.6, "gamma_pressure": 0.3,
+    "alpha_pressure": 0.5, "beta_out_pressure": 2.0,
+    "agn_rho": 0.5, "agn_sig_mstar": 0.15,
+    # Tier-2 z-evolution slopes — broad (an O(1) change per e-fold of 1+z).
+    "lg_m1h_zs": 2.0, "lg_m0star_zs": 2.0, "sigma_lnmstar_zs": 2.0,
+    "lx_zs": 3.0, "kt_zs": 2.0,
+    "agn_log10_ferdf_zs": 3.0, "agn_log10_lstar_zs": 2.0,
+    # Tier-2 X-ray spectral sector.
+    "t_prof_slope": 0.5, "z_gas_norm": 0.3, "z_gas_mslope": 0.5, "z_gas_zs": 2.0,
+    "agn_gamma": 0.3, "agn_fabs": 0.3, "agn_mu_bh_zs": 2.0,
 }
 
 PARAM_LATEX = {
@@ -78,6 +118,50 @@ PARAM_LATEX = {
     "agn_sig_bh": r"$\sigma_{\rm BH}$", "agn_log10_lstar": r"$\log_{10}\lambda_*$",
     "agn_delta1": r"$\delta_1$", "agn_delta2": r"$\delta_2$",
     "agn_log10_ferdf": r"$\log_{10}f_{\rm ERDF}$",
+    # Tier-2 promoted nuisances.
+    "beta_sat": r"$\beta_{\rm sat}$", "bcut": r"$b_{\rm cut}$",
+    "beta_cut": r"$\beta_{\rm cut}$", "alpha_sat": r"$\alpha_{\rm sat}$",
+    "beta_b": r"$\beta_b$", "log10_M_eta": r"$\log_{10}M_\eta$",
+    "beta_eta": r"$\beta_\eta$",
+    "alpha_in_gas": r"$\alpha_{\rm in}$", "alpha_tr_gas": r"$\alpha_{\rm tr}$",
+    "p0_pressure": r"$P_0$", "c500_pressure": r"$c_{500}$",
+    "gamma_pressure": r"$\gamma_P$", "alpha_pressure": r"$\alpha_P$",
+    "beta_out_pressure": r"$\beta_{P,\rm out}$",
+    "agn_rho": r"$\rho_{\rm BH}$", "agn_sig_mstar": r"$\sigma_{M_*}^{\rm BH}$",
+    # Tier-2 z-evolution slopes.
+    "lg_m1h_zs": r"$\partial_z\lg M_1$", "lg_m0star_zs": r"$\partial_z\lg M_{0*}$",
+    "sigma_lnmstar_zs": r"$\partial_z\sigma_{\ln M_*}$",
+    "lx_zs": r"$\partial_z L_X^{\rm norm}$", "kt_zs": r"$\partial_z kT^{\rm norm}$",
+    "agn_log10_ferdf_zs": r"$\partial_z\log_{10}f_{\rm ERDF}$",
+    "agn_log10_lstar_zs": r"$\partial_z\log_{10}\lambda_*$",
+    # Tier-2 X-ray spectral sector.
+    "t_prof_slope": r"$\Gamma_T$", "z_gas_norm": r"$Z_{\rm gas}$",
+    "z_gas_mslope": r"$\partial_M Z$", "z_gas_zs": r"$\partial_z Z$",
+    "agn_gamma": r"$\Gamma_{\rm AGN}$", "agn_fabs": r"$f_{\rm abs}$",
+    "agn_mu_bh_zs": r"$\partial_z\mu_{\rm BH}$",
+}
+
+# Parameter sectors for the tier-2 cosmology-vs-astrophysics decomposition
+# (run_tier2_forecast): σ(sector) marginalised vs other-sectors-pinned, probe
+# attribution, and information gain per sector.  Covers all of PARAM_NAMES.
+SECTORS = {
+    "cosmology": ["Omega_m", "sigma8", "h", "n_s", "Omega_b"],
+    "shmr": ["lg_m1h", "lg_m0star", "beta", "delta", "gamma", "sigma_lnmstar",
+             "eta", "fc", "bsat", "beta_sat", "bcut", "beta_cut", "alpha_sat",
+             "lg_m1h_zs", "lg_m0star_zs", "sigma_lnmstar_zs"],
+    "gas": ["lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max",
+            "alpha_in_gas", "alpha_tr_gas", "beta_pressure", "p0_pressure",
+            "c500_pressure", "gamma_pressure", "alpha_pressure",
+            "beta_out_pressure", "lx_zs", "kt_zs",
+            "t_prof_slope", "z_gas_norm", "z_gas_mslope", "z_gas_zs"],
+    "baryon": ["log10_M_pivot", "log10_eta_min", "beta_b", "log10_M_eta", "beta_eta"],
+    "agn": ["agn_mu_bh", "agn_al_bh", "agn_sig_bh", "agn_log10_lstar",
+            "agn_delta1", "agn_delta2", "agn_log10_ferdf", "agn_rho",
+            "agn_sig_mstar", "agn_log10_ferdf_zs", "agn_log10_lstar_zs",
+            "agn_gamma", "agn_fabs", "agn_mu_bh_zs"],
+    # retired: with agn_emission="powell" the duty cycle leaves the emissivity;
+    # its only remaining consumer is the (off-by-default) energy-closure mode.
+    "retired": ["log10DC"],
 }
 
 
