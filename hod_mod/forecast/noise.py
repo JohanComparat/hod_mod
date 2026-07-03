@@ -159,18 +159,39 @@ class AthenaAllSky:
 
 @dataclass
 class SpectroSurvey:
-    """DESI/4MOST-like spectroscopy over the shear footprint."""
+    """DESI/4MOST-like spectroscopy over the shear footprint.
+
+    Tier-3 stellar-mass completeness: with ``mstar_lim0`` set, a (z, M*) cell
+    is complete iff its lower edge satisfies
+    ``m_lo >= mstar_lim0 + mstar_lim_slope * z_hi`` (a magnitude-limited
+    selection rises roughly linearly in log M* with z).  ``None`` (default)
+    keeps the tier-2 behaviour: complete everywhere.
+    """
     f_sky: float = 0.5
     f_cv0: float = 0.005         # relative cosmic variance × [V/(Gpc/h)³]^{-1/2}
     pi_max: float = 100.0        # w_p projection depth [Mpc/h]
     ssfr_err: float = 0.05       # absolute σ on the mean MS log10 sSFR per cell [dex]
     sfrd_rel: float = 0.12       # relative σ on the cell SFR density (MD14-like)
     foii_lim: float = 1.0e-16    # [OII] line-flux limit [erg/s/cm²] (DESI-like)
+    fha_lim: float = 1.0e-16     # Hα line-flux limit [erg/s/cm²]
+    mstar_lim0: float = None     # log10 M* completeness limit at z = 0
+    mstar_lim_slope: float = 0.0 # its d(log10 M*)/dz slope
 
     def loii_lim(self, z, h, Om):
         """Faintest detectable L_[OII] [erg/s] at redshift z."""
         d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
         return 4.0 * np.pi * d_l ** 2 * self.foii_lim
+
+    def lha_lim(self, z, h, Om):
+        """Faintest detectable L_Hα [erg/s] at redshift z."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
+        return 4.0 * np.pi * d_l ** 2 * self.fha_lim
+
+    def complete_for(self, m_lo, z_hi):
+        """Is a cell with lower M* edge ``m_lo`` complete to ``z_hi``?"""
+        if self.mstar_lim0 is None:
+            return True
+        return float(m_lo) >= self.mstar_lim0 + self.mstar_lim_slope * float(z_hi)
 
     def cv_rel(self, volume):
         """Relative cosmic-variance floor for a cell of ``volume`` (Mpc/h)³."""
@@ -208,6 +229,59 @@ class IRSurvey:
 
     def l_lim(self, z, h, Om):
         """Faintest detectable 6 μm νL_ν [erg/s] at redshift z."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
+        return 4.0 * np.pi * d_l ** 2 * self.nulnu_lim
+
+
+@dataclass
+class SKASurvey:
+    """SKA-like radio continuum intensity maps in a few GHz bands.
+
+    Map noise follows the calibrated effective recipe (the tSZ / 21 cm IM
+    precedent): N_b(ℓ) = rn_b (ℓ/100)^an · C_b(ℓ) against the fiducial band
+    auto — thermal noise, calibration residuals and bright-source masking
+    are absorbed into (rn, an), the documented upgrade path being a physical
+    T_sys/confusion model.
+    """
+    f_sky: float = 0.5
+    bands: tuple = (0.95, 1.4, 3.0)   # band centres [GHz]
+    rn: tuple = (0.2, 0.2, 0.3)       # noise-to-signal at ℓ = 100, per band
+    an: float = 0.5                   # its ℓ growth exponent
+
+    def noise_cl(self, ell, cl_band, i):
+        """Effective noise power for band ``i`` against its fiducial auto."""
+        return self.rn[i] * (np.asarray(ell) / 100.0) ** self.an \
+            * np.asarray(cl_band)
+
+
+@dataclass
+class IRMapSurvey:
+    """WISE/SPHEREx-like infrared intensity maps in a few μm bands.
+
+    Same effective (rn, an) noise recipe as :class:`SKASurvey`; zodiacal and
+    stellar residuals dominate, hence the larger rn at 12 μm.
+    """
+    f_sky: float = 0.65
+    bands: tuple = (3.4, 4.9, 12.0)   # band centres [μm]
+    rn: tuple = (0.3, 0.3, 0.4)
+    an: float = 0.5
+
+    def noise_cl(self, ell, cl_band, i):
+        """Effective noise power for band ``i`` against its fiducial auto."""
+        return self.rn[i] * (np.asarray(ell) / 100.0) ** self.an \
+            * np.asarray(cl_band)
+
+
+@dataclass
+class BandLFSurvey:
+    """Generic broad-band luminosity-function survey: an f_sky footprint with
+    a νL_ν-equivalent flux limit driving the L_lim(z) completeness (the
+    Athena/radio/IR pattern, instantiated per band: UV, opt, NIR, AGN UV/opt)."""
+    f_sky: float
+    nulnu_lim: float             # νL_ν-equivalent limit [erg/s/cm²]
+
+    def l_lim(self, z, h, Om):
+        """Faintest detectable νL_ν [erg/s] at redshift z."""
         d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
         return 4.0 * np.pi * d_l ** 2 * self.nulnu_lim
 

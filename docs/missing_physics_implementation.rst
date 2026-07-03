@@ -628,11 +628,61 @@ Results
 -------
 
 The 90-parameter production forecast (six X-ray bands, SF/Q-split cells,
-radio + IR + [OII] + HI observables — 177 blocks) extends the
-:doc:`tier2_forecast` decomposition; its SUMMARY, npz products and the
-per-sector information gains are written to
-``$HOD_MOD_RESULTS/tier2_forecast/`` by the driver command above and will be
-folded into this page alongside the 61-parameter baseline.
+radio + IR + [OII] + HI observables — 177 blocks, 22 539 data rows) extends
+the :doc:`tier2_forecast` decomposition.  Headline numbers at
+:math:`r_\mathrm{min} = 0.1\,h^{-1}` Mpc:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 20 22 14
+
+   * - Parameter
+     - All 90 free
+     - Astrophysics pinned
+     - Degradation
+   * - :math:`\Omega_\mathrm{m}`
+     - :math:`1.82\times10^{-4}`
+     - :math:`8.01\times10^{-5}`
+     - ×2.3
+   * - :math:`\sigma_8`
+     - :math:`2.93\times10^{-4}`
+     - :math:`1.22\times10^{-4}`
+     - ×2.4
+   * - :math:`w_0`
+     - :math:`3.17\times10^{-3}`
+     - :math:`1.46\times10^{-3}`
+     - ×2.2
+   * - :math:`w_a`
+     - :math:`1.36\times10^{-2}`
+     - :math:`6.22\times10^{-3}`
+     - ×2.2
+   * - :math:`\sum m_\nu` [eV]
+     - :math:`3.23\times10^{-5}`
+     - —
+     - —
+
+Despite 29 additional free parameters, the 90-parameter run *beats* the
+61-parameter tier-2 baseline (:math:`\sigma(\Omega_\mathrm{m}) = 2.85\times
+10^{-4}`, :math:`\sigma(\sigma_8) = 4.39\times10^{-4}`) by ~35%: the new
+per-cell observables (sSFR, SFRD, :math:`C_\ell^{g\mathrm{HI}}`) and the
+radio/[OII]/IR/HI shells add more information than the new freedom removes.
+The cumulative probe attribution is dominated by galaxy grid → +lensing →
++X-ray/tSZ (:math:`3.1 \to 2.7 \to 1.9 \times 10^{-4}` on
+:math:`\Omega_\mathrm{m}`), with the wave observables contributing
+percent-level refinements thereafter.  The three analytically flat
+directions (``eps_sn`` at the saturated energy-closure fiducial,
+``alpha_w`` at the wind-off fiducial, ``dssfr_q`` without an sSFR cut)
+return ``inf`` marginals exactly as designed — they are prior-bounded, not
+data-constrained.  The dominant residual degeneracies are the intra-sector
+ERDF triangle (``agn_sig_bh``–``agn_rho``–``agn_sig_mstar``,
+:math:`|\rho| = 1.000`) and the gas metallicity-evolution pair
+(``z_gas_norm``–``z_gas_zs``, :math:`\rho = -1.000`); the worst-constrained
+Fisher directions are combinations of ``z_gas_norm``/``kt_slope``/``kt_zs``
+and the jet duo ``f_loud0``/``beta_loud``.  Completeness pruning drops
+49 rows (high-z [OII]/IR/radio/X-ray LF bins below the flux limits and the
+two lowest HIMF masses).  SUMMARY, npz products, per-sector information
+gains and the nine diagnostic figures are written to
+``$HOD_MOD_RESULTS/tier2_forecast/`` (``*_nb6``).
 
 API reference
 -------------
@@ -647,6 +697,9 @@ API reference
 
 .. automodule:: hod_mod.forecast.tier2
    :members: Tier2Forecast
+
+.. automodule:: hod_mod.forecast.tier3
+   :members: Tier3Forecast
 
 .. automodule:: hod_mod.forecast.apec_bands
    :members: band_tables, band_transmission, mm83_sigma

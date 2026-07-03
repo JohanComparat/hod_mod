@@ -282,9 +282,11 @@ def test_tier2_split_sfq_assembly(fid, tmp_path):
 
 
 def test_vector_and_sectors_extended():
-    from hod_mod.forecast.forward_jax import PARAM_NAMES, N_PARAM, MISSING_PHYSICS
+    from hod_mod.forecast.forward_jax import (
+        PARAM_NAMES, N_PARAM, MISSING_PHYSICS, TIER3_EXTENSION)
     from hod_mod.forecast.params import SECTORS
-    assert N_PARAM == 90 and len(MISSING_PHYSICS) == 29
+    assert len(MISSING_PHYSICS) == 29 and MISSING_PHYSICS[0] == "eps_sn"
+    assert N_PARAM == 90 + len(TIER3_EXTENSION)
     flat = [n for sec in SECTORS.values() for n in sec]
     assert sorted(flat) == sorted(PARAM_NAMES)
 

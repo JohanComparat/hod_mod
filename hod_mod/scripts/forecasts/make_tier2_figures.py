@@ -89,11 +89,13 @@ def fig_cell_grid(d, out_dir):
             if g.any():
                 ngal[i, j] = d["d0"][g][0]
             snr[i, j] = np.sqrt(snr_row[sel].sum())
+    dz2 = 0.5 * (np.median(np.diff(zc)) if len(zc) > 1 else 0.1)
+    dm = np.median(np.diff(mlo)) if len(mlo) > 1 else 0.2
     fig, axes = plt.subplots(1, 2, figsize=(10.5, 3.8))
     for ax, val, ttl in ((axes[0], np.log10(ngal), r"$\log_{10}\bar n_g$ [$h^3$Mpc$^{-3}$]"),
                          (axes[1], np.log10(snr), r"$\log_{10}$ total S/N per cell")):
         im = ax.imshow(val, origin="lower", aspect="auto", cmap="viridis",
-                       extent=[zc[0] - 0.05, zc[-1] + 0.05, mlo[0], mlo[-1] + 0.2])
+                       extent=[zc[0] - dz2, zc[-1] + dz2, mlo[0], mlo[-1] + dm])
         ax.set_xlabel(r"$z$"); ax.set_ylabel(r"$\log_{10} M_*$ bin")
         ax.set_title(ttl, fontsize=10)
         fig.colorbar(im, ax=ax, fraction=0.046)
@@ -226,7 +228,8 @@ def fig_zevolution(d, out_dir):
     axes[0].set_title("Redshift-evolution constraints", fontsize=10)
 
     i0, i1 = names.index("lg_m1h"), names.index("lg_m1h_zs")
-    z = np.linspace(0.05, 0.95, 60)
+    z_hi = float(np.max(d["meta"]["zeff"])) if "meta" in d else 0.95
+    z = np.linspace(0.05, z_hi, 60)
     x = np.log((1 + z) / 1.3)
     mu = d["fid"][i0] + d["fid"][i1] * x
     var = cov[i0, i0] + x ** 2 * cov[i1, i1] + 2 * x * cov[i0, i1]
@@ -365,6 +368,12 @@ def fig_band_spectroscopy(d, out_dir, d_cmp=None):
 
 
 def make_all(npz_path, out_dir, compare=None):
+    # figure prefix follows the run family (tier2_forecast__ / tier3_forecast__)
+    # so a tier-3 run cannot overwrite the tier-2 docs images
+    global _PFX
+    base = os.path.basename(npz_path)
+    if base.startswith("tier3"):
+        _PFX = "tier3_forecast__"
     d = _load(npz_path)
     d_cmp = _load(compare) if compare else None
     fig_cell_grid(d, out_dir)

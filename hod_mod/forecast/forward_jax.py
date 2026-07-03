@@ -111,6 +111,13 @@ PARAM_NAMES = [
     "loii_norm",                                          # log10 L[OII]/SFR calibration (Kennicutt-like)
     "f_loud0", "beta_loud", "b_jet",                      # radio-loud jet population (HERG/LERG)
     "agn_bc_ir",                                          # log10 L_IR(6um)/L_bol bolometric correction
+    # ---- tier 3: multi-wavelength SED calibrations ----
+    "l14_sfr", "alpha_syn",                               # radio-FIR calibration + synchrotron index
+    "lir_sfr", "bir_color",                               # L_IR/SFR + dust color tilt across IR bands
+    "ml_nir", "ml_opt", "dopt_q",                         # stellar M/L (3.4um; r SF) + quiescent offset
+    "luv_norm", "tau_uv_mslope",                          # UV/SFR (attenuated) + attenuation M* slope
+    "lha_norm",                                           # log10 L_Halpha/SFR (Kennicutt)
+    "agn_bc_uv", "agn_bc_opt",                            # AGN bolometric corrections (1450A, 4400A)
 ]
 _IDX = {n: i for i, n in enumerate(PARAM_NAMES)}
 N_PARAM = len(PARAM_NAMES)
@@ -122,9 +129,11 @@ TIER2_SPECTRAL = PARAM_NAMES[54:61]
 # Missing-physics extension (docs/missing_physics.rst): SN coupling, beyond-ΛCDM
 # cosmology, SF/quiescent quenching, the AGN fundamental plane, the HI sector,
 # and (wave 2) SN wind loading, the star-forming main sequence and the
-# quenched-HI deficit.
-MISSING_PHYSICS = list(PARAM_NAMES[61:])
-TIER2_EXTENSION = list(PARAM_NAMES[31:])
+# quenched-HI deficit.  Frozen slices: later extensions append AFTER [90:].
+MISSING_PHYSICS = list(PARAM_NAMES[61:90])
+TIER2_EXTENSION = list(PARAM_NAMES[31:90])
+# Tier-3 extension: multi-wavelength SED calibrations (radio/IR maps, band LFs).
+TIER3_EXTENSION = list(PARAM_NAMES[90:])
 
 # base parameter → its ln(1+z) evolution slope (applied in ForwardModel._theta_eff)
 _Z_EVOL = {"lg_m1h": "lg_m1h_zs", "lg_m0star": "lg_m0star_zs",
@@ -195,6 +204,19 @@ _SIG_SSFR_Q = 0.5       # width of the quenched log sSFR lognormal [dex]
 _SIG_JET = 0.7          # scatter of the radio-loud jet luminosity at fixed M_BH [dex]
 _SIG_OII = 0.2          # extra [OII]-calibration scatter beyond the MS width [dex]
 _POWELL_LOGBOL = float(np.log10(_POWELL_LBOL_COEF))   # log10 L_bol/(M_BH·λ)
+# ---- tier 3: band-LF calibration scatters + cluster selection --------
+_SIG_UV = 0.2           # UV/SFR calibration scatter [dex]
+_SIG_HA = 0.2           # Halpha/SFR calibration scatter [dex] (== _SIG_OII)
+_SIG_OPT = 0.2          # optical M/L scatter [dex]
+_SIG_NIR = 0.2          # NIR M/L scatter [dex]
+_SIG_LXCL = 0.25        # cluster L_X selection scatter at fixed M_h [dex]
+# IR band templates (anchors at 3.4/4.9/12 um, log-interpolated per band):
+# fraction of L_IR emerging per band (dust), stellar-continuum weight
+# relative to the 3.4 um M/L, and the AGN-torus band fraction.
+_IR_TPL_LAM = np.array([3.4, 4.9, 12.0])
+_IR_TPL_DUST = np.array([0.02, 0.05, 0.15])
+_IR_TPL_STAR = np.array([1.0, 0.6, 0.1])
+_IR_TPL_TORUS = np.array([0.15, 0.30, 0.50])
 # hard(2-10 keV) → soft(0.5-2 keV) energy-flux ratio for a Γ≈1.8 power law
 # (hod_mod.agn.ham convention; becomes Γ-dependent in the multi-band layer).
 from hod_mod.agn.ham import _HARD_TO_SOFT_RATIO as _K_H2S_FID
@@ -355,6 +377,10 @@ class ForwardModel:
         Effective redshift of the (single) representative sample.
     n_k, n_m : int
         Wavenumber and mass grid sizes.
+    log10m_min : float
+        Lower edge of the halo-mass grid [log10 Msun/h].  The 10.0 default is
+        bit-identical to tiers 1-2; low-mass samples (M* down to 10^9) need
+        8.5 together with a larger ``n_m``.
     n_gl : int
         Gauss–Legendre nodes for the gas/pressure radial FT.
     rp_wp, rp_ds : array
@@ -399,6 +425,16 @@ class ForwardModel:
         logloii_oiilf=None,
         loglir_ilf=None,
         pk_correction: str = "none",
+        log10m_min: float = 10.0,
+        radio_map_bands=None,
+        ir_map_bands=None,
+        logluv_uvlf=None,
+        loglopt_optlf=None,
+        loglnir_nirlf=None,
+        loglha_half=None,
+        logluv_qlf=None,
+        loglopt_qlf=None,
+        logl_ncl: float = None,
     ):
         self.z_eff = float(z_eff)
         # tier-2 z-evolution: static per-model lever arm ln[(1+z_eff)/(1+z_p)]
@@ -441,7 +477,12 @@ class ForwardModel:
 
         self.k = jnp.logspace(-4.0, jnp.log10(200.0), n_k)
         self.log_k = jnp.log(self.k)
-        self.m = jnp.logspace(10.0, 16.0, n_m)
+        # Mass-grid floor: 10.0 covers M* >= 10^10 samples; low-mass (tier-3)
+        # cells need ~8.5 so that M_h(M* = 10^9) ~ 2.4e10 sits well inside the
+        # grid.  The inverse-SHMR bracket bounds the usable floor at ~8.5.
+        if not 8.4 <= float(log10m_min) <= 12.0:
+            raise ValueError("log10m_min must lie in [8.4, 12.0]")
+        self.m = jnp.logspace(float(log10m_min), 16.0, n_m)
         self.log10m = jnp.log10(self.m)
         self.gx, self.gw = _gl_nodes(n_gl)
 
@@ -545,6 +586,37 @@ class ForwardModel:
                                          else np.linspace(40.5, 43.5, 7))
         self.loglir_ilf = jnp.asarray(loglir_ilf if loglir_ilf is not None
                                       else np.linspace(42.5, 46.0, 7))
+
+        # ---- tier 3: radio / IR intensity-map bands + band-LF abscissas --
+        # radio bands in GHz (SKA-like), IR bands in um (WISE/SPHEREx-like);
+        # None keeps the map observables off (opt-in, like the LF grids).
+        self.radio_map_bands = (None if radio_map_bands is None
+                                else tuple(float(b) for b in radio_map_bands))
+        self.ir_map_bands = (None if ir_map_bands is None
+                             else tuple(float(b) for b in ir_map_bands))
+        if self.ir_map_bands is not None:
+            llam = np.log10(np.asarray(self.ir_map_bands))
+            ltpl = np.log10(_IR_TPL_LAM)
+            self._ir_cdust = np.interp(llam, ltpl, _IR_TPL_DUST)
+            self._ir_cstar = np.interp(llam, ltpl, _IR_TPL_STAR)
+            self._ir_ctorus = np.interp(llam, ltpl, _IR_TPL_TORUS)
+            # dust color tilt lever arm, anchored at 4.9 um (bir_color inert there)
+            self._ir_dlognu = np.log10(4.9 / np.asarray(self.ir_map_bands))
+        # galaxy band-LF abscissas [log10 nuLnu erg/s] + AGN UV/opt LFs
+        self.logluv_uvlf = jnp.asarray(logluv_uvlf if logluv_uvlf is not None
+                                       else np.linspace(41.5, 44.5, 7))
+        self.loglopt_optlf = jnp.asarray(loglopt_optlf if loglopt_optlf is not None
+                                         else np.linspace(41.5, 44.5, 7))
+        self.loglnir_nirlf = jnp.asarray(loglnir_nirlf if loglnir_nirlf is not None
+                                         else np.linspace(42.0, 45.0, 7))
+        self.loglha_half = jnp.asarray(loglha_half if loglha_half is not None
+                                       else np.linspace(40.3, 43.3, 7))
+        self.logluv_qlf = jnp.asarray(logluv_qlf if logluv_qlf is not None
+                                      else np.linspace(43.0, 46.5, 7))
+        self.loglopt_qlf = jnp.asarray(loglopt_qlf if loglopt_qlf is not None
+                                       else np.linspace(43.0, 46.5, 7))
+        # X-ray cluster-count selection: log10 L_X limit [erg/s] at this z
+        self.logl_ncl = None if logl_ncl is None else float(logl_ncl)
 
         # ---- tier-2 multi-band APEC X-ray layer -------------------------
         # xray_bands=None keeps the tier-1 broad-band model; a list of (emin,
@@ -972,17 +1044,24 @@ class ForwardModel:
         return (1.0 - fabs) + fabs * self._t_bands
 
     # ---- X-ray / tSZ power spectra -----------------------------------
+    def _pk_tracer_field(self, theta, H, wc, ws, X, Xa, n_tr, b_tr):
+        """tracer × field 1h+2h: tracer occupation wc (central) + ws (satellite,
+        NFW-distributed), mean density n_tr, effective bias b_tr; extended
+        field FT X (Nk, NM) + flat (point-source) term Xa (NM,)."""
+        dndm, uk = H["dndm"], H["uk"]
+        m, pk_lin, bias = self.m, H["pk_lin"], H["bias"]
+        gal = wc[None, :] + ws[None, :] * uk
+        P_1h = jnp.trapezoid(dndm[None, :] * gal * X, m, axis=1) / n_tr
+        I_X = jnp.trapezoid(dndm[None, :] * bias[None, :] * X, m, axis=1)
+        P_gas = P_1h + b_tr * pk_lin * I_X
+        P_agn = jnp.trapezoid(dndm[None, :] * gal * Xa[None, :], m, axis=1) / n_tr \
+            + b_tr * pk_lin * jnp.trapezoid(dndm[None, :] * bias[None, :] * Xa[None, :], m, axis=1)
+        return P_gas + P_agn
+
     def _pk_gX_of(self, theta, H, X, Xa):
         """galaxy × X-ray 1h+2h for one gas FT X (Nk, NM) + flat AGN term Xa (NM,)."""
-        dndm, uk, nc, ns = H["dndm"], H["uk"], H["nc"], H["ns"]
-        m, n_gal, b_eff, pk_lin, bias = self.m, H["n_gal"], H["b_eff"], H["pk_lin"], H["bias"]
-        gal = nc[None, :] + ns[None, :] * uk
-        P_1h = jnp.trapezoid(dndm[None, :] * gal * X, m, axis=1) / n_gal
-        I_X = jnp.trapezoid(dndm[None, :] * bias[None, :] * X, m, axis=1)
-        P_gas = P_1h + b_eff * pk_lin * I_X
-        P_agn = jnp.trapezoid(dndm[None, :] * gal * Xa[None, :], m, axis=1) / n_gal \
-            + b_eff * pk_lin * jnp.trapezoid(dndm[None, :] * bias[None, :] * Xa[None, :], m, axis=1)
-        return P_gas + P_agn
+        return self._pk_tracer_field(theta, H, H["nc"], H["ns"], X, Xa,
+                                     H["n_gal"], H["b_eff"])
 
     def _pk_gX(self, theta, H):
         """galaxy × X-ray (gas + AGN), 1h+2h; (Nk,) or (Nb, Nk) in band mode."""
@@ -1319,11 +1398,8 @@ class ForwardModel:
         In quenched mode the cross probes the HI around quenched centrals — the
         ``dhi_quenched`` deficit rescales M_HI (0 dex fiducial; the
         NeutralUniverseMachine phenomenology)."""
-        mhi = self._mhi(theta)
-        if self.sfq == "q":
-            mhi = mhi * 10.0 ** theta[_IDX["dhi_quenched"]]
-        X = (mhi / 1.0e10)[None, :] * H["uk"]                           # (Nk, NM)
-        return self._pk_gX_of(theta, H, X, jnp.zeros_like(self.m))
+        return self._pk_gX_of(theta, H, self._hi_field(theta, H),
+                              jnp.zeros_like(self.m))
 
     # ---- star-forming main sequence (missing-physics wave 2) -----------
     def _ssfr(self, theta):
@@ -1415,6 +1491,288 @@ class ForwardModel:
         K = jnp.sum(erdf[None, None, :] * gk, axis=2) * self.dlam
         ferdf = 10.0 ** theta[_IDX["agn_log10_ferdf"]]
         return jnp.trapezoid(dndlogm[None, :] * K * ferdf, self.log10m, axis=1)
+
+    # ---- tier 3: SFR moments + radio/IR per-halo fields ----------------
+    def _sfr_moments(self, theta):
+        r"""(μ_SFR, σ_SFR, f_Q^cen, ⟨log M*⟩, σ_M*) of the CENTRAL per halo.
+
+        μ_SFR = μ_MS(M*) + log M* through the ZM15 SHMR; the width propagates
+        the MS scatter and the (1+slope)-scaled M*|M_h scatter (the _oiilf
+        algebra, shared by every SFR-calibrated band).
+        """
+        hp = self._hod(theta)
+        log10ms = _inv_shmr(self.log10m, hp["lg_m1h"], hp["lg_m0star"],
+                            hp["beta"], hp["delta"], hp["gamma"])        # (NM,)
+        mu_ssfr = (theta[_IDX["ssfr_ms_norm"]]
+                   + theta[_IDX["ssfr_ms_slope"]] * (log10ms - 10.5))
+        sig_star = sigma_lnmstar_zu15(self.log10m, hp["lg_m1h"],
+                                      hp["sigma_lnmstar"], hp["eta"]) / _LN10
+        sig_lsfr = jnp.sqrt(theta[_IDX["sigma_ms"]] ** 2
+                            + (1.0 + theta[_IDX["ssfr_ms_slope"]]) ** 2
+                            * sig_star ** 2)                             # (NM,)
+        fq_c = f_red_cen_zu16(self.log10m, theta[_IDX["log10_Mq_cen"]],
+                              theta[_IDX["mu_q_cen"]])
+        return mu_ssfr + log10ms, sig_lsfr, fq_c, log10ms, sig_star
+
+    def _mean_sfr(self, theta):
+        """Star-forming-central mean SFR per halo [Msun/yr], (NM,): the full
+        lognormal mean weighted by the SF fraction (quenched centrals carry
+        negligible SFR-driven emission)."""
+        mu_lsfr, sig_lsfr, fq_c, _, _ = self._sfr_moments(theta)
+        return ((1.0 - fq_c) * 10.0 ** mu_lsfr
+                * jnp.exp(0.5 * (sig_lsfr * _LN10) ** 2))
+
+    def _radio_fields(self, theta):
+        r"""Central νL_ν per halo in each radio map band [10³⁸ erg/s], list of (NM,).
+
+        Three source populations: SF synchrotron on the radio–FIR calibration
+        (``l14_sfr``, spectral index ``alpha_syn``, anchored at 1.4 GHz),
+        fundamental-plane cores (the ``_rlf`` FP moments, flat spectrum), and
+        radio-loud jets (5 GHz anchored, ``alpha_syn``-scaled) — the same
+        populations the rlf observable counts, here as a mean intensity field.
+        """
+        sfr = self._mean_sfr(theta)
+        l_sf14 = 10.0 ** (theta[_IDX["l14_sfr"]] + float(np.log10(1.4e9))
+                          - 38.0) * sfr                                  # (NM,)
+        mean_bh, sig_lm, erdf = self._agn_kernel_parts(theta)
+        xi_rx = theta[_IDX["agn_xi_rx"]]
+        xi_rm = theta[_IDX["agn_xi_rm"]]
+        sig_r = jnp.sqrt((xi_rx + xi_rm) ** 2 * sig_lm ** 2
+                         + theta[_IDX["agn_sig_r"]] ** 2)
+        mu0 = (xi_rx * _POWELL_LOGK + (xi_rx + xi_rm) * mean_bh
+               + theta[_IDX["agn_b_r"]])
+        lam_mean = jnp.sum(erdf * 10.0 ** (xi_rx * self.loglam)) * self.dlam
+        ferdf = 10.0 ** theta[_IDX["agn_log10_ferdf"]]
+        l_core = (ferdf * 10.0 ** (mu0 - 38.0) * lam_mean
+                  * jnp.exp(0.5 * (sig_r * _LN10) ** 2))                 # (NM,)
+        f_loud = jnp.minimum(theta[_IDX["f_loud0"]]
+                             * 10.0 ** (theta[_IDX["beta_loud"]]
+                                        * (mean_bh - 8.0)), 1.0)
+        sig_jet = jnp.sqrt(sig_lm ** 2 + _SIG_JET ** 2)
+        l_jet = (f_loud * 10.0 ** (theta[_IDX["b_jet"]] + mean_bh - 8.0 - 38.0)
+                 * jnp.exp(0.5 * (sig_jet * _LN10) ** 2))                # (NM,)
+        a = 1.0 - theta[_IDX["alpha_syn"]]
+        return [l_sf14 * (nu / 1.4) ** a + l_core + l_jet * (nu / 5.0) ** a
+                for nu in self.radio_map_bands]
+
+    def _ir_fields(self, theta):
+        r"""Central νL_ν per halo in each IR map band [10⁴⁴ erg/s], list of (NM,).
+
+        Dust re-emission (∝ SFR via ``lir_sfr``, color-tilted by ``bir_color``
+        around the 4.9 μm anchor), stellar continuum (∝ M* via ``ml_nir``), and
+        the AGN torus (the ``_ilf`` chain, NO f_abs — IR is obscuration-robust).
+        """
+        sfr = self._mean_sfr(theta)
+        _, _, _, log10ms, sig_star = self._sfr_moments(theta)
+        l_star34 = (10.0 ** (theta[_IDX["ml_nir"]] - 44.0 + log10ms)
+                    * jnp.exp(0.5 * (sig_star * _LN10) ** 2))            # (NM,)
+        l_dust = 10.0 ** (theta[_IDX["lir_sfr"]] - 44.0) * sfr           # (NM,)
+        mean_bh, sig_lm, erdf = self._agn_kernel_parts(theta)
+        lam_mean = jnp.sum(erdf * 10.0 ** self.loglam) * self.dlam
+        ferdf = 10.0 ** theta[_IDX["agn_log10_ferdf"]]
+        l_tor = (ferdf * 10.0 ** (_POWELL_LOGBOL + theta[_IDX["agn_bc_ir"]]
+                                  + mean_bh - 44.0) * lam_mean
+                 * jnp.exp(0.5 * (sig_lm * _LN10) ** 2))                 # (NM,)
+        bir = theta[_IDX["bir_color"]]
+        return [(float(self._ir_cdust[i]) * 10.0 ** (bir * float(self._ir_dlognu[i]))
+                 * l_dust
+                 + float(self._ir_cstar[i]) * l_star34
+                 + float(self._ir_ctorus[i]) * l_tor)
+                for i in range(len(self.ir_map_bands))]
+
+    def _hi_field(self, theta, H):
+        """HI mass field M_HI(M_h)·u_NFW in 10^10-referenced model units,
+        (Nk, NM) — shared by the g×HI cross and the 21 cm auto."""
+        mhi = self._mhi(theta)
+        if self.sfq == "q":
+            mhi = mhi * 10.0 ** theta[_IDX["dhi_quenched"]]
+        return (mhi / 1.0e10)[None, :] * H["uk"]
+
+    # ---- tier 3: AGN tracer crosses + cluster counts -------------------
+    def _agn_tracer(self, theta, H, l1, l2):
+        """(N_AGN(M), n_agn, b_agn) for one observed-soft L_X bin — the
+        wp_agn ingredients, shared by every AGN cross-statistic."""
+        n_a = self._agn_occupation_obs(theta, l1, l2)                    # (NM,)
+        n_agn = jnp.trapezoid(H["dndm"] * n_a, self.m)
+        b_agn = jnp.trapezoid(H["dndm"] * H["bias"] * n_a, self.m) / n_agn
+        return n_a, n_agn, b_agn
+
+    def _pk_ag(self, theta, H, n_a, n_agn, b_agn):
+        """AGN × galaxy number cross: central-AGN × satellite-galaxy 1-halo
+        + b_a b_g 2-halo.  Central–central pairs are the AGN host itself
+        (the AGN is the central's nucleus) and are excluded as self-pairs."""
+        P_1h = jnp.trapezoid(H["dndm"][None, :] * (n_a * H["ns"])[None, :]
+                             * H["uk"], self.m, axis=1) / (n_agn * H["n_gal"])
+        return P_1h + b_agn * H["b_eff"] * H["pk_lin"]
+
+    def _pk_am(self, theta, H, n_a, n_agn, b_agn):
+        """AGN × matter (the ΔΣ_AGN kernel): the central-AGN tracer against
+        the baryon-split matter field of ``_pk_gg_gm``."""
+        m_over_rho = self.m / H["rho_m"]
+        uk_gas = self._gas_density_uk(theta, H)
+        u_matter = (1.0 - H["fb"][None, :]) * H["uk"] + H["fb"][None, :] * uk_gas
+        integ = (H["dndm"][None, :] * n_a[None, :] * m_over_rho[None, :]
+                 * u_matter)
+        P_1h = jnp.trapezoid(integ, self.m, axis=1) / n_agn
+        return P_1h + b_agn * H["pk_lin"]
+
+    def _ncl(self, theta, H):
+        r"""X-ray cluster count density [h³ Mpc⁻³] above the survey L_X limit:
+
+        .. math:: n_{\rm cl} = \int dM\,\frac{dn}{dM}\,
+            \tfrac12\,{\rm erfc}\frac{\log L_{\rm lim} - \log L_X(M)}
+                                     {\sqrt2\,\sigma_{L_X}}
+
+        with the free L_X–M relation of the gas sector (``_lx_kt_of``) and a
+        fixed 0.25 dex selection scatter — the classic cluster-count probe,
+        cosmology through dn/dM and astrophysics through the shared scaling.
+        """
+        lx, _ = self._lx_kt_of(theta, H["z"])
+        loglx = jnp.log10(lx) + 45.0                                     # erg/s
+        sel = 0.5 * erfc((self.logl_ncl - loglx) / (jnp.sqrt(2.0) * _SIG_LXCL))
+        return jnp.array([jnp.trapezoid(H["dndm"] * sel, self.m)])
+
+    # ---- tier 3: galaxy band LFs + AGN UV/opt LFs -----------------------
+    def _lf_lognormal(self, theta, grid, mu_l, sig_l, weight):
+        """Lognormal LF kernel Φ(log L) = ∫ dlog M dn/dlog M · w(M) ·
+        N(log L − μ(M); σ(M)) — the shared ``_oiilf`` body; μ, σ, w are (NM,)."""
+        c = self._cosmo(theta)
+        dndm = self._hmf.dndm(self.m, float(self.z_eff), c)
+        dndlogm = dndm * self.m * _LN10
+        t = grid[:, None] - mu_l[None, :]
+        gk = jnp.exp(-0.5 * (t / sig_l[None, :]) ** 2) \
+            / (jnp.sqrt(2.0 * jnp.pi) * sig_l[None, :])                  # (NL, NM)
+        return jnp.trapezoid(dndlogm[None, :] * weight[None, :] * gk,
+                             self.log10m, axis=1)
+
+    def _uvlf(self, theta):
+        """UV (1500 Å) LF of star-forming centrals: μ = luv_norm + log SFR with
+        an M*-dependent attenuation tilt (``tau_uv_mslope``)."""
+        mu_lsfr, sig_lsfr, fq_c, log10ms, _ = self._sfr_moments(theta)
+        mu = (theta[_IDX["luv_norm"]] + mu_lsfr
+              - theta[_IDX["tau_uv_mslope"]] * (log10ms - 10.5))
+        sig = jnp.sqrt(sig_lsfr ** 2 + _SIG_UV ** 2)
+        return self._lf_lognormal(theta, self.logluv_uvlf, mu, sig, 1.0 - fq_c)
+
+    def _half(self, theta):
+        """Hα LF (Kennicutt calibration ``lha_norm``) — the ``_oiilf`` clone
+        at a different line normalisation (identical at lha_norm = loii_norm)."""
+        mu_lsfr, sig_lsfr, fq_c, _, _ = self._sfr_moments(theta)
+        mu = theta[_IDX["lha_norm"]] + mu_lsfr
+        sig = jnp.sqrt(sig_lsfr ** 2 + _SIG_HA ** 2)
+        return self._lf_lognormal(theta, self.loglha_half, mu, sig, 1.0 - fq_c)
+
+    def _nirlf(self, theta):
+        """NIR (3.4 μm) LF of ALL centrals: νL_ν = Υ_NIR · M* — the stellar-
+        continuum leg, direct SHMR probe free of the SFR chain."""
+        _, _, _, log10ms, sig_star = self._sfr_moments(theta)
+        mu = theta[_IDX["ml_nir"]] + log10ms
+        sig = jnp.sqrt(sig_star ** 2 + _SIG_NIR ** 2)
+        return self._lf_lognormal(theta, self.loglnir_nirlf, mu, sig,
+                                  jnp.ones_like(log10ms))
+
+    def _optlf(self, theta):
+        """Optical (r-band) LF: SF/Q mixture — quiescent centrals are offset
+        by ``dopt_q`` dex (at dopt_q = 0 the mixture collapses exactly to a
+        single all-central lognormal, the additivity invariant)."""
+        _, _, fq_c, log10ms, sig_star = self._sfr_moments(theta)
+        sig = jnp.sqrt(sig_star ** 2 + _SIG_OPT ** 2)
+        mu_sf = theta[_IDX["ml_opt"]] + log10ms
+        mu_q = mu_sf + theta[_IDX["dopt_q"]]
+        return (self._lf_lognormal(theta, self.loglopt_optlf, mu_sf, sig,
+                                   1.0 - fq_c)
+                + self._lf_lognormal(theta, self.loglopt_optlf, mu_q, sig, fq_c))
+
+    def _qlf(self, theta, grid, bc):
+        """Type-1 AGN band LF: the ``_ilf`` kernel at bolometric correction
+        ``bc``, times (1 − f_abs) — UV/optical sees only unobscured AGN
+        (completing the cross-band obscuration system: UV/opt ∝ 1−f_abs,
+        IR ∝ 1, soft X-ray = the NH transmission mixture)."""
+        c = self._cosmo(theta)
+        dndm = self._hmf.dndm(self.m, float(self.z_eff), c)
+        dndlogm = dndm * self.m * _LN10
+        mean_bh, sig_lm, erdf = self._agn_kernel_parts(theta)
+        t = grid[:, None, None] - _POWELL_LOGBOL - bc - mean_bh[None, :, None]
+        gk = jnp.exp(-0.5 * ((t - self.loglam[None, None, :]) / sig_lm) ** 2) \
+            / (jnp.sqrt(2.0 * jnp.pi) * sig_lm)
+        K = jnp.sum(erdf[None, None, :] * gk, axis=2) * self.dlam
+        ferdf = 10.0 ** theta[_IDX["agn_log10_ferdf"]]
+        phi = jnp.trapezoid(dndlogm[None, :] * K * ferdf, self.log10m, axis=1)
+        return (1.0 - theta[_IDX["agn_fabs"]]) * phi
+
+    # ---- tier 3: map-spectra dispatch ----------------------------------
+    def _predict_maps(self, theta, Hs, names):
+        """Radio/IR map crosses+autos, AGN crosses, tSZ + 21 cm autos.
+
+        Stacked orderings match ``grid_of``: band-major for cl_gR/cl_gI and
+        cl_RR/cl_II; L_X-bin-major (band inner) for cl_aR/cl_aI; L_X-bin-major
+        for cl_ag.  Point-source fields are theta-only, computed once.
+        """
+        out = {}
+        z2d = jnp.zeros((1, self.m.size))
+        R = (self._radio_fields(theta)
+             if any(n in names for n in ("cl_gR", "cl_RR", "cl_aR")) else None)
+        I = (self._ir_fields(theta)
+             if any(n in names for n in ("cl_gI", "cl_II", "cl_aI")) else None)
+
+        def limber(fn):
+            stack = jnp.stack([jnp.log(jnp.maximum(fn(H), 1e-30)) for H in Hs])
+            return self._limber_from_stack(theta, stack)
+
+        if "cl_gR" in names:
+            out["cl_gR"] = jnp.concatenate(
+                [limber(lambda H, Xa=Xa: self._pk_gX_of(theta, H, z2d, Xa))
+                 for Xa in R])
+        if "cl_gI" in names:
+            out["cl_gI"] = jnp.concatenate(
+                [limber(lambda H, Xa=Xa: self._pk_gX_of(theta, H, z2d, Xa))
+                 for Xa in I])
+        if "cl_RR" in names:
+            out["cl_RR"] = jnp.concatenate(
+                [limber(lambda H, Xa=Xa: self._pk_XX_of(theta, H, z2d, Xa))
+                 for Xa in R])
+        if "cl_II" in names:
+            out["cl_II"] = jnp.concatenate(
+                [limber(lambda H, Xa=Xa: self._pk_XX_of(theta, H, z2d, Xa))
+                 for Xa in I])
+        if any(n in names for n in ("cl_aR", "cl_aI", "cl_ag")):
+            # AGN tracer ingredients per (L_X bin, z) — reused by all crosses
+            tr = [[self._agn_tracer(theta, H, l1, l2) for H in Hs]
+                  for (l1, l2) in self.agn_lx_bins]
+
+            def limber_a(i, fn):
+                stack = jnp.stack([jnp.log(jnp.maximum(
+                    fn(Hs[j], *tr[i][j]), 1e-30)) for j in range(len(Hs))])
+                return self._limber_from_stack(theta, stack)
+
+            if "cl_aR" in names:
+                out["cl_aR"] = jnp.concatenate(
+                    [limber_a(i, lambda H, n_a, n, b, Xa=Xa:
+                              self._pk_tracer_field(theta, H, n_a,
+                                                    jnp.zeros_like(n_a),
+                                                    z2d, Xa, n, b))
+                     for i in range(len(self.agn_lx_bins)) for Xa in R])
+            if "cl_aI" in names:
+                out["cl_aI"] = jnp.concatenate(
+                    [limber_a(i, lambda H, n_a, n, b, Xa=Xa:
+                              self._pk_tracer_field(theta, H, n_a,
+                                                    jnp.zeros_like(n_a),
+                                                    z2d, Xa, n, b))
+                     for i in range(len(self.agn_lx_bins)) for Xa in I])
+            if "cl_ag" in names:
+                out["cl_ag"] = jnp.concatenate(
+                    [limber_a(i, lambda H, n_a, n, b:
+                              self._pk_ag(theta, H, n_a, n, b))
+                     for i in range(len(self.agn_lx_bins))])
+        if "cl_yy" in names:
+            out["cl_yy"] = limber(
+                lambda H: self._pk_XX_of(theta, H, self._pressure_uk(theta, H),
+                                         jnp.zeros_like(self.m)))
+        if "cl_HIHI" in names:
+            out["cl_HIHI"] = limber(
+                lambda H: self._pk_XX_of(theta, H, self._hi_field(theta, H),
+                                         jnp.zeros_like(self.m)))
+        return out
 
     # ---- Powell AGN chain: shared kernel, occupation, emission, clustering --
     def _agn_kernel_parts(self, theta):
@@ -1628,7 +1986,7 @@ class ForwardModel:
         which = which or OBSERVABLES
         out = {}
         if any(o in which for o in ("wp", "ds", "n_gal", "smf", "wp_agn",
-                                    "himf", "sfrd")):
+                                    "himf", "sfrd", "ds_agn", "ncl")):
             H0 = self._halo_common(theta, self.z_eff)
             if "wp" in which or "ds" in which:
                 P_gg, P_gm = self._pk_gg_gm(H0, theta)
@@ -1646,10 +2004,22 @@ class ForwardModel:
                 out["himf"] = self._himf(theta, H0)
             if "sfrd" in which:
                 out["sfrd"] = self._sfrd(theta, H0)
+            if "ds_agn" in which:
+                parts = []
+                for (l1, l2) in self.agn_lx_bins:
+                    n_a, n_agn, b_agn = self._agn_tracer(theta, H0, l1, l2)
+                    P_am = self._pk_am(theta, H0, n_a, n_agn, b_agn)
+                    parts.append(self._delta_sigma(P_am, theta))
+                out["ds_agn"] = jnp.concatenate(parts)
+            if "ncl" in which:
+                out["ncl"] = self._ncl(theta, H0)
         # Galaxy-window angular spectra (gas cross + galaxy×CMB-lensing) share the
         # per-z halo quantities on the galaxy n(z) grid.
         ang = [o for o in ("cl_gX", "cl_gy", "cl_XX", "cl_gHI") if o in which]
-        if ang or "cl_gkCMB" in which:
+        t3maps = [o for o in ("cl_gR", "cl_gI", "cl_RR", "cl_II", "cl_aR",
+                              "cl_aI", "cl_ag", "cl_yy", "cl_HIHI")
+                  if o in which]
+        if ang or t3maps or "cl_gkCMB" in which:
             Hs = [self._halo_common(theta, float(z)) for z in np.asarray(self.z_grid)]
             fns = {"cl_gX": self._pk_gX, "cl_gy": self._pk_gy, "cl_XX": self._pk_XX,
                    "cl_gHI": self._pk_gHI}
@@ -1665,6 +2035,8 @@ class ForwardModel:
                 else:
                     stack = jnp.stack([jnp.log(jnp.maximum(fns[o](theta, H), 1e-30)) for H in Hs])
                     out[o] = self._limber_from_stack(theta, stack)
+            if t3maps:
+                out.update(self._predict_maps(theta, Hs, t3maps))
             if "cl_gkCMB" in which:
                 out["cl_gkCMB"] = self._cl_gkCMB(theta, Hs)
         # Matter-power lensing spectra (cosmic shear + shear×CMB-lensing) share the
@@ -1687,6 +2059,21 @@ class ForwardModel:
             out["oiilf"] = self._oiilf(theta)
         if "ilf" in which:
             out["ilf"] = self._ilf(theta)
+        # tier 3: galaxy band LFs + AGN UV/opt LFs
+        if "uvlf" in which:
+            out["uvlf"] = self._uvlf(theta)
+        if "optlf" in which:
+            out["optlf"] = self._optlf(theta)
+        if "nirlf" in which:
+            out["nirlf"] = self._nirlf(theta)
+        if "half" in which:
+            out["half"] = self._half(theta)
+        if "qlf_uv" in which:
+            out["qlf_uv"] = self._qlf(theta, self.logluv_qlf,
+                                      theta[_IDX["agn_bc_uv"]])
+        if "qlf_opt" in which:
+            out["qlf_opt"] = self._qlf(theta, self.loglopt_qlf,
+                                       theta[_IDX["agn_bc_opt"]])
         return out
 
     def cl_gg_fiducial(self, theta):
@@ -1698,6 +2085,25 @@ class ForwardModel:
                            for H in Hs])
         return self._limber_from_stack(theta, stack)
 
+    def cl_aa_fiducial(self, theta, l1, l2):
+        """AGN angular auto C_ℓ over the window for one observed-soft L_X bin,
+        plus the 3-D AGN density (fiducial-only helper for the tier-3 AGN-cross
+        Knox noise).  2-halo b²P_lin — Bernoulli centrals have no 1-halo
+        self-pairs (the wp_agn convention); the caller adds the shot term."""
+        theta = self._theta_eff(jnp.asarray(theta))
+        Hs = [self._halo_common(theta, float(z)) for z in np.asarray(self.z_grid)]
+        stack, n_agn0 = [], None
+        for H in Hs:
+            _, n_agn, b_agn = self._agn_tracer(theta, H, float(l1), float(l2))
+            stack.append(jnp.log(jnp.maximum(b_agn ** 2 * H["pk_lin"], 1e-30)))
+            if abs(float(H["z"]) - self.z_eff) < 1e-9:
+                n_agn0 = n_agn
+        if n_agn0 is None:
+            H0 = self._halo_common(theta, self.z_eff)
+            _, n_agn0, _ = self._agn_tracer(theta, H0, float(l1), float(l2))
+        cl = self._limber_from_stack(theta, jnp.stack(stack))
+        return cl, float(n_agn0)
+
     def grid_of(self, name):
         """Return the abscissa grid (r_p, ℓ, or log10 L_X) for observable ``name``."""
         if name.startswith("cl_"):
@@ -1707,14 +2113,29 @@ class ForwardModel:
                 return jnp.asarray(np.tile(np.asarray(self.ell), len(self.shear_pairs)))
             if name == "cl_shear_kCMB" and self.n_shear_bins > 1:
                 return jnp.asarray(np.tile(np.asarray(self.ell), self.n_shear_bins))
+            # tier-3 stacked map spectra (orderings match _predict_maps)
+            reps = {"cl_gR": lambda: len(self.radio_map_bands),
+                    "cl_RR": lambda: len(self.radio_map_bands),
+                    "cl_gI": lambda: len(self.ir_map_bands),
+                    "cl_II": lambda: len(self.ir_map_bands),
+                    "cl_aR": lambda: len(self.agn_lx_bins) * len(self.radio_map_bands),
+                    "cl_aI": lambda: len(self.agn_lx_bins) * len(self.ir_map_bands),
+                    "cl_ag": lambda: len(self.agn_lx_bins)}
+            if name in reps:
+                return jnp.asarray(np.tile(np.asarray(self.ell), reps[name]()))
             return self.ell
         return {"wp": self.rp_wp, "ds": self.rp_ds,
                 "xlf": self.loglx_xlf, "n_gal": jnp.array([0.0]),
                 "smf": self.logmstar_smf, "ssfr": jnp.array([0.0]),
-                "sfrd": jnp.array([0.0]),
+                "sfrd": jnp.array([0.0]), "ncl": jnp.array([0.0]),
                 "rlf": self.loglr_rlf, "himf": self.logmhi_himf,
                 "oiilf": self.logloii_oiilf, "ilf": self.loglir_ilf,
+                "uvlf": self.logluv_uvlf, "optlf": self.loglopt_optlf,
+                "nirlf": self.loglnir_nirlf, "half": self.loglha_half,
+                "qlf_uv": self.logluv_qlf, "qlf_opt": self.loglopt_qlf,
                 "wp_agn": jnp.asarray(np.tile(np.asarray(self.rp_wp_agn),
+                                              len(self.agn_lx_bins))),
+                "ds_agn": jnp.asarray(np.tile(np.asarray(self.rp_ds),
                                               len(self.agn_lx_bins)))}[name]
 
     def full_data_vector_fn(self, which=None):
@@ -1746,7 +2167,7 @@ class ForwardModel:
             jnp.asarray([self.z_eff]), _FIXED_COSMO["h"], 0.31)).ravel()[0]) * _FIXED_COSMO["h"]
         ell_max = chi_eff / float(rmin)
         row_obs = np.asarray(row_obs)
-        proj = np.isin(row_obs, ["wp", "ds", "wp_agn"])
+        proj = np.isin(row_obs, ["wp", "ds", "wp_agn", "ds_agn"])
         ang = np.array([str(o).startswith("cl_") for o in row_obs])
         keep = np.ones(len(row_obs), dtype=bool)          # abundance (xlf/n_gal/smf): always kept
         keep = np.where(proj, row_x > float(rmin), keep)
@@ -1768,10 +2189,11 @@ class ForwardModel:
         idx = {}
         for name in which:
             g = np.asarray(self.grid_of(name))
-            if name in ("wp", "ds", "wp_agn"):
+            if name in ("wp", "ds", "wp_agn", "ds_agn"):
                 sel = np.where(g > float(rmin))[0]
             elif name in ("xlf", "n_gal", "smf", "rlf", "himf", "ssfr",
-                          "sfrd", "oiilf", "ilf"):
+                          "sfrd", "oiilf", "ilf", "ncl", "uvlf", "optlf",
+                          "nirlf", "half", "qlf_uv", "qlf_opt"):
                 sel = np.arange(g.size)            # abundance: no scale cut
             else:
                 sel = np.where(g < ell_max)[0]
