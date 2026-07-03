@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hod_mod"
-version = "0.1.5"
+version = "0.2.0"
 description = "HOD galaxy clustering and weak lensing prediction and fitting"
 authors = [{name = "Johan Comparat", email = "johan.comparat@pm.me"}]
 readme = "README.md"
@@ -48,6 +48,7 @@ include = ["hod_mod*"]
 "hod_mod.data.benchmarks" = ["*.csv", "*.json"]
 "hod_mod.data.bnl" = ["*.npy", "*.txt"]
 "hod_mod.data.erosita" = ["*.npz"]
+"hod_mod.data.apec_bands" = ["*.npz"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

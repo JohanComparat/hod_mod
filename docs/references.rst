@@ -682,3 +682,391 @@ the baryon fraction and gas profile calibrations in ``hod_mod``.
 .. [FLAMINGO_overview] FLAMINGO Collaboration 2023.
    FLAMINGO: Large cosmo-hydro simulations for next-generation lensing surveys.
    `https://flamingo.strw.leidenuniv.nl/ <https://flamingo.strw.leidenuniv.nl/>`_
+
+----
+
+Beyond-ΛCDM Cosmology and Emulators
+-------------------------------------
+
+Dynamical dark energy, massive neutrinos and the emulator landscape — the
+upgrade path for the differentiable :doc:`forecast cosmology <missing_physics>`.
+
+.. [EisensteinHu1999] Eisenstein D.J. & Hu W. 1999, ApJ 511, 5.
+   Analytic transfer functions for CDM variants including massive neutrinos;
+   the fitting-function route to a differentiable ν-suppression.
+   `arXiv:astro-ph/9710252 <https://arxiv.org/abs/astro-ph/9710252>`_
+
+.. [Kiakotou2008] Kiakotou A., Elgarøy Ø. & Lahav O. 2008, Phys. Rev. D 77, 063005.
+   Scale-dependent growth suppression from massive neutrinos — compact
+   coefficients for the f_ν correction to D(z, k).
+   `arXiv:0709.0253 <https://arxiv.org/abs/0709.0253>`_
+
+.. [DESI_DR2_BAO] DESI Collaboration 2025, Phys. Rev. D 112, 083515.
+   DESI DR2 BAO measurements: ~3σ preference for dynamical dark energy
+   (w0waCDM) — the science driver for freeing w0/wa in the forecast.
+   `arXiv:2503.14738 <https://arxiv.org/abs/2503.14738>`_
+
+.. [CosmoVerse2025] Di Valentino E. et al. 2025, Phys. Dark Univ. 49, 101965.
+   CosmoVerse white paper on observational tensions (H0, S8) — the context in
+   which beyond-ΛCDM freedom must be marginalised, not assumed away.
+   `arXiv:2504.01669 <https://arxiv.org/abs/2504.01669>`_
+
+.. [EuclidEmulator2] Euclid Collaboration (Knabenhans M.) et al. 2021, MNRAS 505, 2840.
+   EuclidEmulator2: non-linear P(k) boost emulation with massive neutrinos and
+   dynamical dark energy — a distill-to-table candidate for the JAX pipeline.
+   `arXiv:2010.11288 <https://arxiv.org/abs/2010.11288>`_
+
+.. [BACCO2021] Angulo R.E. et al. 2021, MNRAS 507, 5869.
+   The BACCO simulation project: cosmology-rescaled non-linear P(k) emulator
+   covering σ8, w0/wa and Σm_ν.
+   `arXiv:2004.06245 <https://arxiv.org/abs/2004.06245>`_
+
+.. [MiraTitanIV] Moran K.R. et al. 2023, MNRAS 520, 3443.
+   Mira-Titan IV: high-precision P(k) emulator over an 8-parameter
+   w0waνCDM space.
+   `arXiv:2207.12345 <https://arxiv.org/abs/2207.12345>`_
+
+.. [CSSTEmulatorI] Chen Z. et al. 2025, Sci. China Phys. Mech. Astron. 68, 289512.
+   CSST emulator I: matter P(k) to k = 10 h/Mpc at one percent in w0waνCDM;
+   companion of the HMF emulator [ChenCSST2025]_ already wrapped in ``hod_mod``.
+   `arXiv:2502.11160 <https://arxiv.org/abs/2502.11160>`_
+
+.. [Goku2025] Yang Y., Bird S. & Ho M.-F. 2025, Phys. Rev. D 111, 083529.
+   Goku: ten-parameter simulation suite for emulation beyond ΛCDM
+   (w0, wa, Σm_ν, N_eff, running).
+   `arXiv:2501.06296 <https://arxiv.org/abs/2501.06296>`_
+
+.. [eMANTIS2024] Sáez-Casares I., Rasera Y. & Li B. 2024, MNRAS 527, 7242.
+   e-MANTIS: non-linear P(k) emulator for f(R) modified gravity — the
+   modified-gravity branch of the emulator landscape.
+   `arXiv:2303.08899 <https://arxiv.org/abs/2303.08899>`_
+
+.. [DUCA2025] Castro T. et al. 2025, A&A 697, A194.
+   DUCA I: halo mass function calibration in dynamical dark energy
+   cosmologies — the w0waCDM correction to Tinker-style HMFs.
+   `arXiv:2504.07608 <https://arxiv.org/abs/2504.07608>`_
+
+----
+
+Precision Halo-Model Ingredients
+----------------------------------
+
+Cosmology-dependent calibrations of the mass function, bias, concentration
+and the linear power spectrum (see :doc:`missing_physics`).
+
+.. [CLASS2011] Lesgourgues J. 2011, arXiv:1104.2932.
+   The CLASS Boltzmann solver — with CAMB [Lewis2002]_, the accuracy standard
+   any differentiable P(k) surrogate must reproduce.
+   `arXiv:1104.2932 <https://arxiv.org/abs/1104.2932>`_
+
+.. [CosmoPower2022] Spurio Mancini A. et al. 2022, MNRAS 511, 1771.
+   COSMOPOWER: neural-network emulation of CMB and matter power spectra; the
+   dense-MLP architecture is ~10 lines of ``jnp`` to evaluate — the template
+   for a differentiable CAMB-ratio emulator.
+   `arXiv:2106.03846 <https://arxiv.org/abs/2106.03846>`_
+
+.. [EvolutionMapping2022] Sánchez A.G. et al. 2022, MNRAS 514, 5673.
+   Evolution mapping: degeneracy structure of matter clustering across
+   cosmologies — compresses the emulation parameter space.
+   `arXiv:2108.12710 <https://arxiv.org/abs/2108.12710>`_
+
+.. [DiemerKravtsov2015] Diemer B. & Kravtsov A.V. 2015, ApJ 799, 108.
+   Universal concentration–mass model in terms of peak height ν and local
+   P(k) slope n_eff — a *genuinely cosmology-dependent* c(M) that is
+   JAX-portable (both inputs live on the σ(M) grid).
+   `arXiv:1407.4730 <https://arxiv.org/abs/1407.4730>`_
+
+.. [Colossus2018] Diemer B. 2018, ApJS 239, 35.
+   COLOSSUS toolkit — the numerical reference implementation for validating
+   c(M) and HMF ports.
+   `arXiv:1712.04512 <https://arxiv.org/abs/1712.04512>`_
+
+.. [Despali2016] Despali G. et al. 2016, MNRAS 456, 2486.
+   Universality of the virial-overdensity HMF and models for the
+   non-universality of other halo definitions.
+   `arXiv:1507.05627 <https://arxiv.org/abs/1507.05627>`_
+
+.. [Comparat2017] Comparat J. et al. 2017, MNRAS 469, 4157.
+   Accurate halo mass and velocity functions from the MultiDark simulations;
+   one of the ``f(sigma)`` fits shipped in ``hod_mod``.
+   `arXiv:1702.01628 <https://arxiv.org/abs/1702.01628>`_
+
+.. [EuclidHMF2023] Euclid Collaboration (Castro T.) et al. 2023, A&A 671, A100.
+   Percent-level HMF calibration in Λ(ν)CDM with explicit cosmology
+   dependence of the fit parameters — the reference against which the
+   tinker08 non-universality budget should be quoted.
+   `arXiv:2208.02174 <https://arxiv.org/abs/2208.02174>`_
+
+----
+
+AGN Multi-Wavelength Emission and the Fundamental Plane
+---------------------------------------------------------
+
+Radio and infrared AGN emission channels and their halo statistics
+(see :doc:`missing_physics`).
+
+.. [MerloniHeinzDiMatteo2003] Merloni A., Heinz S. & di Matteo T. 2003, MNRAS 345, 1057.
+   The fundamental plane of black-hole activity:
+   log L_R = 0.60 log L_X + 0.78 log M_BH + 7.33 — the relation that attaches
+   a radio luminosity to the Powell chain's (M_BH, L_X).
+   `arXiv:astro-ph/0305261 <https://arxiv.org/abs/astro-ph/0305261>`_
+
+.. [FalckeKordingMarkoff2004] Falcke H., Körding E. & Markoff S. 2004, A&A 414, 895.
+   Jet-dominated accretion unification of low-power black holes — the
+   physical basis of the radio/X-ray correlation.
+   `arXiv:astro-ph/0305335 <https://arxiv.org/abs/astro-ph/0305335>`_
+
+.. [Gultekin2019] Gültekin K. et al. 2019, ApJ 871, 80.
+   Updated fundamental-plane coefficients and scatter with dynamical M_BH —
+   the natural external prior on (ξ_RX, ξ_RM, b_R, σ_R).
+   `arXiv:1901.02530 <https://arxiv.org/abs/1901.02530>`_
+
+.. [Hopkins2007] Hopkins P.F., Richards G.T. & Hernquist L. 2007, ApJ 654, 731.
+   Observational bolometric quasar luminosity function; the L_bol-dependent
+   bolometric corrections used to map L_bol to infrared bands.
+   `arXiv:astro-ph/0605678 <https://arxiv.org/abs/astro-ph/0605678>`_
+
+.. [BestHeckman2012] Best P.N. & Heckman T.M. 2012, MNRAS 421, 1569.
+   The local radio-AGN dichotomy (HERG/LERG) — the jet population that a
+   fundamental-plane-only model does not capture.
+   `arXiv:1201.2397 <https://arxiv.org/abs/1201.2397>`_
+
+.. [Shen2009] Shen Y. et al. 2009, ApJ 697, 1656.
+   Quasar clustering from SDSS DR5 as a function of physical properties
+   (including radio loudness).
+   `arXiv:0810.4144 <https://arxiv.org/abs/0810.4144>`_
+
+.. [RetanaMontenegro2017] Retana-Montenegro E. & Röttgering H.J.A. 2017, A&A 600, A97.
+   Radio-loud vs radio-quiet quasar clustering (SDSS×FIRST): halo-mass
+   difference between the two populations.
+   `arXiv:1611.08630 <https://arxiv.org/abs/1611.08630>`_
+
+.. [Hale2025] Hale C.L. et al. 2025, MNRAS 544, 1323.
+   Clustering of radio AGN and star-forming galaxies in the LoTSS Deep
+   Fields — the current benchmark for radio-AGN halo occupation.
+   `arXiv:2510.01029 <https://arxiv.org/abs/2510.01029>`_
+
+.. [Donoso2014] Donoso E. et al. 2014, ApJ 789, 44.
+   Angular clustering of WISE-selected AGN: different halos for obscured and
+   unobscured populations.
+   `arXiv:1309.2277 <https://arxiv.org/abs/1309.2277>`_
+
+.. [Petter2023] Petter G.C. et al. 2023, ApJ 946, 27.
+   Host halos of 1.4 million WISE obscured/unobscured quasars — the IR-side
+   test of the obscuration parameter shared with the X-ray sector.
+   `arXiv:2302.00690 <https://arxiv.org/abs/2302.00690>`_
+
+.. [Comparat2019] Comparat J. et al. 2019, MNRAS 487, 2005.
+   eROSITA AGN mock catalogue with empirical multi-wavelength SEDs — the
+   ``hod_mod`` heritage for AGN band modelling.
+   `arXiv:1901.10866 <https://arxiv.org/abs/1901.10866>`_
+
+.. [Aird2015] Aird J. et al. 2015, MNRAS 451, 1892.
+   X-ray luminosity functions of unabsorbed and absorbed AGN to z~5; the
+   validation target of the Powell XLF in ``hod_mod``.
+   `arXiv:1503.01120 <https://arxiv.org/abs/1503.01120>`_
+
+----
+
+Galaxy Morphology, Quenching and Star Formation
+-------------------------------------------------
+
+The galaxy-population physics (morphology, sSFR, quenching) missing from the
+all-galaxy ZM15 connection (see :doc:`missing_physics`).
+
+.. [WechslerTinker2018] Wechsler R.H. & Tinker J.L. 2018, ARA&A 56, 435.
+   Review of the galaxy–halo connection: assembly bias, conditional
+   distributions, and where morphology/SFR enter the halo model.
+   `arXiv:1804.03097 <https://arxiv.org/abs/1804.03097>`_
+
+.. [Peng2010] Peng Y. et al. 2010, ApJ 721, 193.
+   Mass and environment quenching separability — the empirical form behind
+   halo-mass quenching parameterisations.
+   `arXiv:1003.4747 <https://arxiv.org/abs/1003.4747>`_
+
+.. [Ilbert2013] Ilbert O. et al. 2013, A&A 556, A55.
+   Quiescent and star-forming stellar mass functions since z≈4 (UltraVISTA)
+   — the f_Q(M*, z) data the split model must reproduce.
+   `arXiv:1301.3157 <https://arxiv.org/abs/1301.3157>`_
+
+.. [Muzzin2013] Muzzin A. et al. 2013, ApJ 777, 18.
+   SF/quiescent stellar mass functions to z = 4 (COSMOS/UltraVISTA).
+   `arXiv:1303.4409 <https://arxiv.org/abs/1303.4409>`_
+
+.. [Speagle2014] Speagle J.S. et al. 2014, ApJS 214, 15.
+   Consistent star-forming main sequence over 0 < z < 6 — the μ_MS(M*, z)
+   parameterisation for a continuous sSFR model.
+   `arXiv:1405.2041 <https://arxiv.org/abs/1405.2041>`_
+
+.. [Behroozi2019] Behroozi P. et al. 2019, MNRAS 488, 3143.
+   UniverseMachine: empirical galaxy–halo connection with per-halo SFR
+   histories — the reference empirical model for SFR-resolved occupations.
+   `arXiv:1806.07893 <https://arxiv.org/abs/1806.07893>`_
+
+.. [Yang2007groups] Yang X., Mo H.J. & van den Bosch F.C. 2007, ApJ 671, 153.
+   SDSS DR4 galaxy group catalogue — quenched fractions vs group halo mass.
+   `arXiv:0707.4640 <https://arxiv.org/abs/0707.4640>`_
+
+.. [Tinker2021groups] Tinker J.L. 2021, ApJ 923, 154.
+   Self-calibrating halo-based group finder — the modern f_Q(M_h) data.
+   `arXiv:2010.02946 <https://arxiv.org/abs/2010.02946>`_
+
+.. [Zhang2024CGM] Zhang Y. et al. 2024, A&A 690, A268.
+   eROSITA hot CGM II: L_X–mass scaling relations of central galaxies.
+   `arXiv:2401.17309 <https://arxiv.org/abs/2401.17309>`_
+
+.. [Zhang2025CGM] Zhang Y. et al. 2025, A&A 693, A197.
+   eROSITA hot CGM III: star-forming vs quiescent galaxies — the measurement
+   an SF/Q-split hot-gas sector must fit.
+   `arXiv:2411.19945 <https://arxiv.org/abs/2411.19945>`_
+
+.. [Truong2021] Truong N., Pillepich A. & Nelson D. 2021, MNRAS 508, 1563.
+   TNG predictions linking CGM X-ray properties to galaxy sSFR.
+   `arXiv:2109.06884 <https://arxiv.org/abs/2109.06884>`_
+
+.. [Banerjee2025] Banerjee A. et al. 2025, PASA 42, 78.
+   AGN vs star-forming galaxies at fixed stellar mass: colour, D4000,
+   morphology and clustering differences.
+   `arXiv:2310.12943 <https://arxiv.org/abs/2310.12943>`_
+
+.. [Yang2019BHbulge] Yang G. et al. 2019, MNRAS 485, 3721.
+   Black-hole growth traces bulge growth — the coupling that puts B/T into
+   the M_BH–M* step of the Powell chain.
+   `arXiv:1903.00003 <https://arxiv.org/abs/1903.00003>`_
+
+.. [Ni2019] Ni Q. et al. 2019, MNRAS 490, 1135.
+   BH growth vs host compactness at fixed M* — morphology as a second
+   parameter of AGN occupation.
+   `arXiv:1909.06382 <https://arxiv.org/abs/1909.06382>`_
+
+----
+
+Galaxy Luminosity Functions and SEDs
+--------------------------------------
+
+Multi-band luminosity functions and the stellar-population calibrations for a
+band-resolved conditional luminosity function (see :doc:`missing_physics`).
+
+.. [Kauffmann2003] Kauffmann G. et al. 2003, MNRAS 341, 33.
+   Stellar masses and star-formation histories for 10^5 SDSS galaxies — the
+   M*/L calibration anchor for mass-to-light parameterisations.
+   `arXiv:astro-ph/0204055 <https://arxiv.org/abs/astro-ph/0204055>`_
+
+.. [Faber2007] Faber S.M. et al. 2007, ApJ 665, 265.
+   B-band luminosity functions to z≈1 (DEEP2/COMBO-17) and the red-sequence
+   build-up.
+   `arXiv:astro-ph/0506044 <https://arxiv.org/abs/astro-ph/0506044>`_
+
+.. [Comparat2015OII] Comparat J. et al. 2015, A&A 575, A40.
+   Evolution of the bright end of the [OII] luminosity function — the
+   emission-line LF target for an SFR→line extension.
+   `arXiv:1408.1523 <https://arxiv.org/abs/1408.1523>`_
+
+.. [Shuntov2025] Shuntov M. et al. 2025, A&A 695, A20.
+   COSMOS-Web stellar-mass assembly in relation to dark-matter halos over
+   0.2 < z < 12.
+   `arXiv:2410.08290 <https://arxiv.org/abs/2410.08290>`_
+
+.. [Xu2025PAC] Xu K. et al. 2025, MNRAS 540, 1635.
+   PAC in DESI: the galaxy stellar mass function into the 10^6 M_sun frontier.
+   `arXiv:2503.01948 <https://arxiv.org/abs/2503.01948>`_
+
+.. [EuclidCosmicDawn2025] Euclid Collaboration (Zalesky L.) et al. 2025.
+   Cosmic Dawn Survey: galaxy stellar mass function over 0.2 < z < 6.5 on
+   10 deg².
+   `arXiv:2504.17867 <https://arxiv.org/abs/2504.17867>`_
+
+----
+
+Stellar Feedback and Galactic Winds
+-------------------------------------
+
+Supernova-driven winds and the simulation suites that calibrate them
+(see :doc:`missing_physics`; AGN feedback references live in the
+Baryonic-Effects group above).
+
+.. [SomervilleDave2015] Somerville R.S. & Davé R. 2015, ARA&A 53, 51.
+   Review of physical models of galaxy formation — the canonical forms of
+   energy- and momentum-driven wind mass loading.
+   `arXiv:1412.2712 <https://arxiv.org/abs/1412.2712>`_
+
+.. [Muratov2015] Muratov A.L. et al. 2015, MNRAS 454, 2691.
+   FIRE galactic winds: η_w ∝ V_c^{-1} (momentum) to V_c^{-2} (energy)
+   mass-loading calibrations.
+   `arXiv:1501.03155 <https://arxiv.org/abs/1501.03155>`_
+
+.. [Chisholm2017] Chisholm J., Tremonti C.A., Leitherer C. & Chen Y. 2017, MNRAS 469, 4831.
+   Measured mass and momentum outflow rates of photoionised galactic winds —
+   external priors on the wind sector.
+   `arXiv:1702.07351 <https://arxiv.org/abs/1702.07351>`_
+
+.. [PillepichTNG2018] Pillepich A. et al. 2018, MNRAS 473, 4077.
+   The IllustrisTNG galaxy-formation model — the SN-wind + AGN subgrid
+   pairing modern hydro suites converge on.
+   `arXiv:1703.02970 <https://arxiv.org/abs/1703.02970>`_
+
+.. [CAMELS2023] Villaescusa-Navarro F. et al. 2023, ApJS 265, 54.
+   CAMELS public data release: thousands of hydro simulations varying SN and
+   AGN feedback — the validation grid for a freed feedback sector.
+   `arXiv:2201.01300 <https://arxiv.org/abs/2201.01300>`_
+
+.. [Eckert2021] Eckert D., Gaspari M., Gastaldello F. et al. 2021, Universe 7, 142.
+   Feedback in galaxy groups: the mass scale where SN and AGN feedback
+   prescriptions diverge most between simulations.
+   `arXiv:2106.13259 <https://arxiv.org/abs/2106.13259>`_
+
+----
+
+Cold Gas and Neutral Hydrogen
+-------------------------------
+
+The HI halo model, cold-gas scaling relations and 21 cm data
+(see :doc:`missing_physics`).
+
+.. [VillaescusaNavarro2018HI] Villaescusa-Navarro F. et al. 2018, ApJ 866, 135.
+   Ingredients for 21 cm intensity mapping: the M_HI(M_h, z) halo model and
+   HI profiles from IllustrisTNG — the form proposed for ``hod_mod``.
+   `arXiv:1804.09180 <https://arxiv.org/abs/1804.09180>`_
+
+.. [Jones2018ALFALFA] Jones M.G. et al. 2018, MNRAS 477, 2.
+   The ALFALFA HI mass function — the z≈0 abundance anchor for the HI sector.
+   `arXiv:1802.00053 <https://arxiv.org/abs/1802.00053>`_
+
+.. [Catinella2018xGASS] Catinella B. et al. 2018, MNRAS 476, 875.
+   xGASS: cold-gas scaling relations and atomic-to-molecular ratios of local
+   galaxies — the M_HI(M*, sSFR) conditional data.
+   `arXiv:1802.02373 <https://arxiv.org/abs/1802.02373>`_
+
+.. [Obuljen2019] Obuljen A. et al. 2019, MNRAS 486, 5124.
+   The HI content of dark-matter halos at z≈0 from ALFALFA — the empirical
+   HI HOD.
+   `arXiv:1805.00934 <https://arxiv.org/abs/1805.00934>`_
+
+.. [GuoNUM2023] Guo H. et al. 2023, ApJ 955, 57.
+   NeutralUniverseMachine: empirical HI/H2 evolution on the UniverseMachine
+   galaxy–halo connection (HDR reference for the cold-gas outlook).
+   `arXiv:2307.07078 <https://arxiv.org/abs/2307.07078>`_
+
+.. [Nishigaki2025] Nishigaki M. et al. 2025, ApJ 984, 135.
+   ChemicalUniverseMachine: metals in the galaxy–ISM–CGM ecosystem.
+   `arXiv:2503.10999 <https://arxiv.org/abs/2503.10999>`_
+
+.. [CHIME2023] CHIME Collaboration 2023, ApJ 947, 16.
+   Detection of cosmological 21 cm emission in cross-correlation with eBOSS
+   tracers — the proof of principle for C_ell^{HI×g}.
+   `arXiv:2202.01242 <https://arxiv.org/abs/2202.01242>`_
+
+.. [Ponomareva2023] Ponomareva A.A. et al. 2023, MNRAS 522, 5308.
+   MIGHTEE-HI: the first MeerKAT HI mass function from an untargeted
+   interferometric survey.
+   `arXiv:2304.13051 <https://arxiv.org/abs/2304.13051>`_
+
+.. [SKA2019] Braun R. et al. 2019, arXiv:1912.12699.
+   Anticipated performance of SKA1 — the sensitivity reference for HI
+   intensity-mapping forecasts.
+   `arXiv:1912.12699 <https://arxiv.org/abs/1912.12699>`_
+
+.. [HI4PI2016] HI4PI Collaboration 2016, A&A 594, A116.
+   Full-sky Galactic HI survey — used in ``hod_mod`` only as the Galactic
+   absorption (N_H) template, *not* as extragalactic cold gas.
+   `arXiv:1610.06175 <https://arxiv.org/abs/1610.06175>`_

@@ -2,6 +2,115 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] — 2026-07-03
+
+The **tier-2 sensitivity study**: all 61 parameters free (nothing fixed), a
+(z, M*) grid of volume-limited galaxy samples, a multi-band APEC X-ray layer,
+tomographic shear, and physical survey-noise models — answering how much
+cosmology and how much astrophysics an optimistic Stage-IV data scenario
+teaches when the model marginalises over everything it contains.
+
+### Added
+
+- **Parameter vector 31 → 61** (append-only; tier-1 scripts pin the extension
+  by default and gain `--free-tier2`): the 16 formerly hard-coded nuisance
+  shapes (satellite HOD, baryon-sector shape, gas emissivity slopes, the full
+  A10 pressure shape including `p0_pressure`, Powell Model-2 `agn_rho` and
+  `agn_sig_mstar`), 7 redshift-evolution slopes applied per
+  `ln[(1+z)/(1+z_pivot)]` through `ForwardModel._theta_eff` (chain-rule exact),
+  and 7 X-ray spectral parameters (temperature-profile tilt, ICM metallicity
+  norm/mass-slope/evolution, AGN photon index `agn_gamma`, obscured fraction
+  `agn_fabs`, `agn_mu_bh_zs`).  `log10DC` is retired: `agn_emission="powell"`
+  replaces the tier-1 `L∝M` surrogate in `C_ℓ^{gX}`/`C_ℓ^{XX}` with the Powell
+  chain (validated against `agn/powell.py` to <1%).
+- **`forecast/tier2.py` — `Tier2Forecast`**: 80 volume-limited (z, M*) cells
+  (Δz = 0.1 × 0.2 dex, exact threshold-difference bin occupations) + 10
+  shell blocks (soft-band AGN XLF, per-band `C_ℓ^{XX}`) + a global tomographic
+  lensing block + 5 AGN-clustering blocks (`wp_agn` per 0.5-dex soft-L_X bin),
+  all sharing ONE parameter vector; block-wise Jacobians with per-block npz
+  caching.
+- **Multi-band APEC layer** (`forecast/apec_bands.py` + shipped
+  `hod_mod/data/apec_bands/*.npz`): band-integrated Λ_b(T, Z) tables distilled
+  once from `ApecCoolingTable`, evaluated with differentiable bilinear
+  interpolation; exact Σ_b w_b = 1 amplitude partition; Morrison & McCammon
+  ISM absorption templates for the obscured AGN fraction.
+- **`forecast/noise.py`** — physical survey noise: pair counts + cosmic
+  variance (w_p, `wp_agn`), shape noise (ΔΣ, 5-bin Euclid+LSST tomographic
+  shear at 30 arcmin⁻², f_sky = 0.5), CXB photon noise with the
+  completeness-pinned Athena all-sky spec (F_lim = 2×10⁻¹⁶ erg/s/cm² — exactly
+  the depth making L_X > 10⁴² complete to z = 1), Poisson XLF errors with
+  automated L_lim(z) completeness flags.
+- **`run_tier2_forecast`** driver (`--smoke`, `--n-bands {1,6,15}`) with the
+  cosmology-vs-astrophysics decomposition (sector pinning, bits per sector,
+  probe build-up), a 9-figure suite (`make_tier2_figures`), and the
+  `docs/tier2_forecast.rst` page with the production numbers.  Headlines at
+  R_min = 0.1 Mpc/h: σ(Ω_m) = 2.9×10⁻⁴, σ(σ_8) = 4.4×10⁻⁴ — only ×2.2/×2.7
+  above the astrophysics-pinned limit; the 6-band spectra turn
+  Γ_AGN/f_abs/Z_gas from prior-bound into measured (×500 on Γ_AGN vs one
+  broad band).
+- **`docs/missing_physics.rst`** — "What the model does not yet contain":
+  eight missing-physics sectors (beyond-ΛCDM, cosmology-correct differentiable
+  ingredients, AGN radio/IR + fundamental plane, morphology, sSFR, SEDs,
+  stellar feedback, cold gas/HI) with concrete implementation propositions,
+  constraining measurements, and 55 new title/author-verified references.
+- `fisher.constraints(..., scale=)` — prior-scaled eigen-inversion for the
+  61-parameter conditioning; `ForwardModel` grew `log10m_star_bin`,
+  `n_shear_bins`, `xray_bands`, `xlf_band`, `agn_emission`, `agn_lx_bins`
+  keywords (all backward-compatible; tier-1 defaults bit-identical, tested).
+- Tests: `tests/test_forecast_tier2.py`, `tests/test_forecast_noise.py`,
+  `hod_mod/forecast/tests/test_agn_matches_powell.py` (94 green across the
+  forecast suites), plus grid-convergence and monotonicity audits.
+
+## [0.1.6] — 2026-07-02
+
+The **differentiable sensitivity / Fisher forecast** of the full
+ZM15 + X-ray gas + AGN pipeline, plus the physical AGN X-ray luminosity-function
+model it uses, and a large test-coverage extension of the new code.
+
+### Added
+
+- **`hod_mod.forecast`** — a pure-JAX forward model whose whole chain (cosmology
+  included, via the analytic Eisenstein & Hu 1998 transfer function instead of
+  CAMB) is one differentiable function, so the Fisher Jacobian
+  `∂d/∂θ` is a single `jax.jacfwd`:
+  - `forward_jax.ForwardModel` — 31-parameter → 12-observable forward model
+    (`w_p`, `ΔΣ`, `C_ℓ^{gX,gy,XX,κκ,κκ_c,gκ_c,κκ_c}`, `Φ(L_X)`, `n_gal`, `Φ(M_*)`),
+    with a shared hot-gas/baryon sector linking the ΔΣ/cosmic-shear baryon split to
+    the X-ray and tSZ amplitudes, and an optional energy-closure baryon mode.
+  - `pk_eisenstein_hu.EisensteinHu98PkLinear` — σ8-parameterised, differentiable
+    EH98 linear `P(k)`.
+  - `fisher` — Fisher assembly (diagonal or full analytic covariance), eigen-floored
+    constraints, figure of merit, degeneracy ranking, principal directions and
+    per-probe decomposition; `covariance` — analytic Gaussian covariance with the
+    lensing-triplet cross-correlations; `params` — fiducials/priors/labels;
+    `tomography.TomographicForecast` — shared-cosmology, per-bin-HOD multi-sample
+    Jacobian.
+- **`hod_mod.agn.powell.PowellAGNModel`** — the physical Powell (2022) AGN–halo
+  model forward-modelling the AGN X-ray luminosity function (ZM15 SHMR → free
+  `M_BH`–`M_*` relation → universal Ananna 2022 Eddington-ratio distribution),
+  validated standalone against the Aird+2015 hard XLF; added as the 7-parameter
+  `xlf` observable of the forecast.
+- **`hod_mod.scripts.forecasts`** — `run_sensitivity_study`, `make_sensitivity_figures`,
+  `make_forward_diagram` (the structure-of-the-prediction diagram) and
+  `run_stage4_forecast`; `scripts.fitting.fit_powell_agn`.
+- **Documentation** — two new pages wired into the toctree: `sensitivity_fisher`
+  (the pedagogical scale-cut/degeneracy-breaking study, with a new appendix that
+  writes out the forward model *equation by equation* and a colour-coded flow
+  diagram linking the 31 equations) and `stage4_forecast` (realistic multi-survey
+  error budget).
+
+### Tests
+
+- 59 new tests for the forecast/AGN code: `test_forecast_fisher`,
+  `test_forecast_params`, `test_forecast_covariance`, `test_forecast_pk_eh98`,
+  `test_forecast_tomography` and `test_forecast_forward` (fast primitives + a
+  tiny-grid `ForwardModel` smoke test asserting every observable is finite and the
+  exact active-fraction identity `∂lnΦ/∂log10 f_ERDF = ln 10`), plus
+  `test_powell_agn` (ERDF shape, XLF positivity/decline, convolution-vs-Monte-Carlo,
+  occupation/bias/emissivity). These run in the default `tests/` suite (the heavy
+  production-match / finite-difference validation stays in
+  `hod_mod/forecast/tests/`).
+
 ## [0.1.5] — 2026-07-01
 
 - ``docs/conf.py`` sets ``autodoc_mock_imports`` for the heavy/optional backends

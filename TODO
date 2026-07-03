@@ -1,3 +1,85 @@
+JAX_PLATFORMS=cpu HOD_MOD_RESULTS=/home/comparat/data/hod_mod_results \
+  python -m hod_mod.scripts.forecasts.run_sensitivity_study --add-planck-prior
+
+
+
+
+# shared env prefix (skip if ~/.bashrc already exports these)
+ENV="HOD_MOD_DATA_DIR=/home/comparat/data HOD_MOD_RESULTS=/home/comparat/data/hod_mod_results JAX_PLATFORMS=cpu"
+PY=/home/comparat/mamba/envs/hod_mod/bin/python
+
+
+# MCMC, one process per sample, in parallel (grids already cached -> ~1 min each).
+# Each run writes: <S>_bb_chain.npz, <S>_bb_summary.json, and per-sample figures
+#   <S>_bb_corner.png, <S>_bb_traces.png, <S>_bb_decomp.png
+for s in S1 S2 S3 S4; do
+  eval $ENV nohup $PY -m hod_mod.scripts.fitting.fit_xray_joint \
+      --samples $s --mcmc --nwalkers 64 --nsteps 8000 --nburn 2000 \
+      > phaseA_$s.log 2>&1 &
+done; wait
+
+# cross-sample diagnostic plots (params-vs-mass, decomp overview, band energy/ratios/validation)
+eval $ENV $PY -m hod_mod.scripts.fitting.make_xray_diagnostics
+# -> results/xray_joint/diagnostics/*.png
+
+
+# (once) reconstruct the 15-band w(theta) if not already present under $HOD_MOD_DATA_DIR/xray_bands
+eval $ENV $PY -m hod_mod.scripts.fitting.reconstruct_band_wtheta
+
+# MCMC per sample. NOTE: the 81-cell full-APEC band grid is built on first run
+#   (~1 h/sample); after that the cache is reused and MCMC is ~1 min.
+# Each run writes: <S>_bands_chain.npz, <S>_bands_summary.json, and figures
+#   <S>_bands_corner.png, <S>_bands_traces.png, <S>_bands_spectrum.png
+for s in S1 S2 S3 S4; do
+  eval $ENV nohup $PY -m hod_mod.scripts.fitting.fit_xray_joint_bands \
+      --samples $s --mcmc --nwalkers 64 --nsteps 8000 --nburn 2000 \
+      > phaseB_$s.log 2>&1 &
+done; wait
+
+# regenerate diagnostics (now also emits bands_params_vs_mass.png)
+eval $ENV $PY -m hod_mod.scripts.fitting.make_xray_diagnostics
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 data: verify all the data in the data directory and its consistency. All the benchmark !
 documentation: continue reading and proofing. (Overview and data formats page are final, next is the forward model showcase.)
 code coverage, and tests.
