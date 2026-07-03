@@ -1,28 +1,27 @@
-"""Phase B — energy-band (temperature-resolved) joint galaxy×X-ray w(theta) fit.
+"""Phase B v2 — energy-band gas fit with FREE LX–M and kT–M scaling relations.
 
-Extends the broad-band joint fit (``fit_xray_joint``) to the 15 narrow energy bands
-(0.5-0.6 ... 1.9-2.0 keV).  The gas emissivity ``ε_b = n_e²·Λ_b(T,Z)`` is
-band-dependent through the per-band APEC cooling ``Λ_b``, so the **band RATIOS
-constrain the gas temperature kT** — the freedom the broad-band fit lacked (where
-S6/S7, the cluster-mass samples, failed even individually).  All samples are fit
-JOINTLY with ONE shared set of physical scaling-relation parameters; the new free
-parameter vs Phase A is ``kT_norm`` (the temperature-normalisation of the kT-M
-relation), constrained by the band ratios.
+The temperature is NO LONGER self-similar.  The gas is parametrised directly by the
+(normalisation, slope) of two scaling relations, free "to a limited extent" around
+the Comparat+2025 GAS.py centrals (``validate_gas_profiles._gas_py_lx``/``_gas_py_kt``):
 
-The band data (reconstructed + validated by ``reconstruct_band_wtheta``) are read
-from ``$HOD_MOD_DATA_DIR/xray_bands/<basename>/<band>.fits`` (env-var data link via
-``hod_mod.paths.data_path``), falling back to the in-repo ``hod_mod/data``.
+* LX–M:  log10(LX_0.5-2 / E(z)²) = lx_norm + lx_slope·(log10 M500c − 15),  σ_LX=0.3
+* kT–M:  log10(kT / E(z)^{2/3}) = kt_slope·log10 M500c + kt_norm,          σ_kT=0.2
 
-Speed: the 15 bands share n_e/T/Z and the FT geometry, so each cell's emissivity FT
-is built ONCE for all bands (``emissivity_full_uk_bands`` →
-``emissivity_xuk_bands_per_z``); the per-band Limber+Hankel reuse the cached HOD
-weights via ``x_uk_override``.
+Free params ``[lx_norm, lx_slope, kt_norm, kt_slope, p2, r_max, log10DC]`` with
+informative Gaussian priors N(44.7,0.3)/N(1.61,0.3)/N(−8,0.2)/N(0.6,0.15).
 
-Usage (after the band-data move is complete):
-    HOD_MOD_DATA_DIR=<data root> JAX_PLATFORMS=cpu python -m \
-        hod_mod.scripts.fitting.fit_xray_joint_bands --samples S1 S2 S3 S4 S5 S6 S7 --map-only
-    # quick smoke test:
-    ... fit_xray_joint_bands --samples S1 --grid-tiny --map-only
+Forward model (constant-kT-per-halo): the band-b emissivity of a halo is
+``LX(M)·[Λ_b(kT(M))/Λ_broad(kT(M))]``, so w_b(θ) is a **cheap** analytic weight
+folded through a PRECOMPUTED per-mass transfer ``G(θ,M | p2,r_max)`` (the Limber +
+Hankel of the normalised n_e²-shape FT with the halo-model mass kernel; validated to
+reproduce a direct ``angular_cl_gX`` call to ~5e-5).  The eROSITA per-band response
+weight ``A_b`` multiplies gas and AGN; the empirical S1 anchor sets the absolute
+amplitude (anchor-relative v1).  No per-eval FT ⇒ fast MCMC.
+
+Usage:
+    HOD_MOD_DATA_DIR=/home/comparat/data HOD_MOD_RESULTS=/home/comparat/data/hod_mod_results \
+      JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_xray_joint_bands \
+      --samples S1 S2 S3 S4 --mcmc
 """
 
 from __future__ import annotations
@@ -41,302 +40,364 @@ from hod_mod import paths
 from hod_mod.core.power_spectrum import LinearPowerSpectrum
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
+from hod_mod.core.distances import hubble_e, comoving_distance
 from hod_mod.gas import GasDensityDPM
 from hod_mod.gas.cooling import ApecCoolingTable
-from hod_mod.gas.metallicity import MetallicityProfileDPM
+from hod_mod.gas.conversions import m200_to_m500c
 from hod_mod.connection.hod import ZuMandelbaum15HODModel
 from hod_mod.observables.clustering import FullHaloModelPrediction
-from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+from hod_mod.observables.cross_spectra import HaloModelCrossSpectra, psf_king_window_ell
 from hod_mod.agn.duty_cycle import DutyCycleAGNModel
 from hod_mod.scripts.fitting import fit_comparat2025 as F
 from hod_mod.scripts.fitting import fit_agn_duty_cycle_baseline as B
 from hod_mod.scripts.fitting import fit_xray_joint as J
-from hod_mod.scripts.validate_gas_profiles import (
-    _make_density_variant, _make_pressure_variant, _calibrate_ne03_P03,
-)
+from hod_mod.scripts.validate_gas_profiles import _make_density_variant, _rho_crit_z
 
 _OUT_DIR = os.fspath(paths.results_root() / "xray_joint_bands")
 
-# 15 bands (folder names in eV) + their keV edges
 _BANDS = [f"{lo:04d}_E_{lo+100:04d}" for lo in range(500, 2000, 100)]
 _BAND_EDGES = [(lo / 1000.0, (lo + 100) / 1000.0) for lo in range(500, 2000, 100)]
 _NB = len(_BANDS)
+_GAMMA_AGN = 1.8
 
-# emulator grid: gas shape (p2, r_max, beta_gas) + the NEW temperature axis kT_norm
+# profile-shape grid (the scaling relations are analytic, NOT gridded)
 _ALPHA_PROF = 0.9
-_P2_GRID   = np.array([0.3, 1.0, 2.4])
-_RMAX_GRID = np.array([3.0, 4.0, 5.0])
-_BETA_GRID = np.array([0.9, 1.5, 2.1])
-_KT_GRID   = np.array([0.5, 1.0, 2.0])       # multiplies the self-similar kT
+_P2_GRID   = np.array([0.1, 0.6, 1.2, 2.4])   # gas outer slope
+_RMAX_GRID = np.array([3.0, 4.0, 5.0])         # r_max / r200
+_Z_METAL   = 0.3                                # representative gas metallicity [Z_sun]
 
-_THETA_MIN, _THETA_MAX = 8.0, 300.0
-_NE03_FID = B._NE03_FID
-_NORM_LO, _NORM_HI = B._NORM_LO, B._NORM_HI
+# Scaling-relation pivots.  kt_norm is PIVOTED at M500c=10^14 (near the emission-
+# weighted mass) — NOT at M500c=1 — so kt_norm ≡ log10(kT/E^{2/3}) at 10^14 keV and
+# does NOT trade off with kt_slope (the M500c=1 pivot amplified the slope ~10x at the
+# data mass and drove kT to unphysical values).  GAS.py at 10^14: 0.6·14−8 = +0.4.
+_KT_PIVOT = 14.0
+_LX_PIVOT = 15.0
+
+
+def kT_of_M(log10_m500c, ez, kt_slope, kt_norm):
+    """kT(M500c) [keV].  kt_norm = log10(kT/E(z)^{2/3}) at M500c = 10^_KT_PIVOT."""
+    return 10.0 ** (kt_slope * (np.asarray(log10_m500c) - _KT_PIVOT) + kt_norm) * ez ** (2.0 / 3.0)
+
+
+def LX_of_M(log10_m500c, ez, lx_norm, lx_slope, boost=1.0):
+    """LX_0.5-2(M500c) [erg/s].  lx_norm at M500c = 10^_LX_PIVOT."""
+    return 10.0 ** (lx_norm + lx_slope * (np.asarray(log10_m500c) - _LX_PIVOT)) * ez ** 2 * boost
+
+
+# 8 free params: LX-M(2) + kT-M(2) + shape(2) + AGN duty cycle + gas metallicity.
+# Metallicity is a param so the "free_metal" candidate can vary it; the relation
+# params always carry their informative Gaussian priors (limited-extent freedom).
+_PARAMS   = ["lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max", "log10DC", "z_metal"]
+_BOOST_LX  = float(np.exp(0.5 * (np.log(10.0) * 0.3) ** 2))   # log-normal mean boost
 _LOG10DC_LO, _LOG10DC_HI = B._LOG10DC_LO, B._LOG10DC_HI
-_GAMMA_AGN = 1.8                              # AGN photon index for the band split
+_Z_FID = 0.3                                                  # fiducial gas metallicity [Z_sun]
 
-_PARAMS = ["log10_ne_03", "kT_norm", "beta_gas", "p2", "r_max", "log10DC"]
-
-
-def _grids(tiny=False):
-    if tiny:
-        return (np.array([0.3, 2.4]), np.array([3.0, 5.0]),
-                np.array([0.9, 2.1]), np.array([0.5, 2.0]))
-    return _P2_GRID, _RMAX_GRID, _BETA_GRID, _KT_GRID
+# --- candidate machinery: per-candidate Gaussian priors + bounds (8-vectors) ------
+# Each candidate isolates one hypothesis for the "gas runs hot" result and writes to
+# its own subfolder.  sig=inf ⇒ flat prior (bounds only); a tight sig ⇒ effectively
+# fixed.  Set by _apply_candidate() into module globals used by _log_prior/_weight.
+_CANDIDATES = ["baseline", "agn_fixed", "free_metal", "flat_kt"]
+_MU8 = _SIG8 = _BND8 = None
 
 
-# --- band data + cooling + AGN spectral split ------------------------------
+def _apply_candidate(cand, dc_fix=-1.8):
+    """Configure the priors/bounds for a candidate; returns the output subdir name."""
+    global _MU8, _SIG8, _BND8
+    inf = np.inf
+    mu  = np.array([44.7, 1.61, 0.4, 0.6, 0.0, 0.0, 0.0, _Z_FID])
+    sig = np.array([0.3, 0.3, 0.2, 0.15, inf, inf, inf, 0.005])   # base: DC flat, Z fixed
+    bnd = np.array([[43.2, 46.2], [0.6, 2.6], [-0.9, 1.7], [0.1, 1.3],
+                    [_P2_GRID[0], _P2_GRID[-1]], [_RMAX_GRID[0], _RMAX_GRID[-1]],
+                    [_LOG10DC_LO, _LOG10DC_HI], [0.05, 1.0]])
+    if cand == "agn_fixed":          # fix AGN duty cycle to the Phase-A broad-band value
+        mu[6] = dc_fix; sig[6] = 0.02; bnd[6] = [dc_fix - 0.1, dc_fix + 0.1]
+    elif cand == "free_metal":       # free the gas metallicity (flat in [0.05, 1.0])
+        sig[7] = inf
+    elif cand == "flat_kt":          # relax the kT-norm prior -> data-driven temperature
+        sig[2] = 2.0
+    elif cand != "baseline":
+        raise ValueError(f"unknown candidate {cand}; choose from {_CANDIDATES}")
+    _MU8, _SIG8, _BND8 = mu, sig, bnd
+    return "baseline" if cand == "baseline" else cand
+
+
+# --- band data + cooling + AGN spectral split + eROSITA response -------------
 
 def _basename(label):
     return F._zenodo_fname(label).name.replace("_GALxEVT_wtheta.fits", "")
 
 
 def load_band_data(label):
-    """Per-band reconstructed w_b(theta) for a sample.
-
-    Returns dict with theta_arcsec/theta_rad (deg→) and (Nb, Ntheta) wtheta/err.
-    Reads ``$HOD_MOD_DATA_DIR/xray_bands/<basename>/<band>.fits``.
-    """
-    base = _basename(label)
-    root = paths.data_path("xray_bands", base)
-    w = np.zeros((_NB, 0)); e = np.zeros((_NB, 0)); th_deg = None
-    rows = []
+    """Per-band reconstructed w_b(theta): (Nb, Ntheta) wtheta/err + theta grid."""
+    root = paths.data_path("xray_bands", _basename(label))
+    rows = []; th_deg = None
     for band in _BANDS:
         fp = os.fspath(root / (band + ".fits"))
         if not os.path.isfile(fp):
             raise FileNotFoundError(f"missing band file: {fp}\n"
-                                    f"set $HOD_MOD_DATA_DIR to the moved data root.")
+                                    f"set $HOD_MOD_DATA_DIR to the data root.")
         t = Table.read(fp)
         if th_deg is None:
             th_deg = np.asarray(t["theta_mid"], float)
         rows.append((np.asarray(t["wtheta"], float), np.asarray(t["wtheta_err"], float)))
-    w = np.vstack([r[0] for r in rows]); e = np.vstack([r[1] for r in rows])
     return dict(theta_deg=th_deg, theta_arcsec=th_deg * 3600.0,
-                theta_rad=th_deg * np.pi / 180.0, wtheta=w, wtheta_err=e)
+                theta_rad=th_deg * np.pi / 180.0,
+                wtheta=np.vstack([r[0] for r in rows]),
+                wtheta_err=np.vstack([r[1] for r in rows]))
 
 
 _COOLING_CACHE = None
 def _band_cooling():
-    """15 per-band ApecCoolingTable instances (built once, ~150 s)."""
+    """15 per-band + 1 broad (0.5-2 keV) ApecCoolingTable (built once)."""
     global _COOLING_CACHE
     if _COOLING_CACHE is None:
-        _COOLING_CACHE = [ApecCoolingTable(emin=lo, emax=hi) for lo, hi in _BAND_EDGES]
+        bands = [ApecCoolingTable(emin=lo, emax=hi) for lo, hi in _BAND_EDGES]
+        broad = ApecCoolingTable(emin=0.5, emax=2.0)
+        _COOLING_CACHE = (bands, broad)
     return _COOLING_CACHE
 
 
 def _agn_band_fractions(gamma=_GAMMA_AGN):
-    """Energy-flux fraction of a Γ power-law AGN spectrum in each band:
-    f_b = ∫_b E^{1-Γ}dE / ∫_{0.5}^{2.0} E^{1-Γ}dE  (Σ f_b = 1).
-    First-pass AGN spectral split; a full spectrum×eROSITA-response-per-band AGN
-    is a later refinement."""
-    p = 2.0 - gamma   # exponent of the antiderivative E^{2-Γ}/(2-Γ); energy flux ∝ E^{1-Γ}
+    """Energy-flux fraction of a Γ power-law AGN in each band (Σ f_b = 1)."""
+    p = 2.0 - gamma
     def _integ(lo, hi):
-        if abs(p) < 1e-9:
-            return np.log(hi / lo)
-        return (hi ** p - lo ** p) / p
+        return np.log(hi / lo) if abs(p) < 1e-9 else (hi ** p - lo ** p) / p
     tot = _integ(0.5, 2.0)
     return np.array([_integ(lo, hi) / tot for lo, hi in _BAND_EDGES])
 
 
-def _make_full_gas_kT(p2, r_max, beta_gas, kT_norm):
-    """Full-APEC gas profiles at (p2, r_max, beta_gas) with the temperature scaled
-    by kT_norm (P_03 ×= kT_norm so T = P/n_e ∝ kT_norm); density at the calibrated
-    n_e (rescaled to the fiducial later)."""
-    beta_P = beta_gas + 2.0 / 3.0
-    ne_cal, P_cal = _calibrate_ne03_P03(beta_gas, beta_P, T_min=0.3, z=0.135)
-    dp = _make_density_variant(model=2, ne_03=ne_cal, beta=beta_gas,
-                               alpha_in=_ALPHA_PROF, alpha_tr=2.0,
-                               alpha_out=_ALPHA_PROF + 2.0 * float(p2))
-    dp._r_max_factor = float(r_max)
-    pp = _make_pressure_variant(model=2, P_03=P_cal * float(kT_norm), beta=beta_P)
-    return dp, pp, ne_cal
+_ARF_CACHE = None
+def _arf_band_weights():
+    """Per-band eROSITA effective-response weight A_b = <ARF·g_inband>_band (mean 1)."""
+    global _ARF_CACHE
+    if _ARF_CACHE is None:
+        from hod_mod.gas import erosita_response as ER
+        d = np.load(ER._DEFAULT_NPZ)
+        emid = 0.5 * (d["energ_lo"] + d["energ_hi"])
+        resp = d["arf_comb"] * d["g_inband"]
+        A = np.array([np.mean(resp[(emid >= lo) & (emid < hi)]) for lo, hi in _BAND_EDGES])
+        _ARF_CACHE = A / A.mean()
+    return _ARF_CACHE
 
 
-# --- emulator precompute ----------------------------------------------------
+# --- per-mass transfer G(theta, M) (the validated core) ---------------------
 
-def _precompute(sample, hmf_backend, tiny):
-    """Build (or load) the per-sample band emulator: gas w_b(theta) over
-    (p2, r_max, beta_gas, kT_norm) for all 15 bands at density_norm=1, plus the
-    broad-band AGN template (DC=1)."""
+def _shape_ft(dp, sc, z, theta_cosmo):
+    """Normalised n_e²-shape FT Ŝ(k,M) = emissivity_uk(k,M)/emissivity_uk(k→0,M);
+    cancels the density amplitude AND mass slope (those are now LX(M))."""
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        em = np.asarray(dp.emissivity_uk(sc["k_np"], sc["m_np"], sc["r_delta"],
+                                         float(z), theta_cosmo))
+    return em / em[0:1, :]
+
+
+def _build_transfer(cross, hod, theta_cosmo, z_arr, nz, th_rad, ell, dp):
+    """G(θ,M) (Ntheta, NM): w_gas(θ) = weight(M) @ G.  Linear-interp Limber + Hankel
+    of the halo-model mass kernel × Ŝ, with the trapezoid dM measure folded in."""
+    h = float(theta_cosmo["h"]); om = float(theta_cosmo["Omega_m"])
+    chi_z = np.array([float(np.asarray(comoving_distance(float(zi), h, om)).ravel()[0]) * h
+                      for zi in z_arr])
+    dndchi = np.asarray(nz, float) / np.trapezoid(np.asarray(nz, float), chi_z)
+    ell = np.asarray(ell, float)
+    k_lim = (ell[:, None] + 0.5) / chi_z[None, :]           # (Nell, Nz)
+    per_z = []
+    m_np = None
+    for iz, zi in enumerate(z_arr):
+        sc = cross._get_static_cache(float(zi), theta_cosmo, hod)
+        k_np = np.asarray(sc["k_np"], float); m_np = np.asarray(sc["m_np"], float)
+        dndm = np.asarray(sc["dndm_np"], float); bias = np.asarray(sc["bias_np"], float)
+        pk = np.asarray(sc["pk_lin"], float); uk = np.asarray(sc["uk"], float)
+        nc, ns, n_gal, b_eff = cross._get_hod_weights(float(zi), theta_cosmo, hod, sc)
+        nc = np.asarray(nc, float); ns = np.asarray(ns, float)
+        S = _shape_ft(dp, sc, zi, theta_cosmo)             # (Nk, NM)
+        Pk = (dndm[None, :] * (nc[None, :] + ns[None, :] * uk) * S / n_gal
+              + dndm[None, :] * bias[None, :] * S * (b_eff * pk[:, None]))   # (Nk, NM)
+        klz = k_lim[:, iz]
+        Pint = np.stack([np.interp(klz, k_np, Pk[:, j]) for j in range(Pk.shape[1])], axis=1)
+        per_z.append(dndchi[iz] * Pint / chi_z[iz] ** 2)   # (Nell, NM)
+    Cl_M = np.trapezoid(np.stack(per_z, 0), chi_z, axis=0)  # (Nell, NM)
+    Cl_M = Cl_M * np.asarray(psf_king_window_ell(ell, F._PSF_KING_THETA_C, 1.5))[:, None]
+    # vectorised Hankel: G[θ,M] = Σ_ℓ (ℓ w_ℓ / 2π) j0(ℓθ) Cl_M[ℓ,M]
+    from scipy.special import j0 as _j0
+    wl = np.empty_like(ell)
+    wl[1:-1] = (ell[2:] - ell[:-2]) / 2.0; wl[0] = (ell[1] - ell[0]) / 2.0
+    wl[-1] = (ell[-1] - ell[-2]) / 2.0
+    J0w = (ell * wl / (2.0 * np.pi))[None, :] * _j0(ell[None, :] * np.asarray(th_rad)[:, None])
+    G = J0w @ Cl_M                                          # (Ntheta, NM)
+    wtrap = np.empty_like(m_np)
+    wtrap[1:-1] = (m_np[2:] - m_np[:-2]) / 2.0; wtrap[0] = (m_np[1] - m_np[0]) / 2.0
+    wtrap[-1] = (m_np[-1] - m_np[-2]) / 2.0
+    return G * wtrap[None, :], m_np
+
+
+def _precompute(sample, hmf_backend):
+    """Build (or load) the per-sample transfer grid G(θ,M | p2,r_max) + m500c(M) +
+    E(z) + AGN template + band data."""
     os.makedirs(_OUT_DIR, exist_ok=True)
-    suff = "_tiny" if tiny else ""
-    cache = os.path.join(_OUT_DIR, f"{sample}_bands_emulator{suff}.npz")
-    p2g, rg, bg_, ktg = _grids(tiny)
-
+    cache = os.path.join(_OUT_DIR, f"{sample}_transfer.npz")
     bd = load_band_data(sample)
     th_as = bd["theta_arcsec"]; th_rad = bd["theta_rad"]
-    mask = (th_as >= _THETA_MIN) & (th_as <= _THETA_MAX)
-
+    mask = (th_as >= 8.0) & (th_as <= 300.0)
     if os.path.exists(cache):
         d = np.load(cache)
-        if (np.array_equal(d["p2_grid"], p2g) and np.array_equal(d["rmax_grid"], rg)
-                and np.array_equal(d["beta_grid"], bg_) and np.array_equal(d["kt_grid"], ktg)):
-            return d["gas_grid"], d["agn_dc1"], bd, mask
-        print(f"  [{sample}] cached band grid axes changed -> rebuilding", flush=True)
+        if (np.array_equal(d["p2_grid"], _P2_GRID) and np.array_equal(d["rmax_grid"], _RMAX_GRID)
+                and d["G_grid"].shape[-2] == th_as.size):
+            return (d["G_grid"], d["log10_m500c"], float(d["ez"]), d["agn_dc1"], bd, mask)
+        print(f"  [{sample}] cached transfer stale -> rebuild", flush=True)
 
     th = F._THETA_COSMO
-    pk = LinearPowerSpectrum()
-    hmf = make_hmf(hmf_backend, pk_func=pk.pk_linear)
-    colo = dict(flat=True, H0=th["h"] * 100.0, Om0=th["Omega_m"],
-                Ob0=th["Omega_b"], sigma8=0.811, ns=th["n_s"])
+    pk = LinearPowerSpectrum(); hmf = make_hmf(hmf_backend, pk_func=pk.pk_linear)
+    colo = dict(flat=True, H0=th["h"] * 100.0, Om0=th["Omega_m"], Ob0=th["Omega_b"],
+                sigma8=0.811, ns=th["n_s"])
     hp = HaloProfile(colo, cm_relation="diemer19")
     hod = ZuMandelbaum15HODModel(hmf, hmf.bias)
     fhmp = FullHaloModelPrediction(pk, hod, hp)
     hod_params = B._build_hod_params(sample)
     z_arr, nz = F._build_nz_fast(sample)
-    cool = _band_cooling()
-    mp = MetallicityProfileDPM()
+    zmean = float(F.SAMPLES[sample]["zmean"])
+    cross = HaloModelCrossSpectra(fhmp, density_profile=GasDensityDPM(model=2))
 
-    # broad-band AGN template (DC=1) — split into bands at fit time via f_b
+    # AGN template (DC=1)
     agn = DutyCycleAGNModel(sample=sample, theta_cosmo=th, hmf=hmf, log10DC=0.0)
-    cross_a = HaloModelCrossSpectra(fhmp, density_profile=GasDensityDPM(model=2),
-                                    agn_model=agn)
+    cross_a = HaloModelCrossSpectra(fhmp, density_profile=GasDensityDPM(model=2), agn_model=agn)
     comp = cross_a.angular_cl_gX(F._ELL, z_arr, nz, th, hod_params,
                                  psf_king_theta_c_arcsec=F._PSF_KING_THETA_C,
-                                 return_components=True, agn_kwargs={"log10DC": 0.0},
-                                 n_workers=1)
+                                 return_components=True, agn_kwargs={"log10DC": 0.0}, n_workers=1)
     agn_dc1 = F._hankel(np.asarray(comp["agn"], float), th_rad)
 
-    nth = th_as.size
-    gas_grid = np.zeros((p2g.size, rg.size, bg_.size, ktg.size, _NB, nth))
-    ncell = p2g.size * rg.size * bg_.size * ktg.size
-    t0 = time.time(); done = 0
-    for i, p2 in enumerate(p2g):
-        for j, rmax in enumerate(rg):
-            for kk, beta in enumerate(bg_):
-                for l, kt in enumerate(ktg):
-                    dp, pp, ne_cal = _make_full_gas_kT(p2, rmax, float(beta), float(kt))
-                    cross = HaloModelCrossSpectra(fhmp, density_profile=dp)
-                    cross._dp = dp; cross._pp = pp; cross._mp = mp
-                    # ONE batched FT for all 15 bands, per z
-                    xukb = cross.emissivity_xuk_bands_per_z(z_arr, th, hod_params, cool)
-                    scale = (_NE03_FID / ne_cal) ** 2
-                    for b in range(_NB):
-                        ov = [scale * xukb[iz][b] for iz in range(len(z_arr))]
-                        c = cross.angular_cl_gX(
-                            F._ELL, z_arr, nz, th, hod_params,
-                            psf_king_theta_c_arcsec=F._PSF_KING_THETA_C,
-                            x_uk_override=ov, return_components=True, n_workers=1)
-                        gas_grid[i, j, kk, l, b] = F._hankel(
-                            np.asarray(c["gas"], float), th_rad)
-                    done += 1
-            print(f"  [{sample}] p2={p2:.2f} r_max={rmax:.1f} "
-                  f"({done}/{ncell} cells) [{time.time()-t0:.0f}s]", flush=True)
+    # m500c(M) at zmean + E(zmean) (relation inputs; constant-per-halo)
+    sc0 = cross._get_static_cache(zmean, th, hod_params)
+    m_np = np.asarray(sc0["m_np"], float); c_np = np.asarray(sc0["c_np"], float)
+    r_delta = np.asarray(sc0["r_delta"], float)
+    m500c_h, _ = m200_to_m500c(m_np, c_np, r_delta, _rho_crit_z(zmean))
+    log10_m500c = np.log10(np.asarray(m500c_h, float) / th["h"])   # Msun (physical)
+    ez = float(hubble_e(zmean, th["Omega_m"]))
 
-    np.savez(cache, gas_grid=gas_grid, agn_dc1=agn_dc1,
-             p2_grid=p2g, rmax_grid=rg, beta_grid=bg_, kt_grid=ktg)
-    print(f"[{sample}] band emulator built in {time.time()-t0:.0f}s -> {cache}", flush=True)
-    return gas_grid, agn_dc1, bd, mask
+    G_grid = np.zeros((_P2_GRID.size, _RMAX_GRID.size, th_as.size, m_np.size))
+    t0 = time.time()
+    for i, p2 in enumerate(_P2_GRID):
+        for j, rmax in enumerate(_RMAX_GRID):
+            dp = _make_density_variant(model=2, ne_03=1e-4, beta=0.5, alpha_in=_ALPHA_PROF,
+                                       alpha_tr=2.0, alpha_out=_ALPHA_PROF + 2.0 * float(p2))
+            dp._r_max_factor = float(rmax)
+            G_grid[i, j], _ = _build_transfer(cross, hod_params, th, z_arr, nz, th_rad, F._ELL, dp)
+        print(f"  [{sample}] transfer p2={p2:.2f} ({(i+1)*_RMAX_GRID.size}/"
+              f"{_P2_GRID.size*_RMAX_GRID.size}) [{time.time()-t0:.0f}s]", flush=True)
+    np.savez(cache, G_grid=G_grid, log10_m500c=log10_m500c, ez=ez, agn_dc1=agn_dc1,
+             p2_grid=_P2_GRID, rmax_grid=_RMAX_GRID)
+    print(f"[{sample}] transfer built in {time.time()-t0:.0f}s -> {cache}", flush=True)
+    return G_grid, log10_m500c, ez, agn_dc1, bd, mask
 
 
-# --- model + objective ------------------------------------------------------
+# --- model + priors ---------------------------------------------------------
+
+def _weight_bands(p, S):
+    """LX(M)·Λ_b(kT(M))/Λ_broad(kT(M))  — (Nb, NM), from the free relations."""
+    lx_norm, lx_slope, kt_norm, kt_slope = p[0], p[1], p[2], p[3]
+    lm = S["log10_m500c"]
+    kT = np.clip(kT_of_M(lm, S["ez"], kt_slope, kt_norm), S["kT_lo"], S["kT_hi"])
+    LX = LX_of_M(lm, S["ez"], lx_norm, lx_slope, boost=_BOOST_LX)
+    Zc = np.full_like(kT, np.clip(p[7], 0.05, 3.0))    # gas metallicity (free in free_metal)
+    lam_broad = np.maximum(np.asarray(S["cool_broad"](kT, Zc)), 1e-40)
+    lam_b = np.stack([np.asarray(cb(kT, Zc)) for cb in S["cool_bands"]])   # (Nb, NM)
+    return LX[None, :] * (lam_b / lam_broad[None, :])
+
+
+def _components_bands(p, S):
+    """ARF-weighted gas and AGN (Nb, Ntheta)."""
+    G = S["G_interp"]([[p[4], p[5]]])[0].reshape(S["nth"], -1)   # (Ntheta, NM)
+    gas = S["c_total"] * (_weight_bands(p, S) @ G.T)             # (Nb, Ntheta)
+    agn = 10.0 ** p[6] * S["c_obs_total"] * (S["fb"][:, None] * S["agn_dc1"][None, :])
+    return S["arf"][:, None] * gas, S["arf"][:, None] * agn
+
 
 def _model_bands(p, S):
-    """(Nb, Ntheta) model w_b(theta) for shared params p on sample dict S."""
-    log10_ne_03, kT_norm, beta, p2, r_max, log10DC = p
-    gas = S["interp"]([[p2, r_max, beta, kT_norm]])[0].reshape(_NB, -1)   # (Nb, Nth)
-    a_gas = S["c_total"] * (10.0 ** (log10_ne_03 - np.log10(_NE03_FID))) ** 2
-    a_agn = 10.0 ** log10DC * S["c_obs_total"]
-    return a_gas * gas + a_agn * (S["fb"][:, None] * S["agn_dc1"][None, :])
+    g, a = _components_bands(p, S)
+    return g + a
 
 
 def _chi2_sample(p, S):
-    wm = _model_bands(p, S)
-    r = (wm - S["wtheta"])[:, S["mask"]] / S["err"][:, S["mask"]]
+    r = (_model_bands(p, S) - S["wtheta"])[:, S["mask"]] / S["err"][:, S["mask"]]
     return float(np.sum(r ** 2))
 
 
 def _bounds():
-    return np.array([
-        [np.log10(_NE03_FID) + np.log10(_NORM_LO), np.log10(_NE03_FID) + np.log10(_NORM_HI)],
-        [_KT_GRID[0], _KT_GRID[-1]],
-        [_BETA_GRID[0], _BETA_GRID[-1]],
-        [_P2_GRID[0], _P2_GRID[-1]],
-        [_RMAX_GRID[0], _RMAX_GRID[-1]],
-        [_LOG10DC_LO, _LOG10DC_HI],
-    ])
+    return _BND8
 
 
-def _anchor_c_total_S1(S):
-    """Empirical full-APEC gas anchor on S1 using the BAND-SUMMED amplitude (free
-    A_gas, A_AGN at the best shape, kT), defining that A_gas as c_total(S1)."""
-    bnds = _bounds()
-    w = 1.0 / S["err"][:, S["mask"]].ravel()
-    best = (np.inf, None)
-    p2g, rg, bg_, ktg = S["axes"]
-    for p2 in p2g:
-        for rmax in rg:
-            for beta in bg_:
-                for kt in ktg:
-                    gas = S["interp"]([[p2, rmax, beta, kt]])[0].reshape(_NB, -1)
-                    g = gas[:, S["mask"]].ravel() * w
-                    a = (S["fb"][:, None] * S["agn_dc1"][None, :])[:, S["mask"]].ravel() * w
-                    A = np.column_stack([g, a])
-                    res = lsq_linear(A, S["wtheta"][:, S["mask"]].ravel() * w,
-                                     bounds=([0, 0], [np.inf, np.inf]), method="bvls")
-                    chi2 = float(np.sum((A @ res.x - S["wtheta"][:, S["mask"]].ravel() * w) ** 2))
-                    if chi2 < best[0]:
-                        best = (chi2, float(res.x[0]))
-    return best[1], best[0]
+def _log_prior(p):
+    for v, (lo, hi) in zip(p, _BND8):
+        if not (lo <= v <= hi):
+            return -np.inf
+    fin = np.isfinite(_SIG8)
+    d = (np.asarray(p, float)[fin] - _MU8[fin]) / _SIG8[fin]
+    return -0.5 * float(np.sum(d ** 2))
 
 
-def _components_bands(p, S):
-    """Gas and AGN (Nb, Ntheta) model for band params p on sample S."""
-    ln, kt, beta, p2, rmax, dc = p
-    gas = (S["c_total"] * (10.0 ** (ln - np.log10(_NE03_FID))) ** 2
-           * S["interp"]([[p2, rmax, beta, kt]])[0].reshape(_NB, -1))
-    agn = 10.0 ** dc * S["c_obs_total"] * (S["fb"][:, None] * S["agn_dc1"][None, :])
-    return gas, agn
+def _neg_log_prob(p, samples):
+    lp = _log_prior(p)
+    if not np.isfinite(lp):
+        return 1e30
+    return -lp + 0.5 * sum(_chi2_sample(p, S) for S in samples.values())
 
+
+def _anchor(samples, anchor_sample):
+    """Empirical gas amplitude anchor on the anchor sample: at the prior-centre
+    relation params + mid shape, free (A_gas, A_AGN) lsq over the band data -> the
+    A_gas that reproduces it defines c_total (density_norm≡1)."""
+    S = samples[anchor_sample]
+    pc = np.array([_MU8[0], _MU8[1], _MU8[2], _MU8[3], 0.6, 4.0, -1.5, _Z_FID])
+    St = dict(S); St["c_total"] = 1.0
+    gas1, _ = _components_bands(pc, St)                # c_total=1
+    agn1 = St["arf"][:, None] * St["c_obs_total"] * (St["fb"][:, None] * St["agn_dc1"][None, :])
+    m = S["mask"]; w = 1.0 / S["err"][:, m].ravel()
+    A = np.column_stack([gas1[:, m].ravel() * w, agn1[:, m].ravel() * w])
+    res = lsq_linear(A, S["wtheta"][:, m].ravel() * w, bounds=([0, 0], [np.inf, np.inf]),
+                     method="bvls")
+    chi2 = float(np.sum((A @ res.x - S["wtheta"][:, m].ravel() * w) ** 2))
+    return float(res.x[0]), chi2
+
+
+# --- figures ----------------------------------------------------------------
 
 def _figures_bands(tag, samples, flat, chain_full, lp_full, nburn, map_p, out_dir):
-    """Complete band-fit diagnostics: traces, corner, and per-sample band spectra
-    (data w_b vs energy + model) and soft/hard band-ratio vs theta."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     ecen = np.array([0.5 * (lo + hi) for lo, hi in _BAND_EDGES])
     np_ = len(_PARAMS)
-
-    # traces
     fig, axs = plt.subplots(np_ + 1, 1, figsize=(8, 1.5 * (np_ + 1)), sharex=True)
     for i, p in enumerate(_PARAMS):
         axs[i].plot(chain_full[:, :, i], color="C0", alpha=0.12, lw=0.5)
         axs[i].set_ylabel(p, fontsize=8); axs[i].axvline(nburn, color="C3", ls=":")
     axs[-1].plot(lp_full, color="C0", alpha=0.12, lw=0.5)
     axs[-1].set_ylabel("log prob", fontsize=8); axs[-1].axvline(nburn, color="C3", ls=":")
-    axs[-1].set_xlabel("step")
-    axs[0].set_title(f"{tag}: band MCMC traces (red = burn-in {nburn})", fontsize=9)
+    axs[0].set_title(f"{tag}: band-fit traces (red=burn-in {nburn})", fontsize=9)
     fig.tight_layout(); fig.savefig(os.path.join(out_dir, f"{tag}_bands_traces.png"), dpi=110)
     plt.close(fig)
-
-    # corner
     try:
         import corner
         fig = corner.corner(flat, labels=_PARAMS, truths=list(map_p))
         fig.savefig(os.path.join(out_dir, f"{tag}_bands_corner.png"), dpi=110); plt.close(fig)
     except Exception as e:
         print(f"  (corner skipped: {e})", flush=True)
-
-    # per-sample: band spectrum (w_b vs energy) at 2 angular scales + soft/hard ratio
     for s, S in samples.items():
         th = S["th_as"]; wd = S["wtheta"]; err = S["err"]
-        gas_m, agn_m = _components_bands(map_p, S); tot_m = gas_m + agn_m
+        gas_m, agn_m = _components_bands(map_p, S); tot = gas_m + agn_m
         fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 4.5))
         for th0, c in [(10.0, "C0"), (40.0, "C1")]:
-            j = int(np.argmin(np.abs(th - th0)))
-            a1.errorbar(ecen, wd[:, j], yerr=err[:, j], fmt="o", ms=3, color=c,
-                        label=fr"data $\theta$≈{th[j]:.0f}″")
-            a1.plot(ecen, tot_m[:, j], "-", color=c)
+            k = int(np.argmin(np.abs(th - th0)))
+            a1.errorbar(ecen, wd[:, k], yerr=err[:, k], fmt="o", ms=3, color=c,
+                        label=fr"data $\theta$≈{th[k]:.0f}″")
+            a1.plot(ecen, tot[:, k], "-", color=c)
         a1.set_xlabel("band energy [keV]"); a1.set_ylabel(r"$w_b(\theta)$")
         a1.set_title(f"{s}: band spectrum (pts=data, line=model)", fontsize=9)
         a1.legend(fontsize=7); a1.axhline(0, color="grey", lw=0.5)
-        # soft/hard ratio vs theta: data vs model
         m = S["mask"]
-        def ratio(w):
-            soft = np.nansum(w[0:4], axis=0); hard = np.nansum(w[10:15], axis=0)
-            return soft, hard
-        sd, hd = ratio(wd); sm, hm = ratio(tot_m)
+        sd = np.nansum(wd[0:4], 0); hd = np.nansum(wd[10:15], 0)
+        sm = np.nansum(tot[0:4], 0); hm = np.nansum(tot[10:15], 0)
         good = m & np.isfinite(sd) & np.isfinite(hd) & (hd > 0)
         a2.plot(th[good], (sd / hd)[good], "ko", ms=3, label="data")
         a2.plot(th[good], (sm / hm)[good], "C0-", label="model")
@@ -347,62 +408,78 @@ def _figures_bands(tag, samples, flat, chain_full, lp_full, nburn, map_p, out_di
         plt.close(fig)
 
 
+# --- main -------------------------------------------------------------------
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--samples", nargs="+", default=list(F.SAMPLES))
     ap.add_argument("--hmf", default="tinker08")
     ap.add_argument("--f-sys", type=float, default=0.05)
-    ap.add_argument("--grid-tiny", action="store_true", help="2^4 grid smoke test")
     ap.add_argument("--map-only", action="store_true")
-    ap.add_argument("--mcmc", action="store_true",
-                    help="after the MAP, run emcee over the shared band params")
+    ap.add_argument("--mcmc", action="store_true")
     ap.add_argument("--nwalkers", type=int, default=64)
     ap.add_argument("--nsteps", type=int, default=8000)
     ap.add_argument("--nburn", type=int, default=2000)
+    ap.add_argument("--candidate", default="baseline", choices=_CANDIDATES,
+                    help="hot-gas hypothesis to test; writes to its own subfolder")
     args = ap.parse_args(argv)
-    tag = "_".join(args.samples)   # per-run tag so parallel runs do not clobber
+    tag = "_".join(args.samples)
 
-    p2g, rg, bg_, ktg = _grids(args.grid_tiny)
-    fb = _agn_band_fractions()
+    # candidate config: agn_fixed pins log10DC to the Phase-A broad-band value
+    dc_fix = -1.8
+    if args.candidate == "agn_fixed":
+        af = "S1" if "S1" in args.samples else args.samples[0]
+        pa = os.path.join(J._OUT_DIR, f"{af}_bb_summary.json")
+        if os.path.isfile(pa):
+            dc_fix = float(json.load(open(pa))["posterior"]["log10DC"]["median"])
+    subdir = _apply_candidate(args.candidate, dc_fix)
+    out_dir = _OUT_DIR if subdir == "baseline" else os.path.join(_OUT_DIR, subdir)
+    os.makedirs(out_dir, exist_ok=True)
+    print(f"Candidate '{args.candidate}' -> {out_dir}"
+          + (f"  (dc_fix={dc_fix:.2f})" if args.candidate == "agn_fixed" else ""), flush=True)
+
+    cool_bands, cool_broad = _band_cooling()
+    fb = _agn_band_fractions(); arf = _arf_band_weights()
+    kT_lo, kT_hi = 0.09, 19.0
     samples = {}
     for s in args.samples:
-        gas_grid, agn_dc1, bd, mask = _precompute(s, args.hmf, args.grid_tiny)
+        G_grid, log10_m500c, ez, agn_dc1, bd, mask = _precompute(s, args.hmf)
         err = np.sqrt(bd["wtheta_err"] ** 2 + (args.f_sys * np.abs(bd["wtheta"])) ** 2)
-        # interp over (p2,r_max,beta,kT); values flattened over (band,theta)
-        vals = gas_grid.reshape(p2g.size, rg.size, bg_.size, ktg.size, -1)
-        interp = RegularGridInterpolator((p2g, rg, bg_, ktg), vals,
-                                         method="linear", bounds_error=False, fill_value=None)
-        samples[s] = dict(interp=interp, agn_dc1=agn_dc1, wtheta=bd["wtheta"], err=err,
-                          mask=mask, fb=fb, c_obs_total=J._c_obs_total(s),
-                          srx=float(F.load_data(s)["beckground"][0]),
-                          axes=(p2g, rg, bg_, ktg), th_as=bd["theta_arcsec"],
+        nth = bd["theta_arcsec"].size
+        G_interp = RegularGridInterpolator(
+            (_P2_GRID, _RMAX_GRID), G_grid.reshape(_P2_GRID.size, _RMAX_GRID.size, -1),
+            method="linear", bounds_error=False, fill_value=None)
+        samples[s] = dict(G_interp=G_interp, nth=nth, log10_m500c=log10_m500c, ez=ez,
+                          agn_dc1=agn_dc1, wtheta=bd["wtheta"], err=err, mask=mask,
+                          th_as=bd["theta_arcsec"], fb=fb, arf=arf,
+                          cool_bands=cool_bands, cool_broad=cool_broad, kT_lo=kT_lo, kT_hi=kT_hi,
+                          c_obs_total=J._c_obs_total(s), srx=float(F.load_data(s)["beckground"][0]),
                           n_pts=int(mask.sum()) * _NB)
-        print(f"[{s}] band grid ready, n_pts={samples[s]['n_pts']}", flush=True)
+        print(f"[{s}] transfer ready, n_pts={samples[s]['n_pts']}", flush=True)
 
     anchor_sample = "S1" if "S1" in samples else args.samples[0]
-    c_total_S1, chi2_S1 = _anchor_c_total_S1(samples[anchor_sample])
-    srx_anchor = samples[anchor_sample]["srx"]
-    print(f"\nBand anchor on {anchor_sample}: c_total={c_total_S1:.3e} "
-          f"(unconstrained band-summed chi2={chi2_S1:.1f})", flush=True)
+    samples[anchor_sample]["c_total"] = 1.0
+    c_total_S1, chi2a = _anchor(samples, anchor_sample)
+    srx_a = samples[anchor_sample]["srx"]
+    print(f"\nAnchor on {anchor_sample}: c_total={c_total_S1:.3e} (unconstrained band chi2={chi2a:.1f})",
+          flush=True)
     for s, S in samples.items():
-        S["c_total"] = c_total_S1 * srx_anchor / S["srx"]
+        S["c_total"] = c_total_S1 * srx_a / S["srx"]
 
     n_tot = sum(S["n_pts"] for S in samples.values())
-    print(f"\nJoint BAND MAP over {len(samples)} samples × {_NB} bands, {n_tot} pts, "
-          f"{len(_PARAMS)} shared params ...", flush=True)
-    bnds = _bounds()
+    print(f"\nBand MAP over {len(samples)} samples × {_NB} bands, {n_tot} pts, "
+          f"{len(_PARAMS)} shared params (LX-M + kT-M relations free) ...", flush=True)
 
     def nlp(p):
-        for v, (lo, hi) in zip(p, bnds):
-            if not (lo <= v <= hi):
-                return 1e30
-        return 0.5 * sum(_chi2_sample(p, S) for S in samples.values())
+        return _neg_log_prob(p, samples)
 
-    starts = [
-        [np.log10(_NE03_FID),       1.0, 1.5, 1.0, 4.0, -1.8],
-        [np.log10(_NE03_FID) + 0.3, 0.5, 0.9, 0.3, 5.0, -1.5],
-        [np.log10(_NE03_FID) - 0.3, 2.0, 2.1, 2.4, 3.0, -2.2],
-        [np.log10(_NE03_FID),       1.5, 1.2, 1.0, 4.0, -1.0],
+    # 8-vec starts (…, log10DC, z_metal); log10DC seeded at the candidate's bound mid
+    dc0 = float(np.clip(-1.5, _BND8[6, 0], _BND8[6, 1]))
+    starts = [   # kt_norm = log10(kT/E^{2/3}) at M500c=10^14 (GAS.py: +0.4)
+        [44.7, 1.61, 0.40, 0.60, 0.6, 4.0, dc0, _Z_FID],
+        [45.0, 1.80, 0.20, 0.70, 0.3, 3.5, dc0 + 0.4, _Z_FID],
+        [44.4, 1.40, 0.60, 0.50, 1.2, 4.5, dc0 - 0.4, 0.5],
+        [44.7, 1.61, 0.30, 0.65, 0.6, 4.0, dc0, 0.15],
     ]
     best = None
     for q0 in starts:
@@ -411,66 +488,54 @@ def main(argv=None):
         if best is None or o.fun < best.fun:
             best = o
         print(f"  start {np.round(q0,2)} -> chi2={2*o.fun:.1f}", flush=True)
-
-    map_p = best.x; chi2 = 2.0 * best.fun
+    map_p = best.x
+    chi2 = 2.0 * sum(_chi2_sample(map_p, S) for S in samples.values())
     ndof = max(n_tot - len(_PARAMS), 1)
     out = dict(zip(_PARAMS, [float(v) for v in map_p]))
-    out["density_norm"] = float(10.0 ** (map_p[0] - np.log10(_NE03_FID)))
     out["chi2"] = chi2; out["ndof"] = ndof; out["chi2_per_dof"] = chi2 / ndof
     out["chi2_per_sample"] = {s: float(_chi2_sample(map_p, S)) for s, S in samples.items()}
-    os.makedirs(_OUT_DIR, exist_ok=True)
-    outf = os.path.join(_OUT_DIR, f"joint_bands_map_{tag}.json")
-    with open(outf, "w") as fh:
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, f"joint_bands_map_{tag}.json"), "w") as fh:
         json.dump(out, fh, indent=2)
-    print("\n=== JOINT BAND MAP ===")
+    print("\n=== BAND MAP (free LX-M, kT-M) ===")
     for k in _PARAMS:
-        print(f"  {k:14s} = {out[k]:+.4f}")
-    print(f"  density_norm   = {out['density_norm']:.3f}")
-    print(f"  chi2/dof       = {chi2:.1f}/{ndof} = {chi2/ndof:.3f}")
+        print(f"  {k:10s} = {out[k]:+.4f}")
+    print(f"  chi2/dof   = {chi2:.1f}/{ndof} = {chi2/ndof:.3f}")
     for s, v in out["chi2_per_sample"].items():
-        print(f"    {s}: chi2={v:.1f} ({samples[s]['n_pts']} pts)")
-    print(f"\nSaved -> {outf}", flush=True)
+        print(f"    {s}: chi2={v:.1f} ({samples[s]['n_pts']} pts)", flush=True)
 
     if args.map_only or not args.mcmc:
         return out
 
-    # ---- MCMC over the shared band params (cached-grid likelihood: fast) ----
     import emcee
     ndim = len(_PARAMS); nw = args.nwalkers
     rng = np.random.default_rng(42)
-    p0 = map_p + 1e-3 * rng.standard_normal((nw, ndim)) * np.ptp(bnds, axis=1)
-    p0 = np.clip(p0, bnds[:, 0] + 1e-6, bnds[:, 1] - 1e-6)
-
-    def logp(p):
-        v = nlp(p)
-        return -v if v < 1e29 else -np.inf
-
-    sampler = emcee.EnsembleSampler(nw, ndim, logp)
+    p0 = map_p + 1e-3 * rng.standard_normal((nw, ndim)) * np.ptp(_bounds(), axis=1)
+    p0 = np.clip(p0, _bounds()[:, 0] + 1e-6, _bounds()[:, 1] - 1e-6)
+    sampler = emcee.EnsembleSampler(nw, ndim, lambda p: -nlp(p) if nlp(p) < 1e29 else -np.inf)
     print(f"\nBAND MCMC: {nw} walkers × {args.nsteps} steps ({tag}) ...", flush=True)
-    t0 = time.time()
-    sampler.run_mcmc(p0, args.nsteps, progress=False)
-    print(f"MCMC done in {time.time()-t0:.0f}s; mean acceptance="
-          f"{np.mean(sampler.acceptance_fraction):.2f}", flush=True)
-
+    t0 = time.time(); sampler.run_mcmc(p0, args.nsteps, progress=False)
+    print(f"MCMC done in {time.time()-t0:.0f}s; acceptance={np.mean(sampler.acceptance_fraction):.2f}",
+          flush=True)
     flat = sampler.get_chain(discard=args.nburn, flat=True)
-    np.savez(os.path.join(_OUT_DIR, f"{tag}_bands_chain.npz"),
-             flatchain=flat, log_prob=sampler.get_log_prob(discard=args.nburn, flat=True),
+    np.savez(os.path.join(out_dir, f"{tag}_bands_chain.npz"), flatchain=flat,
+             log_prob=sampler.get_log_prob(discard=args.nburn, flat=True),
              chain=sampler.get_chain(), lp=sampler.get_log_prob(), params=_PARAMS,
              nburn=args.nburn, c_total={s: S["c_total"] for s, S in samples.items()})
     pct = np.percentile(flat, [16, 50, 84], axis=0)
     post = {p: dict(median=float(pct[1, i]), lo=float(pct[1, i] - pct[0, i]),
                     hi=float(pct[2, i] - pct[1, i])) for i, p in enumerate(_PARAMS)}
-    with open(os.path.join(_OUT_DIR, f"{tag}_bands_summary.json"), "w") as fh:
+    with open(os.path.join(out_dir, f"{tag}_bands_summary.json"), "w") as fh:
         json.dump(dict(samples=args.samples, map=out,
-                       acceptance=float(np.mean(sampler.acceptance_fraction)),
-                       posterior=post), fh, indent=2)
+                       acceptance=float(np.mean(sampler.acceptance_fraction)), posterior=post),
+                  fh, indent=2)
     print("Posterior (median +hi -lo):", flush=True)
     for i, p in enumerate(_PARAMS):
-        print(f"  {p:12s} = {pct[1,i]:.3f} +{pct[2,i]-pct[1,i]:.3f} -{pct[1,i]-pct[0,i]:.3f}",
+        print(f"  {p:10s} = {pct[1,i]:.3f} +{pct[2,i]-pct[1,i]:.3f} -{pct[1,i]-pct[0,i]:.3f}",
               flush=True)
     _figures_bands(tag, samples, flat, sampler.get_chain(), sampler.get_log_prob(),
-                   args.nburn, map_p, _OUT_DIR)
-    print(f"Saved BAND MCMC chain/summary/figures -> {_OUT_DIR}", flush=True)
+                   args.nburn, map_p, out_dir)
+    print(f"Saved chain/summary/figures -> {out_dir}", flush=True)
     return out
 
 
