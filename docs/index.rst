@@ -20,8 +20,6 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
 
    overview
    forward_model_showcase
-   sensitivity_fisher
-   stage4_forecast
    data_formats
    data_hosting
    scripts
@@ -46,6 +44,15 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    :caption: Pipeline — Galaxy × thermal SZ
 
    pipeline_gal_tsz
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Sensitivity & Forecasts
+
+   sensitivity_fisher
+   stage4_forecast
+   tier2_forecast
+   missing_physics
 
 .. toctree::
    :maxdepth: 2
