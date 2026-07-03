@@ -23,55 +23,17 @@ link below was resolved and checked against title and first author.
 
 .. admonition:: Implementation status (2026-07, branch ``feature/missing-physics``)
 
-   The parameter vector grew 61 → **77** (``MISSING_PHYSICS`` block, appended
-   fiducial-preservingly).  Implemented: the **Diemer & Kravtsov c(ν, n_eff)**
-   wiring (``cm_relation="diemer15"``; the exercise exposed and fixed a factor
-   ~2 bug in the pre-existing ``core.concentration.c_diemer15`` — the DK15
-   Eq. 9 half and second exponent — now COLOSSUS-anchored), the **eps_sn**
-   promotion, the **CPL growth ODE** (``growth_factor`` dispatcher in
-   :mod:`hod_mod.core.halo_mass_function`, RK4/`lax.scan`; w0/wa also threaded
-   through every Limber distance and E(z) in the forecast), the **ν
-   suppression** of the EH98 shape (fiducial Σm_ν = 0 eV, bit-identical), the
-   **SF/quiescent split** (``sfq="sf"|"q"`` with the ZM16 Weibull fractions +
-   ``dlx_quenched``; SF+Q ≡ unsplit exactly, tested), the **fundamental-plane
-   radio LF** (``rlf`` observable; collapses exactly onto the hard-band XLF at
-   (ξ_RX, ξ_RM, b_R, σ_R) = (1,0,0,0), tested), and the **HI sector**
-   (``himf``/``cl_gHI``; C_ℓ^{gHI} ∝ M_0 exactly, tested).  Gates in
-   ``tests/test_missing_physics.py``.
-
-   **Wave 2** (same branch, vector 77 → 83): the **linearized CAMB/EH98
-   ratio table** (``forecast/pk_camb_ratio.py`` + shipped
-   ``data/pk_ratio/camb_eh98_ratio.npz``; max :math:`|\ln R_0|` = 3.8%,
-   derivative rows for h/Ω_b/Ω_m/n_s/Σm_ν; enable with
-   ``ForwardModel(pk_correction="camb_linear")``), **SN wind mass loading**
-   (``eta_w_norm``/``alpha_w``, Muratov-style η_w(V_c) coupled into the η(M)
-   gas-concentration slot, exactly the tier-2 sigmoid at η₀ = 0), the
-   **star-forming main sequence** (``ssfr`` per-cell observable with
-   norm/slope and the standard ``_zs`` evolution), the **quenched-HI deficit**
-   (``dhi_quenched``), and the **survey wiring**: ``RadioSurvey`` /
-   ``HISurvey`` noise models and ``Tier2Forecast(include_radio=True,
-   include_hi=True, include_ssfr=True)`` — the radio LF per shell with its
-   νL_ν completeness limit, a dedicated local (z ≤ 0.06, ALFALFA-like) HIMF
-   block (at Δz = 0.1 shell depths the 21 cm flux limit flags everything —
-   physical, so the HIMF is local by design), 21 cm × galaxy crosses per
-   cell, and the sSFR datum per non-quenched cell.
-
-   **Wave 3** (same branch, vector 83 → 90): the **continuous sSFR
-   distribution** — the double-lognormal p(log sSFR | M*) with free MS scatter
-   ``sigma_ms`` and quenched offset ``dssfr_q``, **sSFR-threshold selection**
-   (``ForwardModel(ssfr_cut=...)``, ELG-like samples, composable with the SF/Q
-   split with exact additivity), the **SFR density** ``sfrd`` per cell
-   (ρ_SFR ∝ 10^{sSFR_MS} exactly) and the **z-resolved [OII] LF** ``oiilf``
-   (Kennicutt-like ``loii_norm`` on the SHMR + main sequence, line-flux
-   completeness in the noise); the **radio-loud jet population**
-   (``f_loud0``/``beta_loud``/``b_jet`` — not ERDF-tied, so the ferdf
-   amplitude identity of the FP-only rlf breaks by design, tested); the **AGN
-   infrared LF** ``ilf`` (``agn_bc_ir`` on L_bol; obscuration-robust — zero
-   f_abs response, tested — the cross-band check of the obscured fraction);
-   ``IRSurvey`` + [OII]/SFRD noise and ``Tier2Forecast(include_ir=True)`` /
-   extended ``include_ssfr`` blocks with driver flags.  Still open (wave 4
-   candidates): ν/HMF emulator distillation beyond first order, multi-band
-   SEDs/CLF (route 1/2), morphology.
+   Three implementation waves grew the parameter vector 61 → **90** and
+   delivered sectors 1–3, 5, 7 and 8 of this page (beyond-ΛCDM growth and
+   neutrinos, the cosmology-dependent c(ν, n_eff), the AGN fundamental
+   plane with jets and the infrared band, the SF/quiescent split with a
+   continuous sSFR distribution and the [OII] LF, wind mass loading, and
+   the HI sector), plus the linearized CAMB/EH98 ratio for sector 2 —
+   each with exact tested invariants and survey-noise wiring into the
+   tier-2 forecast.  **The full account lives in**
+   :doc:`missing_physics_implementation`.  Still open: ν/HMF emulator
+   distillation beyond first order, multi-band SEDs/CLF (route 1/2), and
+   morphology.
 
 Summary and suggested order
 ---------------------------

@@ -45,7 +45,7 @@ implemented in ``hod_mod``.
 
 .. [Asgari2023] Marika Asgari, Alexander J. Mead, Catherine Heymans 
    OJAp 6E 39A 2023. The halo model for cosmology: a pedagogical review. 
-   `arXiv:astro-ph/2303.08752 <https://arxiv.org/abs/2303.08752>`_
+   `arXiv:2303.08752 <https://arxiv.org/abs/2303.08752>`_
 
 .. [SeljakWarren2004] Seljak U. & Warren M.S. 2004, MNRAS 355, 129.
    First complete halo model predictions for galaxy clustering including
@@ -897,6 +897,16 @@ all-galaxy ZM15 connection (see :doc:`missing_physics`).
    Consistent star-forming main sequence over 0 < z < 6 — the μ_MS(M*, z)
    parameterisation for a continuous sSFR model.
    `arXiv:1405.2041 <https://arxiv.org/abs/1405.2041>`_
+
+.. [Kennicutt1998] Kennicutt R.C. 1998, ARA&A 36, 189.
+   Star formation in galaxies along the Hubble sequence — the SFR–line
+   calibrations behind the ``loii_norm`` parameter.
+   `arXiv:astro-ph/9807187 <https://arxiv.org/abs/astro-ph/9807187>`_
+
+.. [MadauDickinson2014] Madau P. & Dickinson M. 2014, ARA&A 52, 415.
+   The cosmic star-formation history — the ρ_SFR(z) data the ``sfrd``
+   observable is compared against.
+   `arXiv:1403.0007 <https://arxiv.org/abs/1403.0007>`_
 
 .. [Behroozi2019] Behroozi P. et al. 2019, MNRAS 488, 3143.
    UniverseMachine: empirical galaxy–halo connection with per-halo SFR
