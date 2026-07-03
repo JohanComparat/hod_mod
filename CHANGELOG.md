@@ -74,6 +74,45 @@ Wave 3 (vector 83 → 90):
 - Driver flags `--include-ir` and extended `--include-ssfr` (sfrd + [OII]
   per shell); probe groups `+IR AGN`, galaxy-grid `+sfrd/oiilf`.
 
+Tier-3 forecast (vector 90 → 102; `docs/tier3_forecast.rst`; gates in
+`tests/test_forecast_tier3.py`):
+
+- **12 SED calibrations** (`TIER3_EXTENSION`, all feeding only new
+  observables): radio–FIR `l14_sfr` + `alpha_syn`, IR `lir_sfr` +
+  `bir_color`, stellar M/L `ml_nir`/`ml_opt` + `dopt_q`, UV
+  `luv_norm` + `tau_uv_mslope`, Hα `lha_norm`, AGN bolometric corrections
+  `agn_bc_uv`/`agn_bc_opt`.  Slices `MISSING_PHYSICS`/`TIER2_EXTENSION`
+  frozen at [61:90]/[31:90].
+- **Radio/IR intensity maps** (SKA-like 0.95/1.4/3 GHz; WISE/SPHEREx-like
+  3.4/4.9/12 μm): per-halo central νL_ν fields (SF synchrotron + FP cores +
+  jets; dust + stellar continuum + AGN torus) with exact band-scaling and
+  chain-rule gates; observables `cl_gR`/`cl_gI` (cells), `cl_RR`/`cl_II`/
+  `cl_aR`/`cl_aI`/`cl_ag` (shells) through the new generic
+  `_pk_tracer_field` kernel (bit-identical `_pk_gX_of` delegation).
+- **Galaxy band LFs + AGN UV/opt LFs** via one `_lf_lognormal` kernel:
+  `uvlf`, `optlf` (SF/Q mixture, exact collapse at `dopt_q=0`), `nirlf`,
+  `half` (exact `oiilf` clone) and type-1 `qlf_uv`/`qlf_opt`
+  (= `ilf` kernel × (1−f_abs) — the cross-band obscuration system closed).
+- **Extras**: tSZ auto `cl_yy`, 21 cm auto `cl_HIHI`, X-ray cluster counts
+  `ncl` (free L_X–M relation, 0.25 dex selection scatter), AGN lensing
+  `ds_agn`; per-shell wide-M* `sfrd` blocks (Madau–Dickinson).
+- **`Tier3Forecast`** (`forecast/tier3.py`): coarse exploratory grid
+  (Δz = 0.2 to z = 2 × 0.2 dex down to M* = 10⁹, SF/Q split), two-tier
+  spectroscopic completeness (wide M*_lim(z) = 10^{9+z} + deep field;
+  incomplete cells skipped and reported), extended mass grid
+  (`ForwardModel(log10m_min=8.5)`; default 10.0 bit-identical), AGN samples
+  to z = 1.9; new noise models `SKASurvey`/`IRMapSurvey`/`BandLFSurvey`
+  + `SpectroSurvey` M*/Hα limits; tier-2 assembly reused through identity
+  hooks (tier-2 σ regression unchanged).
+- **`--jobs N`** parallel block precompute
+  (`Tier2Forecast.precompute_blocks`): spawned workers rebuild the forecast
+  from its resolved ctor spec and fill the cache atomically; parallel ==
+  serial byte-exact (the x64 mode propagates via `JAX_ENABLE_X64` so
+  module-level constants build in the right precision).
+- Driver `run_tier3_forecast.py` (probe groups `+radio/IR maps`,
+  `+band LFs`, `+tSZ/HI autos`, `+clusters`, `+AGN lensing`); tier-3 figure
+  prefix in `make_tier2_figures`; docs page + 6 arXiv-verified references.
+
 ## [0.2.0] — 2026-07-03
 
 The **tier-2 sensitivity study**: all 61 parameters free (nothing fixed), a
