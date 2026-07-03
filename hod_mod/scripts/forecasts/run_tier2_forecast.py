@@ -46,11 +46,13 @@ from hod_mod.forecast.tier2 import Tier2Forecast  # noqa: E402
 # probe groups for the cumulative attribution (galaxy grid → lensing →
 # X-ray/tSZ crosses → AGN abundance → AGN clustering)
 PROBE_GROUPS = [
-    ("galaxy grid", ("wp", "ds", "n_gal")),
+    ("galaxy grid", ("wp", "ds", "n_gal", "ssfr")),
     ("+lensing", ("cl_kk", "cl_kCMB", "cl_shear_kCMB", "cl_gkCMB")),
     ("+X-ray/tSZ", ("cl_gX", "cl_XX", "cl_gy")),
     ("+XLF(z)", ("xlf",)),
     ("+wp_agn", ("wp_agn",)),
+    ("+radio LF", ("rlf",)),
+    ("+HI", ("himf", "cl_gHI")),
 ]
 EVOL_PARAMS = list(TIER2_ZSLOPES) + ["z_gas_zs", "agn_mu_bh_zs"]
 
@@ -110,6 +112,14 @@ def main():
                     help="2x2 cells, tiny grids: fast end-to-end check")
     ap.add_argument("--free-log10dc", action="store_true",
                     help="do not pin the retired duty-cycle parameter")
+    ap.add_argument("--split-sfq", action="store_true",
+                    help="split every (z, M*) cell into SF and quiescent samples")
+    ap.add_argument("--include-radio", action="store_true",
+                    help="add the fundamental-plane radio LF per shell")
+    ap.add_argument("--include-hi", action="store_true",
+                    help="add the HIMF (low-z shells) and 21cm×galaxy crosses")
+    ap.add_argument("--include-ssfr", action="store_true",
+                    help="add the main-sequence mean sSFR datum per cell")
     ap.add_argument("--no-plots", action="store_true")
     args = ap.parse_args()
 
@@ -127,7 +137,10 @@ def main():
             ell=np.logspace(1.0, 3.3, 6), rp_wp_agn=np.logspace(0.1, 1.4, 4))
     else:
         t2 = Tier2Forecast(n_bands=args.n_bands, n_k=args.n_k, n_m=args.n_m,
-                           n_gl=args.n_gl)
+                           n_gl=args.n_gl, split_sfq=args.split_sfq,
+                           include_radio=args.include_radio,
+                           include_hi=args.include_hi,
+                           include_ssfr=args.include_ssfr)
 
     fid = t2.fiducial()
     names = PARAM_NAMES

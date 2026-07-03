@@ -74,6 +74,11 @@ _FIDUCIAL_DEFAULT = {
     "agn_xi_rx": 0.60, "agn_xi_rm": 0.78, "agn_b_r": 7.33, "agn_sig_r": 0.88,
     # M_HI(M_h) halo model (Villaescusa-Navarro+2018, z=0)
     "log10_M0_hi": 10.63, "log10_Mmin_hi": 12.3, "alpha_hi": 0.24,
+    # --- wave 2: SN wind loading (η_0 = 0 ⇒ exactly the tier-2 η(M) sigmoid),
+    # Speagle+14-like main sequence, quenched-HI deficit.
+    "eta_w_norm": 0.0, "alpha_w": 1.0,
+    "ssfr_ms_norm": -9.9, "ssfr_ms_slope": -0.25, "ssfr_ms_zs": 0.0,
+    "dhi_quenched": 0.0,
 }
 
 # Planck 2018 1σ priors (planck_prior.PLANCK18_SIGMAS) on the free cosmo params.
@@ -122,6 +127,10 @@ BROAD_PRIOR_SIGMA = {
     "dlx_quenched": 1.0,
     "agn_xi_rx": 0.3, "agn_xi_rm": 0.3, "agn_b_r": 2.0, "agn_sig_r": 0.3,
     "log10_M0_hi": 1.0, "log10_Mmin_hi": 1.0, "alpha_hi": 0.3,
+    # wave 2
+    "eta_w_norm": 0.5, "alpha_w": 0.7,
+    "ssfr_ms_norm": 0.5, "ssfr_ms_slope": 0.3, "ssfr_ms_zs": 2.0,
+    "dhi_quenched": 1.0,
 }
 
 PARAM_LATEX = {
@@ -171,6 +180,10 @@ PARAM_LATEX = {
     "agn_b_r": r"$b_R$", "agn_sig_r": r"$\sigma_R$",
     "log10_M0_hi": r"$\log_{10}M_0^{\rm HI}$",
     "log10_Mmin_hi": r"$\log_{10}M_{\min}^{\rm HI}$", "alpha_hi": r"$\alpha_{\rm HI}$",
+    # wave 2
+    "eta_w_norm": r"$\eta_{w,0}$", "alpha_w": r"$\alpha_w$",
+    "ssfr_ms_norm": r"${\rm sSFR}_{\rm MS}$", "ssfr_ms_slope": r"$\partial_M{\rm sSFR}$",
+    "ssfr_ms_zs": r"$\partial_z{\rm sSFR}$", "dhi_quenched": r"$\Delta M_{\rm HI}^{\rm Q}$",
 }
 
 # Parameter sectors for the tier-2 cosmology-vs-astrophysics decomposition
@@ -188,17 +201,18 @@ SECTORS = {
             "beta_out_pressure", "lx_zs", "kt_zs",
             "t_prof_slope", "z_gas_norm", "z_gas_mslope", "z_gas_zs"],
     "baryon": ["log10_M_pivot", "log10_eta_min", "beta_b", "log10_M_eta",
-               "beta_eta", "eps_sn"],
+               "beta_eta", "eps_sn", "eta_w_norm", "alpha_w"],
     "agn": ["agn_mu_bh", "agn_al_bh", "agn_sig_bh", "agn_log10_lstar",
             "agn_delta1", "agn_delta2", "agn_log10_ferdf", "agn_rho",
             "agn_sig_mstar", "agn_log10_ferdf_zs", "agn_log10_lstar_zs",
             "agn_gamma", "agn_fabs", "agn_mu_bh_zs",
             "agn_xi_rx", "agn_xi_rm", "agn_b_r", "agn_sig_r"],
-    # SF/quiescent split (ZM16 halo quenching + the quenched-CGM offset)
+    # SF/quiescent split (ZM16 halo quenching, the quenched-CGM offset, and
+    # the star-forming main sequence)
     "sfq": ["log10_Mq_cen", "mu_q_cen", "log10_Mq_sat", "mu_q_sat",
-            "dlx_quenched"],
-    # cold gas / neutral hydrogen (VN18 halo model)
-    "coldgas": ["log10_M0_hi", "log10_Mmin_hi", "alpha_hi"],
+            "dlx_quenched", "ssfr_ms_norm", "ssfr_ms_slope", "ssfr_ms_zs"],
+    # cold gas / neutral hydrogen (VN18 halo model + quenched deficit)
+    "coldgas": ["log10_M0_hi", "log10_Mmin_hi", "alpha_hi", "dhi_quenched"],
     # retired: with agn_emission="powell" the duty cycle leaves the emissivity;
     # its only remaining consumer is the (off-by-default) energy-closure mode.
     "retired": ["log10DC"],

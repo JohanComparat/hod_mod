@@ -163,10 +163,51 @@ class SpectroSurvey:
     f_sky: float = 0.5
     f_cv0: float = 0.005         # relative cosmic variance × [V/(Gpc/h)³]^{-1/2}
     pi_max: float = 100.0        # w_p projection depth [Mpc/h]
+    ssfr_err: float = 0.05       # absolute σ on the mean MS log10 sSFR per cell [dex]
 
     def cv_rel(self, volume):
         """Relative cosmic-variance floor for a cell of ``volume`` (Mpc/h)³."""
         return self.f_cv0 / np.sqrt(volume / 1.0e9)
+
+
+@dataclass
+class RadioSurvey:
+    """LOFAR/LoTSS-like radio continuum survey with redshift counterparts.
+
+    ``nulnu_lim`` is the νL_ν detection threshold expressed at the fundamental
+    plane's 5 GHz reference (a 144 MHz flux limit of ~0.8 mJy scaled with a
+    ν^{-0.7} synchrotron spectrum) — the radio analogue of the Athena F_lim,
+    driving the L_lim(z) completeness of the radio luminosity function.
+    """
+    f_sky: float = 0.13          # LoTSS-wide with photo/spec-z counterparts
+    nulnu_lim: float = 3.0e-22   # νL_ν(5 GHz)-equivalent limit [erg/s/cm²]
+
+    def l_lim(self, z, h, Om):
+        """Faintest detectable 5 GHz νL_ν [erg/s] at redshift z."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
+        return 4.0 * np.pi * d_l ** 2 * self.nulnu_lim
+
+
+@dataclass
+class HISurvey:
+    """Blind HI survey + 21 cm intensity mapping (ALFALFA/MIGHTEE → SKA1 era).
+
+    The HIMF uses Poisson counts with an M_HI detection limit
+    M_lim(z) = 2.36×10⁵ d_L² S_int (the standard 21 cm mass–flux relation);
+    the 21 cm × galaxy cross uses the calibrated effective (rN, aN) recipe
+    (the tSZ precedent) — a CHIME/MeerKLASS-era noise-to-signal.
+    """
+    f_sky: float = 0.16          # ALFALFA-like footprint for the HIMF
+    s_int_lim: float = 0.6       # integrated-flux limit [Jy km/s]
+    z_himf: float = 0.06         # depth of the LOCAL blind-HIMF volume
+    f_sky_im: float = 0.1        # 21 cm IM × galaxies overlap
+    rn_im: float = 2.0           # IM noise-to-signal at ℓ = 100
+    an_im: float = 0.5           # and its ℓ growth exponent
+
+    def mhi_lim(self, z, h, Om):
+        """Faintest detectable M_HI [Msun/h] at redshift z (2.36e5 d_L² S)."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h                # [Mpc]
+        return 2.36e5 * max(d_l, 1e-3) ** 2 * self.s_int_lim * h
 
 
 # ---------------------------------------------------------------------------

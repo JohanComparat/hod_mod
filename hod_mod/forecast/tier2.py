@@ -94,7 +94,9 @@ class Tier2Forecast:
                  n_shear_bins=5, agn_lx_bins=None,
                  agn_z_centers=(0.1, 0.3, 0.5, 0.7, 0.9),
                  shear=None, cmbl=None, athena=None, spectro=None,
-                 tsz=(0.25, 0.9, 0.30), split_sfq=False, **model_kw):
+                 tsz=(0.25, 0.9, 0.30), split_sfq=False,
+                 include_radio=False, include_hi=False, include_ssfr=False,
+                 radio=None, hi=None, **model_kw):
         self.z_edges = np.asarray(z_edges if z_edges is not None
                                   else np.arange(0.0, 1.01, 0.1))
         self.mstar_edges = np.asarray(mstar_edges if mstar_edges is not None
@@ -111,6 +113,12 @@ class Tier2Forecast:
         self.athena = athena if athena is not None else noise.AthenaAllSky()
         self.spectro = spectro if spectro is not None else noise.SpectroSurvey()
         self.tsz = tuple(tsz)
+        # missing-physics wave 2: radio LF, HI (HIMF + 21 cm IM cross), MS sSFR
+        self.include_radio = bool(include_radio)
+        self.include_hi = bool(include_hi)
+        self.include_ssfr = bool(include_ssfr)
+        self.radio = radio if radio is not None else noise.RadioSurvey()
+        self.hi = hi if hi is not None else noise.HISurvey()
 
         kw = dict(DEFAULT_MODEL_KW)
         kw.update(model_kw)
@@ -124,6 +132,8 @@ class Tier2Forecast:
                                 list(self.mstar_edges), self.bands,
                                 self.n_shear_bins, self.agn_lx_bins,
                                 self.agn_z_centers, self.split_sfq,
+                                self.include_radio, self.include_hi,
+                                self.include_ssfr,
                                 {k: np.asarray(v).tolist() if hasattr(v, "__len__") else v
                                  for k, v in kw.items()}))
 
@@ -143,7 +153,14 @@ class Tier2Forecast:
                     m = ForwardModel(z_eff=zc, log10m_star_bin=(m1, m2),
                                      sfq=sv, **cell_kw)
                     lab = f"z{zc:.2f}_m{m1:.1f}" + ("" if sv is None else f"_{sv}")
-                    self.blocks.append(_Block(lab, "cell", m, GAL_OBS,
+                    # wave-2 per-cell observables: 21 cm × galaxies cross for
+                    # every cell; the MS mean sSFR only for non-quenched samples
+                    obs = tuple(GAL_OBS)
+                    if self.include_hi:
+                        obs += ("cl_gHI",)
+                    if self.include_ssfr and sv != "q":
+                        obs += ("ssfr",)
+                    self.blocks.append(_Block(lab, "cell", m, obs,
                                               z1, z2, m1, m2))
                     if shell_model is None and sv is None:
                         shell_model = m
@@ -155,9 +172,23 @@ class Tier2Forecast:
                     z_eff=zc,
                     log10m_star_bin=(self.mstar_edges[0], self.mstar_edges[1]),
                     **cell_kw)
-            # shell observables (M*-independent): soft XLF + per-band cl_XX
+            # shell observables (M*-independent): soft XLF + per-band cl_XX,
+            # + the radio LF (fundamental plane, wave 2)
+            shell_obs = tuple(SHELL_OBS)
+            if self.include_radio:
+                shell_obs += ("rlf",)
             self.blocks.append(_Block(f"z{zc:.2f}_shell", "shell", shell_model,
-                                      SHELL_OBS, z1, z2))
+                                      shell_obs, z1, z2))
+        if self.include_hi:
+            # the blind HIMF is a LOCAL measurement (ALFALFA-like z ≲ 0.06):
+            # at Δz = 0.1 shell depths the 21 cm flux limit flags everything
+            # below ~10^11 Msun — one dedicated low-z block instead
+            m_hi = ForwardModel(z_eff=0.5 * self.hi.z_himf,
+                                log10m_star_bin=(self.mstar_edges[0],
+                                                 self.mstar_edges[1]),
+                                **cell_kw)
+            self.blocks.append(_Block("hi_local", "shell", m_hi, ("himf",),
+                                      0.0, self.hi.z_himf))
         gm = ForwardModel(z_eff=0.3, n_shear_bins=self.n_shear_bins,
                           z_src_mean=0.9, **kw)
         self.global_model = gm
@@ -336,6 +367,15 @@ class Tier2Forecast:
                         n_y = rn_y * (ell / 100.0) ** an_y * d_b[s]
                         sig_b[s] = np.sqrt(2.0 / noise.n_modes(ell, fsky_y)) \
                             * (d_b[s] + n_y)
+                    elif name == "cl_gHI":
+                        # 21 cm IM × galaxies: calibrated effective recipe
+                        n_hi = self.hi.rn_im * (ell / 100.0) ** self.hi.an_im \
+                            * d_b[s]
+                        sig_b[s] = np.sqrt(
+                            2.0 / noise.n_modes(ell, self.hi.f_sky_im)) \
+                            * (d_b[s] + n_hi)
+                    elif name == "ssfr":
+                        sig_b[s] = sp.ssfr_err
                     elif name == "cl_gkCMB":
                         sig_b[s] = noise.knox_cross(
                             ell, d_b[s], cl_gg, 1.0 / n2d, cl_kcmb, cm.n0,
@@ -366,6 +406,33 @@ class Tier2Forecast:
                         sig_b[s] = np.concatenate([
                             noise.knox_auto(ell, cxx[k], nx[k] / beam2, ath.f_sky)
                             for k in range(len(self.bands))])
+                    elif name == "rlf":
+                        # radio LF: Poisson counts over the radio×z-counterpart
+                        # footprint, with the νLν(5 GHz) completeness limit
+                        grid = np.asarray(meta["x"][bsel][s])
+                        dlog = float(grid[1] - grid[0]) if grid.size > 1 else 1.0
+                        v_r = noise.shell_volume(b.z_lo, b.z_hi, h, Om,
+                                                 self.radio.f_sky)
+                        rel = noise.xlf_relerr(d_b[s], v_r, dloglx=dlog)
+                        lr_lo = 10.0 ** (grid - 0.5 * dlog)
+                        bad = lr_lo < self.radio.l_lim(b.z_hi, h, Om)
+                        rel = np.where(bad, np.inf, rel)
+                        for xv in grid[bad]:
+                            flagged.append((b.label, "rlf", float(xv)))
+                        sig_b[s] = rel * d_b[s]
+                    elif name == "himf":
+                        # blind HIMF: Poisson with the 21 cm M_HI flux limit
+                        grid = np.asarray(meta["x"][bsel][s])
+                        dlog = float(grid[1] - grid[0]) if grid.size > 1 else 1.0
+                        v_hi = noise.shell_volume(b.z_lo, b.z_hi, h, Om,
+                                                  self.hi.f_sky)
+                        rel = noise.xlf_relerr(d_b[s], v_hi, dloglx=dlog)
+                        mhi_lo = 10.0 ** (grid - 0.5 * dlog)
+                        bad = mhi_lo < self.hi.mhi_lim(b.z_hi, h, Om)
+                        rel = np.where(bad, np.inf, rel)
+                        for xv in grid[bad]:
+                            flagged.append((b.label, "himf", float(xv)))
+                        sig_b[s] = rel * d_b[s]
 
             elif b.kind == "global":
                 for name in b.which:
