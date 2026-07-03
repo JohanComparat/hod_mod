@@ -53,6 +53,27 @@ Wave 2 (vector 77 → 83):
   non-quenched cell; driver flags
   `--include-radio --include-hi --include-ssfr --split-sfq`.
 
+Wave 3 (vector 83 → 90):
+
+- **Continuous sSFR distribution**: double-lognormal p(log sSFR | M*) with
+  free MS scatter `sigma_ms` and quenched offset `dssfr_q`;
+  **sSFR-threshold selection** `ForwardModel(ssfr_cut=...)` (ELG-like
+  samples) composable with the SF/Q split — SF-cut + Q-cut ≡ mixture-cut
+  exactly (tested).
+- **SFR density** `sfrd` per cell (ρ_SFR ∝ 10^{sSFR_MS} exactly; SF + Q
+  partition it exactly) and the **z-resolved [OII] LF** `oiilf` — the
+  Kennicutt-like `loii_norm` calibration on the SHMR + main sequence, with
+  the DESI-like line-flux completeness limit in the noise.
+- **Radio-loud jets** (`f_loud0`, `beta_loud`, `b_jet`): a second rlf
+  component from ALL central black holes (HERG/LERG, not ERDF-tied — the
+  ferdf amplitude identity of the FP-only rlf breaks by design, tested).
+- **AGN infrared LF** `ilf` (`agn_bc_ir` on L_bol) — obscuration-robust by
+  construction (zero `agn_fabs` response, tested): the cross-band check of
+  the obscured fraction the soft-X-ray XLF is dimmed by.  `IRSurvey`
+  (WISE/SPHEREx-like) noise + completeness.
+- Driver flags `--include-ir` and extended `--include-ssfr` (sfrd + [OII]
+  per shell); probe groups `+IR AGN`, galaxy-grid `+sfrd/oiilf`.
+
 ## [0.2.0] — 2026-07-03
 
 The **tier-2 sensitivity study**: all 61 parameters free (nothing fixed), a

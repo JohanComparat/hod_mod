@@ -96,7 +96,7 @@ class Tier2Forecast:
                  shear=None, cmbl=None, athena=None, spectro=None,
                  tsz=(0.25, 0.9, 0.30), split_sfq=False,
                  include_radio=False, include_hi=False, include_ssfr=False,
-                 radio=None, hi=None, **model_kw):
+                 include_ir=False, radio=None, hi=None, ir=None, **model_kw):
         self.z_edges = np.asarray(z_edges if z_edges is not None
                                   else np.arange(0.0, 1.01, 0.1))
         self.mstar_edges = np.asarray(mstar_edges if mstar_edges is not None
@@ -117,8 +117,10 @@ class Tier2Forecast:
         self.include_radio = bool(include_radio)
         self.include_hi = bool(include_hi)
         self.include_ssfr = bool(include_ssfr)
+        self.include_ir = bool(include_ir)
         self.radio = radio if radio is not None else noise.RadioSurvey()
         self.hi = hi if hi is not None else noise.HISurvey()
+        self.ir = ir if ir is not None else noise.IRSurvey()
 
         kw = dict(DEFAULT_MODEL_KW)
         kw.update(model_kw)
@@ -133,7 +135,7 @@ class Tier2Forecast:
                                 self.n_shear_bins, self.agn_lx_bins,
                                 self.agn_z_centers, self.split_sfq,
                                 self.include_radio, self.include_hi,
-                                self.include_ssfr,
+                                self.include_ssfr, self.include_ir,
                                 {k: np.asarray(v).tolist() if hasattr(v, "__len__") else v
                                  for k, v in kw.items()}))
 
@@ -159,7 +161,7 @@ class Tier2Forecast:
                     if self.include_hi:
                         obs += ("cl_gHI",)
                     if self.include_ssfr and sv != "q":
-                        obs += ("ssfr",)
+                        obs += ("ssfr", "sfrd")
                     self.blocks.append(_Block(lab, "cell", m, obs,
                                               z1, z2, m1, m2))
                     if shell_model is None and sv is None:
@@ -177,6 +179,10 @@ class Tier2Forecast:
             shell_obs = tuple(SHELL_OBS)
             if self.include_radio:
                 shell_obs += ("rlf",)
+            if self.include_ssfr:
+                shell_obs += ("oiilf",)
+            if self.include_ir:
+                shell_obs += ("ilf",)
             self.blocks.append(_Block(f"z{zc:.2f}_shell", "shell", shell_model,
                                       shell_obs, z1, z2))
         if self.include_hi:
@@ -376,6 +382,8 @@ class Tier2Forecast:
                             * (d_b[s] + n_hi)
                     elif name == "ssfr":
                         sig_b[s] = sp.ssfr_err
+                    elif name == "sfrd":
+                        sig_b[s] = sp.sfrd_rel * np.abs(d_b[s])
                     elif name == "cl_gkCMB":
                         sig_b[s] = noise.knox_cross(
                             ell, d_b[s], cl_gg, 1.0 / n2d, cl_kcmb, cm.n0,
@@ -432,6 +440,34 @@ class Tier2Forecast:
                         rel = np.where(bad, np.inf, rel)
                         for xv in grid[bad]:
                             flagged.append((b.label, "himf", float(xv)))
+                        sig_b[s] = rel * d_b[s]
+                    elif name == "oiilf":
+                        # [OII] LF: Poisson over the spectroscopic volume with
+                        # the line-flux completeness limit (wave 3)
+                        grid = np.asarray(meta["x"][bsel][s])
+                        dlog = float(grid[1] - grid[0]) if grid.size > 1 else 1.0
+                        v_sp = noise.shell_volume(b.z_lo, b.z_hi, h, Om,
+                                                  sp.f_sky)
+                        rel = noise.xlf_relerr(d_b[s], v_sp, dloglx=dlog)
+                        l_lo = 10.0 ** (grid - 0.5 * dlog)
+                        bad = l_lo < sp.loii_lim(b.z_hi, h, Om)
+                        rel = np.where(bad, np.inf, rel)
+                        for xv in grid[bad]:
+                            flagged.append((b.label, "oiilf", float(xv)))
+                        sig_b[s] = rel * d_b[s]
+                    elif name == "ilf":
+                        # AGN IR LF: Poisson over the IR footprint with the
+                        # νLν(6 μm) completeness limit (wave 3)
+                        grid = np.asarray(meta["x"][bsel][s])
+                        dlog = float(grid[1] - grid[0]) if grid.size > 1 else 1.0
+                        v_ir = noise.shell_volume(b.z_lo, b.z_hi, h, Om,
+                                                  self.ir.f_sky)
+                        rel = noise.xlf_relerr(d_b[s], v_ir, dloglx=dlog)
+                        l_lo = 10.0 ** (grid - 0.5 * dlog)
+                        bad = l_lo < self.ir.l_lim(b.z_hi, h, Om)
+                        rel = np.where(bad, np.inf, rel)
+                        for xv in grid[bad]:
+                            flagged.append((b.label, "ilf", float(xv)))
                         sig_b[s] = rel * d_b[s]
 
             elif b.kind == "global":

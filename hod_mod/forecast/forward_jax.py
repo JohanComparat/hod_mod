@@ -106,6 +106,11 @@ PARAM_NAMES = [
     "eta_w_norm", "alpha_w",                              # SN wind mass loading (Muratov+15 form)
     "ssfr_ms_norm", "ssfr_ms_slope", "ssfr_ms_zs",        # star-forming main sequence (Speagle+14)
     "dhi_quenched",                                       # HI deficit of quenched centrals [dex]
+    # ---- missing-physics wave 3 ----
+    "sigma_ms", "dssfr_q",                                # MS scatter + quenched sSFR offset [dex]
+    "loii_norm",                                          # log10 L[OII]/SFR calibration (Kennicutt-like)
+    "f_loud0", "beta_loud", "b_jet",                      # radio-loud jet population (HERG/LERG)
+    "agn_bc_ir",                                          # log10 L_IR(6um)/L_bol bolometric correction
 ]
 _IDX = {n: i for i, n in enumerate(PARAM_NAMES)}
 N_PARAM = len(PARAM_NAMES)
@@ -185,6 +190,11 @@ _POWELL_KBOL_HARD = 20.0
 _POWELL_LOGK = float(np.log10(_POWELL_LBOL_COEF / _POWELL_KBOL_HARD))  # log10 L_X/(M_BH·λ)
 _SIG_MSTAR_XLF = 0.20   # fixed log10 M* scatter entering the (shift-invariant) M_BH–M_halo width
 _SIG_MHI = 0.35         # fixed lognormal scatter of M_HI at fixed M_h [dex]
+# missing-physics wave 3 constants
+_SIG_SSFR_Q = 0.5       # width of the quenched log sSFR lognormal [dex]
+_SIG_JET = 0.7          # scatter of the radio-loud jet luminosity at fixed M_BH [dex]
+_SIG_OII = 0.2          # extra [OII]-calibration scatter beyond the MS width [dex]
+_POWELL_LOGBOL = float(np.log10(_POWELL_LBOL_COEF))   # log10 L_bol/(M_BH·λ)
 # hard(2-10 keV) → soft(0.5-2 keV) energy-flux ratio for a Γ≈1.8 power law
 # (hod_mod.agn.ham convention; becomes Γ-dependent in the multi-band layer).
 from hod_mod.agn.ham import _HARD_TO_SOFT_RATIO as _K_H2S_FID
@@ -383,8 +393,11 @@ class ForwardModel:
         nh_abs: float = _NH_ABS,
         cm_relation: str = "dutton14",
         sfq: str = None,
+        ssfr_cut: float = None,
         loglr_rlf=None,
         logmhi_himf=None,
+        logloii_oiilf=None,
+        loglir_ilf=None,
         pk_correction: str = "none",
     ):
         self.z_eff = float(z_eff)
@@ -524,6 +537,14 @@ class ForwardModel:
         # HI mass-function abscissa (log10 M_HI [Msun/h])
         self.logmhi_himf = jnp.asarray(logmhi_himf if logmhi_himf is not None
                                        else np.linspace(8.5, 11.0, 7))
+        # wave 3: sSFR-threshold selection (log10 sSFR [yr⁻¹]; e.g. −10.5 for
+        # an ELG-like star-forming cut) — composes with the sfq split
+        self.ssfr_cut = None if ssfr_cut is None else float(ssfr_cut)
+        # [OII] LF and AGN IR LF abscissas [erg/s]
+        self.logloii_oiilf = jnp.asarray(logloii_oiilf if logloii_oiilf is not None
+                                         else np.linspace(40.5, 43.5, 7))
+        self.loglir_ilf = jnp.asarray(loglir_ilf if loglir_ilf is not None
+                                      else np.linspace(42.5, 46.0, 7))
 
         # ---- tier-2 multi-band APEC X-ray layer -------------------------
         # xray_bands=None keeps the tier-1 broad-band model; a list of (emin,
@@ -1251,7 +1272,22 @@ class ForwardModel:
         gk = jnp.exp(-0.5 * (t / sig_r) ** 2) / (jnp.sqrt(2.0 * jnp.pi) * sig_r)
         K = jnp.sum(erdf[None, None, :] * gk, axis=2) * self.dlam       # (Nlr, NM)
         ferdf = 10.0 ** theta[_IDX["agn_log10_ferdf"]]
-        return jnp.trapezoid(dndlogm[None, :] * K * ferdf, self.log10m, axis=1)
+        rlf_fp = jnp.trapezoid(dndlogm[None, :] * K * ferdf, self.log10m, axis=1)
+        # radio-loud jet population (wave 3, HERG/LERG): NOT tied to the
+        # radiatively-efficient ERDF-active fraction — a loud fraction
+        # f_loud(M_BH) of ALL central black holes with a jet luminosity
+        # lognormal around b_jet + (log M_BH − 8).  f_loud0 = 0 removes it.
+        f_loud = jnp.minimum(theta[_IDX["f_loud0"]]
+                             * 10.0 ** (theta[_IDX["beta_loud"]]
+                                        * (mean_bh - 8.0)), 1.0)        # (NM,)
+        sig_jet = jnp.sqrt(sig_lm ** 2 + _SIG_JET ** 2)
+        t_j = self.loglr_rlf[:, None] - theta[_IDX["b_jet"]] \
+            - (mean_bh[None, :] - 8.0)
+        gk_j = jnp.exp(-0.5 * (t_j / sig_jet) ** 2) \
+            / (jnp.sqrt(2.0 * jnp.pi) * sig_jet)                        # (Nlr, NM)
+        rlf_jet = jnp.trapezoid(dndlogm[None, :] * f_loud[None, :] * gk_j,
+                                self.log10m, axis=1)
+        return rlf_fp + rlf_jet
 
     # ---- cold gas / neutral hydrogen (missing-physics extension) ------
     def _mhi(self, theta):
@@ -1302,10 +1338,83 @@ class ForwardModel:
         The datum per (z, M*) cell directly constrains the MS normalisation,
         slope and evolution (COSMOS/Euclid main-sequence measurements).
         """
+        return jnp.array([self._mu_ms(theta)])
+
+    def _sfrd(self, theta, H):
+        r"""SFR density of THIS cell's sample [M_⊙/yr (Mpc/h)⁻³], (1,).
+
+        Occupation-weighted over the SF and quenched members with their
+        lognormal mean SFRs, SFR = sSFR · M_*; the cosmic ρ_SFR(z)
+        (Madau–Dickinson) is the sum over the cell column at each z.
+        """
         mstar_c = (0.5 * (self._thr + self._thr_hi) if self._thr_hi is not None
                    else self._thr + 0.25)
-        return jnp.array([theta[_IDX["ssfr_ms_norm"]]
-                          + theta[_IDX["ssfr_ms_slope"]] * (mstar_c - 10.5)])
+        mu = self._mu_ms(theta)
+        sfr_ms = 10.0 ** (mu + mstar_c) \
+            * jnp.exp(0.5 * (theta[_IDX["sigma_ms"]] * _LN10) ** 2)
+        sfr_q = 10.0 ** (mu + theta[_IDX["dssfr_q"]] + mstar_c) \
+            * jnp.exp(0.5 * (_SIG_SSFR_Q * _LN10) ** 2)
+        nc, ns = self._occ_base(theta)
+        fq_c, fq_s, s_ms, s_q = self._sfq_weights(theta)
+        n_sf = jnp.trapezoid(H["dndm"] * (nc * (1.0 - fq_c) + ns * (1.0 - fq_s))
+                             * s_ms, self.m)
+        n_q = jnp.trapezoid(H["dndm"] * (nc * fq_c + ns * fq_s) * s_q, self.m)
+        if self.sfq == "sf":
+            return jnp.array([n_sf * sfr_ms])
+        if self.sfq == "q":
+            return jnp.array([n_q * sfr_q])
+        return jnp.array([n_sf * sfr_ms + n_q * sfr_q])
+
+    def _oiilf(self, theta):
+        r"""[OII] luminosity function Φ(log L_[OII]) [(Mpc/h)⁻³ dex⁻¹].
+
+        Kennicutt-like calibration on the star-forming main sequence:
+        log L_[OII] = loii_norm + log SFR with
+        log SFR(M_h) = μ_MS(M_*(M_h)) + log M_*(M_h) through the ZM15 SHMR;
+        the kernel width combines the MS scatter, the [OII]-calibration
+        scatter and the (1+slope)-propagated M_*|M_h scatter.  Centrals-only
+        v1 (the AGN-chain convention).  Data: the z-resolved [OII] LFs.
+        """
+        c = self._cosmo(theta)
+        dndm = self._hmf.dndm(self.m, float(self.z_eff), c)
+        dndlogm = dndm * self.m * _LN10
+        hp = self._hod(theta)
+        log10ms = _inv_shmr(self.log10m, hp["lg_m1h"], hp["lg_m0star"],
+                            hp["beta"], hp["delta"], hp["gamma"])
+        mu_ssfr = (theta[_IDX["ssfr_ms_norm"]]
+                   + theta[_IDX["ssfr_ms_slope"]] * (log10ms - 10.5))
+        mu_l = theta[_IDX["loii_norm"]] + mu_ssfr + log10ms               # (NM,)
+        sig_star = sigma_lnmstar_zu15(self.log10m, hp["lg_m1h"],
+                                      hp["sigma_lnmstar"], hp["eta"]) / _LN10
+        sig_l = jnp.sqrt(theta[_IDX["sigma_ms"]] ** 2 + _SIG_OII ** 2
+                         + (1.0 + theta[_IDX["ssfr_ms_slope"]]) ** 2
+                         * sig_star ** 2)                                 # (NM,)
+        fq_c = f_red_cen_zu16(self.log10m, theta[_IDX["log10_Mq_cen"]],
+                              theta[_IDX["mu_q_cen"]])
+        t = self.logloii_oiilf[:, None] - mu_l[None, :]
+        gk = jnp.exp(-0.5 * (t / sig_l[None, :]) ** 2) \
+            / (jnp.sqrt(2.0 * jnp.pi) * sig_l[None, :])                   # (NL, NM)
+        return jnp.trapezoid(dndlogm[None, :] * (1.0 - fq_c)[None, :] * gk,
+                             self.log10m, axis=1)
+
+    def _ilf(self, theta):
+        r"""AGN infrared (6 μm) luminosity function [(Mpc/h)⁻³ dex⁻¹].
+
+        L_IR = 10^{agn_bc_ir} · L_bol on the Powell chain — obscuration-robust
+        by construction (no f_abs suppression), so the IR LF cross-checks the
+        obscured fraction the soft-X-ray XLF is dimmed by.
+        """
+        c = self._cosmo(theta)
+        dndm = self._hmf.dndm(self.m, float(self.z_eff), c)
+        dndlogm = dndm * self.m * _LN10
+        mean_bh, sig_lm, erdf = self._agn_kernel_parts(theta)
+        t = self.loglir_ilf[:, None, None] - _POWELL_LOGBOL \
+            - theta[_IDX["agn_bc_ir"]] - mean_bh[None, :, None]
+        gk = jnp.exp(-0.5 * ((t - self.loglam[None, None, :]) / sig_lm) ** 2) \
+            / (jnp.sqrt(2.0 * jnp.pi) * sig_lm)
+        K = jnp.sum(erdf[None, None, :] * gk, axis=2) * self.dlam
+        ferdf = 10.0 ** theta[_IDX["agn_log10_ferdf"]]
+        return jnp.trapezoid(dndlogm[None, :] * K * ferdf, self.log10m, axis=1)
 
     # ---- Powell AGN chain: shared kernel, occupation, emission, clustering --
     def _agn_kernel_parts(self, theta):
@@ -1440,20 +1549,54 @@ class ForwardModel:
         quenched fractions f_Q(M_h); by construction the "sf" and "q" samples
         sum EXACTLY to the unsplit sample (the regression invariant).
         """
+        nc, ns = self._occ_base(theta)
+        if self.sfq is not None or self.ssfr_cut is not None:
+            fq_c, fq_s, s_ms, s_q = self._sfq_weights(theta)
+            if self.sfq == "q":
+                nc, ns = nc * fq_c * s_q, ns * fq_s * s_q
+            elif self.sfq == "sf":
+                nc, ns = nc * (1.0 - fq_c) * s_ms, ns * (1.0 - fq_s) * s_ms
+            else:               # pure sSFR-threshold selection (ELG-like)
+                nc = nc * ((1.0 - fq_c) * s_ms + fq_c * s_q)
+                ns = ns * ((1.0 - fq_s) * s_ms + fq_s * s_q)
+        return nc, ns
+
+    def _occ_base(self, theta):
+        """Bin/threshold occupation BEFORE any SF/Q or sSFR selection."""
         nc, ns = self._occ_above(theta, self._thr)
         if self._thr_hi is not None:
             nc_hi, ns_hi = self._occ_above(theta, self._thr_hi)
             nc, ns = nc - nc_hi, ns - ns_hi
-        if self.sfq is not None:
-            fq_c = f_red_cen_zu16(self.log10m, theta[_IDX["log10_Mq_cen"]],
-                                  theta[_IDX["mu_q_cen"]])
-            fq_s = f_red_sat_zu16(self.log10m, theta[_IDX["log10_Mq_sat"]],
-                                  theta[_IDX["mu_q_sat"]])
-            if self.sfq == "q":
-                nc, ns = nc * fq_c, ns * fq_s
-            else:
-                nc, ns = nc * (1.0 - fq_c), ns * (1.0 - fq_s)
         return nc, ns
+
+    def _mu_ms(self, theta):
+        """Main-sequence mean log10 sSFR of this cell's M* sample (scalar)."""
+        mstar_c = (0.5 * (self._thr + self._thr_hi) if self._thr_hi is not None
+                   else self._thr + 0.25)
+        return (theta[_IDX["ssfr_ms_norm"]]
+                + theta[_IDX["ssfr_ms_slope"]] * (mstar_c - 10.5))
+
+    def _sfq_weights(self, theta):
+        r"""(f_Q^cen, f_Q^sat, S_MS, S_Q): the ZM16 quenched fractions and the
+        sSFR-cut survival of each population (wave 3).
+
+        With the double-lognormal p(log sSFR | M*) = f_Q N(μ_MS + Δ_Q, σ_Q)
+        + (1−f_Q) N(μ_MS, σ_MS), the fraction above a threshold is the
+        Gaussian survival ½ erfc[(cut − μ)/√2σ] per component.  S = 1 when no
+        cut is set, so the SF+Q ≡ unsplit invariant is untouched.
+        """
+        fq_c = f_red_cen_zu16(self.log10m, theta[_IDX["log10_Mq_cen"]],
+                              theta[_IDX["mu_q_cen"]])
+        fq_s = f_red_sat_zu16(self.log10m, theta[_IDX["log10_Mq_sat"]],
+                              theta[_IDX["mu_q_sat"]])
+        if self.ssfr_cut is None:
+            return fq_c, fq_s, 1.0, 1.0
+        mu = self._mu_ms(theta)
+        s_ms = 0.5 * erfc((self.ssfr_cut - mu)
+                          / (jnp.sqrt(2.0) * theta[_IDX["sigma_ms"]]))
+        s_q = 0.5 * erfc((self.ssfr_cut - mu - theta[_IDX["dssfr_q"]])
+                         / (jnp.sqrt(2.0) * _SIG_SSFR_Q))
+        return fq_c, fq_s, s_ms, s_q
 
     def _n_gal(self, theta, H):
         """Comoving galaxy number density n̄_g [h³ Mpc⁻³] of the sample.
@@ -1484,7 +1627,8 @@ class ForwardModel:
         theta = self._theta_eff(theta)      # tier-2 z-evolution (identity at fiducial)
         which = which or OBSERVABLES
         out = {}
-        if any(o in which for o in ("wp", "ds", "n_gal", "smf", "wp_agn", "himf")):
+        if any(o in which for o in ("wp", "ds", "n_gal", "smf", "wp_agn",
+                                    "himf", "sfrd")):
             H0 = self._halo_common(theta, self.z_eff)
             if "wp" in which or "ds" in which:
                 P_gg, P_gm = self._pk_gg_gm(H0, theta)
@@ -1500,6 +1644,8 @@ class ForwardModel:
                 out["wp_agn"] = self._wp_agn(theta, H0)
             if "himf" in which:
                 out["himf"] = self._himf(theta, H0)
+            if "sfrd" in which:
+                out["sfrd"] = self._sfrd(theta, H0)
         # Galaxy-window angular spectra (gas cross + galaxy×CMB-lensing) share the
         # per-z halo quantities on the galaxy n(z) grid.
         ang = [o for o in ("cl_gX", "cl_gy", "cl_XX", "cl_gHI") if o in which]
@@ -1537,6 +1683,10 @@ class ForwardModel:
             out["rlf"] = self._rlf(theta)
         if "ssfr" in which:
             out["ssfr"] = self._ssfr(theta)
+        if "oiilf" in which:
+            out["oiilf"] = self._oiilf(theta)
+        if "ilf" in which:
+            out["ilf"] = self._ilf(theta)
         return out
 
     def cl_gg_fiducial(self, theta):
@@ -1561,7 +1711,9 @@ class ForwardModel:
         return {"wp": self.rp_wp, "ds": self.rp_ds,
                 "xlf": self.loglx_xlf, "n_gal": jnp.array([0.0]),
                 "smf": self.logmstar_smf, "ssfr": jnp.array([0.0]),
+                "sfrd": jnp.array([0.0]),
                 "rlf": self.loglr_rlf, "himf": self.logmhi_himf,
+                "oiilf": self.logloii_oiilf, "ilf": self.loglir_ilf,
                 "wp_agn": jnp.asarray(np.tile(np.asarray(self.rp_wp_agn),
                                               len(self.agn_lx_bins)))}[name]
 
@@ -1618,7 +1770,8 @@ class ForwardModel:
             g = np.asarray(self.grid_of(name))
             if name in ("wp", "ds", "wp_agn"):
                 sel = np.where(g > float(rmin))[0]
-            elif name in ("xlf", "n_gal", "smf", "rlf", "himf", "ssfr"):
+            elif name in ("xlf", "n_gal", "smf", "rlf", "himf", "ssfr",
+                          "sfrd", "oiilf", "ilf"):
                 sel = np.arange(g.size)            # abundance: no scale cut
             else:
                 sel = np.where(g < ell_max)[0]
