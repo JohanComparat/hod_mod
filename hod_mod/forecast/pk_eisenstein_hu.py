@@ -68,10 +68,16 @@ class EisensteinHu98PkLinear:
     ----------
     R8 : float
         Top-hat radius for the σ8 normalisation [Mpc/h] (8 by convention).
+    camb_ratio : dict or None
+        Linearized CAMB/EH98 shape-ratio table
+        (:func:`hod_mod.forecast.pk_camb_ratio.load`) — multiplies the shape
+        everywhere (HMF path, σ8 anchor, 2-halo) so the spectrum and its first
+        derivatives become CAMB-accurate near the fiducial.
     """
 
-    def __init__(self, R8: float = 8.0):
+    def __init__(self, R8: float = 8.0, camb_ratio: dict = None):
         self._R8 = float(R8)
+        self._camb_ratio = camb_ratio
 
     # -- shape spectrum, for the HMF -----------------------------------
     def pk_shape(self, k: jnp.ndarray, theta: dict) -> jnp.ndarray:
@@ -86,6 +92,9 @@ class EisensteinHu98PkLinear:
         pk = eisenstein_hu_pk(k, theta)
         if "sum_mnu" in theta:
             pk = pk * _nu_suppression(k, theta)
+        if self._camb_ratio is not None:
+            from hod_mod.forecast.pk_camb_ratio import apply_ratio
+            pk = apply_ratio(pk, k, theta, self._camb_ratio)
         return pk
 
     def _sigma8_shape2(self, theta: dict) -> jnp.ndarray:

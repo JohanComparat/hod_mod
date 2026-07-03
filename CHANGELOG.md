@@ -29,6 +29,30 @@ First implementation wave of the `docs/missing_physics.rst` roadmap
   reusing the existing kernels; C_ℓ^{gHI} ∝ M_0 exactly.
 - `eps_sn` promoted (energy-closure SN coupling now free).
 
+Wave 2 (vector 77 → 83):
+
+- **CAMB-quality P(k)**: `forecast/pk_camb_ratio.py` — the linearized
+  CAMB/EH98 shape-ratio table (fiducial + derivative rows for
+  h/Ω_b/Ω_m/n_s/Σm_ν; |lnR₀|max = 3.8%), distilled once into
+  `data/pk_ratio/camb_eh98_ratio.npz` and applied differentiably via
+  `ForwardModel(pk_correction="camb_linear")` — spectrum and first
+  derivatives CAMB-accurate near the fiducial (the Fisher requirement).
+- **SN wind mass loading**: `eta_w_norm`/`alpha_w` (Muratov+15 form) coupled
+  into the η(M) gas-concentration slot; exactly the tier-2 sigmoid at the
+  η₀ = 0 fiducial.
+- **Star-forming main sequence**: per-cell `ssfr` observable
+  (`ssfr_ms_norm`/`ssfr_ms_slope` + `ssfr_ms_zs` through the standard
+  evolution mechanism); **quenched-HI deficit** `dhi_quenched`.
+- **Radio/HI enter the forecast**: `RadioSurvey` (LoTSS-like, νL_ν(5 GHz)
+  completeness limit) and `HISurvey` (ALFALFA flux-limited HIMF + effective
+  21 cm-IM noise) in `forecast/noise.py`;
+  `Tier2Forecast(include_radio, include_hi, include_ssfr)` adds the radio LF
+  per shell, a dedicated LOCAL (z ≤ 0.06) HIMF block — at Δz = 0.1 shell
+  depths the 21 cm flux limit flags every bin, so the HIMF is local by
+  design — the 21 cm × galaxy cross per cell and the sSFR datum per
+  non-quenched cell; driver flags
+  `--include-radio --include-hi --include-ssfr --split-sfq`.
+
 ## [0.2.0] — 2026-07-03
 
 The **tier-2 sensitivity study**: all 61 parameters free (nothing fixed), a
