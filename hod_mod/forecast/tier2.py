@@ -83,6 +83,10 @@ class Tier2Forecast:
     shear, cmbl, athena, spectro : noise.py survey dataclasses
     tsz : (rN, aN, f_sky)
         The calibrated stage-4 effective tSZ noise recipe (kept in v1).
+    split_sfq : bool
+        Split every (z, M*) cell into star-forming and quiescent samples
+        (ZM16 Weibull quenching; missing-physics extension).  Doubles the
+        cell blocks; the shell X-ray observables stay unsplit (total gas).
     model_kw : forwarded to every ForwardModel (grids etc.).
     """
 
@@ -90,7 +94,7 @@ class Tier2Forecast:
                  n_shear_bins=5, agn_lx_bins=None,
                  agn_z_centers=(0.1, 0.3, 0.5, 0.7, 0.9),
                  shear=None, cmbl=None, athena=None, spectro=None,
-                 tsz=(0.25, 0.9, 0.30), **model_kw):
+                 tsz=(0.25, 0.9, 0.30), split_sfq=False, **model_kw):
         self.z_edges = np.asarray(z_edges if z_edges is not None
                                   else np.arange(0.0, 1.01, 0.1))
         self.mstar_edges = np.asarray(mstar_edges if mstar_edges is not None
@@ -115,26 +119,44 @@ class Tier2Forecast:
         kw.setdefault("ell", _ELL)
         kw.setdefault("n_z_shear", max(16, 3 * self.n_shear_bins + 1))
         self.model_kw = kw
+        self.split_sfq = bool(split_sfq)
         self._spec_repr = repr((sorted(PARAM_NAMES), list(self.z_edges),
                                 list(self.mstar_edges), self.bands,
                                 self.n_shear_bins, self.agn_lx_bins,
-                                self.agn_z_centers,
+                                self.agn_z_centers, self.split_sfq,
                                 {k: np.asarray(v).tolist() if hasattr(v, "__len__") else v
                                  for k, v in kw.items()}))
 
         cell_kw = dict(kw, xray_bands=self.bands, agn_emission="powell",
                        xlf_band="soft", agn_lx_bins=self.agn_lx_bins)
+        # SF/quiescent split (missing-physics): two samples per (z, M*) cell
+        # sharing the one global vector — SF + Q sum exactly to the unsplit
+        # occupations, so the split only ADDs information (and the dlx_quenched
+        # hot-gas offset becomes observable through the per-population cl_gX).
+        sfq_variants = ("sf", "q") if self.split_sfq else (None,)
         self.blocks = []
         for i, (z1, z2) in enumerate(zip(self.z_edges[:-1], self.z_edges[1:])):
             zc = 0.5 * (z1 + z2)
-            first = None
+            shell_model = None
             for (m1, m2) in zip(self.mstar_edges[:-1], self.mstar_edges[1:]):
-                m = ForwardModel(z_eff=zc, log10m_star_bin=(m1, m2), **cell_kw)
-                first = first if first is not None else m
-                self.blocks.append(_Block(f"z{zc:.2f}_m{m1:.1f}", "cell", m,
-                                          GAL_OBS, z1, z2, m1, m2))
+                for sv in sfq_variants:
+                    m = ForwardModel(z_eff=zc, log10m_star_bin=(m1, m2),
+                                     sfq=sv, **cell_kw)
+                    lab = f"z{zc:.2f}_m{m1:.1f}" + ("" if sv is None else f"_{sv}")
+                    self.blocks.append(_Block(lab, "cell", m, GAL_OBS,
+                                              z1, z2, m1, m2))
+                    if shell_model is None and sv is None:
+                        shell_model = m
+            if shell_model is None:
+                # split mode: the shell observables (xlf, TOTAL-gas cl_XX) need
+                # an UNSPLIT model — the quenched L_X offset must not leak into
+                # the X-ray auto of the whole shell
+                shell_model = ForwardModel(
+                    z_eff=zc,
+                    log10m_star_bin=(self.mstar_edges[0], self.mstar_edges[1]),
+                    **cell_kw)
             # shell observables (M*-independent): soft XLF + per-band cl_XX
-            self.blocks.append(_Block(f"z{zc:.2f}_shell", "shell", first,
+            self.blocks.append(_Block(f"z{zc:.2f}_shell", "shell", shell_model,
                                       SHELL_OBS, z1, z2))
         gm = ForwardModel(z_eff=0.3, n_shear_bins=self.n_shear_bins,
                           z_src_mean=0.9, **kw)

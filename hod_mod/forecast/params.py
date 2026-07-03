@@ -59,6 +59,21 @@ _FIDUCIAL_DEFAULT = {
     # (fit_xray_joint_bands._GAMMA_AGN), ~30% obscured at NH=1e22.
     "t_prof_slope": 0.0, "z_gas_norm": 0.3, "z_gas_mslope": 0.0, "z_gas_zs": 0.0,
     "agn_gamma": 1.8, "agn_fabs": 0.3, "agn_mu_bh_zs": 0.0,
+    # --- missing-physics extension (docs/missing_physics.rst).  Fiducials
+    # preserve the tier-2 predictions: eps_sn = the former _EPS_SN constant;
+    # (w0, wa, sum_mnu) = the ΛCDM/massless limit (the CPL growth ODE and the
+    # ν suppression are exactly their tier-2 values there); the quenching and
+    # FP/HI parameters only touch the new opt-in observables.
+    "eps_sn": 0.1,
+    "w0": -1.0, "wa": 0.0, "sum_mnu": 0.0,
+    # ZM16 halo-quenching MAP (Zu & Mandelbaum 2016, the in-repo fiducials)
+    "log10_Mq_cen": 11.78, "mu_q_cen": 0.41,
+    "log10_Mq_sat": 12.19, "mu_q_sat": 0.24,
+    "dlx_quenched": 0.0,
+    # fundamental plane of BH activity (Merloni+03 fiducials, Gültekin+19 priors)
+    "agn_xi_rx": 0.60, "agn_xi_rm": 0.78, "agn_b_r": 7.33, "agn_sig_r": 0.88,
+    # M_HI(M_h) halo model (Villaescusa-Navarro+2018, z=0)
+    "log10_M0_hi": 10.63, "log10_Mmin_hi": 12.3, "alpha_hi": 0.24,
 }
 
 # Planck 2018 1σ priors (planck_prior.PLANCK18_SIGMAS) on the free cosmo params.
@@ -100,6 +115,13 @@ BROAD_PRIOR_SIGMA = {
     # Tier-2 X-ray spectral sector.
     "t_prof_slope": 0.5, "z_gas_norm": 0.3, "z_gas_mslope": 0.5, "z_gas_zs": 2.0,
     "agn_gamma": 0.3, "agn_fabs": 0.3, "agn_mu_bh_zs": 2.0,
+    # Missing-physics extension.
+    "eps_sn": 0.3,
+    "w0": 1.0, "wa": 2.0, "sum_mnu": 0.25,
+    "log10_Mq_cen": 1.0, "mu_q_cen": 1.0, "log10_Mq_sat": 1.0, "mu_q_sat": 1.0,
+    "dlx_quenched": 1.0,
+    "agn_xi_rx": 0.3, "agn_xi_rm": 0.3, "agn_b_r": 2.0, "agn_sig_r": 0.3,
+    "log10_M0_hi": 1.0, "log10_Mmin_hi": 1.0, "alpha_hi": 0.3,
 }
 
 PARAM_LATEX = {
@@ -139,13 +161,24 @@ PARAM_LATEX = {
     "z_gas_mslope": r"$\partial_M Z$", "z_gas_zs": r"$\partial_z Z$",
     "agn_gamma": r"$\Gamma_{\rm AGN}$", "agn_fabs": r"$f_{\rm abs}$",
     "agn_mu_bh_zs": r"$\partial_z\mu_{\rm BH}$",
+    # Missing-physics extension.
+    "eps_sn": r"$\varepsilon_{\rm SN}$",
+    "w0": r"$w_0$", "wa": r"$w_a$", "sum_mnu": r"$\Sigma m_\nu$",
+    "log10_Mq_cen": r"$\log_{10}M_{\rm q}^{\rm cen}$", "mu_q_cen": r"$\mu_{\rm q}^{\rm cen}$",
+    "log10_Mq_sat": r"$\log_{10}M_{\rm q}^{\rm sat}$", "mu_q_sat": r"$\mu_{\rm q}^{\rm sat}$",
+    "dlx_quenched": r"$\Delta L_X^{\rm Q}$",
+    "agn_xi_rx": r"$\xi_{RX}$", "agn_xi_rm": r"$\xi_{RM}$",
+    "agn_b_r": r"$b_R$", "agn_sig_r": r"$\sigma_R$",
+    "log10_M0_hi": r"$\log_{10}M_0^{\rm HI}$",
+    "log10_Mmin_hi": r"$\log_{10}M_{\min}^{\rm HI}$", "alpha_hi": r"$\alpha_{\rm HI}$",
 }
 
 # Parameter sectors for the tier-2 cosmology-vs-astrophysics decomposition
 # (run_tier2_forecast): σ(sector) marginalised vs other-sectors-pinned, probe
 # attribution, and information gain per sector.  Covers all of PARAM_NAMES.
 SECTORS = {
-    "cosmology": ["Omega_m", "sigma8", "h", "n_s", "Omega_b"],
+    "cosmology": ["Omega_m", "sigma8", "h", "n_s", "Omega_b",
+                  "w0", "wa", "sum_mnu"],
     "shmr": ["lg_m1h", "lg_m0star", "beta", "delta", "gamma", "sigma_lnmstar",
              "eta", "fc", "bsat", "beta_sat", "bcut", "beta_cut", "alpha_sat",
              "lg_m1h_zs", "lg_m0star_zs", "sigma_lnmstar_zs"],
@@ -154,11 +187,18 @@ SECTORS = {
             "c500_pressure", "gamma_pressure", "alpha_pressure",
             "beta_out_pressure", "lx_zs", "kt_zs",
             "t_prof_slope", "z_gas_norm", "z_gas_mslope", "z_gas_zs"],
-    "baryon": ["log10_M_pivot", "log10_eta_min", "beta_b", "log10_M_eta", "beta_eta"],
+    "baryon": ["log10_M_pivot", "log10_eta_min", "beta_b", "log10_M_eta",
+               "beta_eta", "eps_sn"],
     "agn": ["agn_mu_bh", "agn_al_bh", "agn_sig_bh", "agn_log10_lstar",
             "agn_delta1", "agn_delta2", "agn_log10_ferdf", "agn_rho",
             "agn_sig_mstar", "agn_log10_ferdf_zs", "agn_log10_lstar_zs",
-            "agn_gamma", "agn_fabs", "agn_mu_bh_zs"],
+            "agn_gamma", "agn_fabs", "agn_mu_bh_zs",
+            "agn_xi_rx", "agn_xi_rm", "agn_b_r", "agn_sig_r"],
+    # SF/quiescent split (ZM16 halo quenching + the quenched-CGM offset)
+    "sfq": ["log10_Mq_cen", "mu_q_cen", "log10_Mq_sat", "mu_q_sat",
+            "dlx_quenched"],
+    # cold gas / neutral hydrogen (VN18 halo model)
+    "coldgas": ["log10_M0_hi", "log10_Mmin_hi", "alpha_hi"],
     # retired: with agn_emission="powell" the duty cycle leaves the emissivity;
     # its only remaining consumer is the (off-by-default) energy-closure mode.
     "retired": ["log10DC"],

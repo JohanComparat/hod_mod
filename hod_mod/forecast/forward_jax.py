@@ -50,6 +50,8 @@ from hod_mod.connection.hod.zumandelbaum15 import (
     _mh_from_mstar_zu15,
     _mstar_from_mh_zu15,
     sigma_lnmstar_zu15,
+    f_red_cen_zu16,
+    f_red_sat_zu16,
 )
 from jax import custom_jvp
 from jax.scipy.special import erf, erfc
@@ -92,6 +94,14 @@ PARAM_NAMES = [
     "z_gas_norm", "z_gas_mslope", "z_gas_zs",             # ICM metallicity [Z_sun] + slopes
     "agn_gamma", "agn_fabs",                              # AGN photon index + obscured fraction
     "agn_mu_bh_zs",                                       # M_BH–M* zero-point evolution
+    # ---- missing-physics extension (docs/missing_physics.rst) ----
+    "eps_sn",                                             # SN feedback coupling (energy closure)
+    "w0", "wa", "sum_mnu",                                # beyond-ΛCDM: CPL dark energy + Σm_ν [eV]
+    "log10_Mq_cen", "mu_q_cen",                           # ZM16 halo quenching (centrals)
+    "log10_Mq_sat", "mu_q_sat",                           # ZM16 halo quenching (satellites)
+    "dlx_quenched",                                       # L_X–M offset of quenched centrals [dex]
+    "agn_xi_rx", "agn_xi_rm", "agn_b_r", "agn_sig_r",     # fundamental plane of BH activity
+    "log10_M0_hi", "log10_Mmin_hi", "alpha_hi",           # M_HI(M_h) halo model (VN18)
 ]
 _IDX = {n: i for i, n in enumerate(PARAM_NAMES)}
 N_PARAM = len(PARAM_NAMES)
@@ -100,6 +110,9 @@ N_PARAM = len(PARAM_NAMES)
 TIER2_PROMOTED = PARAM_NAMES[31:47]
 TIER2_ZSLOPES = PARAM_NAMES[47:54]
 TIER2_SPECTRAL = PARAM_NAMES[54:61]
+# Missing-physics extension (docs/missing_physics.rst): SN coupling, beyond-ΛCDM
+# cosmology, SF/quiescent quenching, the AGN fundamental plane, and the HI sector.
+MISSING_PHYSICS = PARAM_NAMES[61:77]
 TIER2_EXTENSION = list(PARAM_NAMES[31:])
 
 # base parameter → its ln(1+z) evolution slope (applied in ForwardModel._theta_eff)
@@ -115,7 +128,10 @@ OBSERVABLES = ["wp", "ds", "cl_gX", "cl_gy", "cl_XX", "cl_kk",
 _C_OVER_H0 = 2997.92   # c/H0 [Mpc/h]  (H0 = 100 h km/s/Mpc)
 
 # Fixed (non-varied) cosmology + HOD nuisance held at Planck18 / ZM15-MAP values.
-_FIXED_COSMO = {"h": 0.6736, "Omega_b": 0.0493, "n_s": 0.9649}
+# w0/wa/sum_mnu fallbacks are the ΛCDM/massless limits (the missing-physics
+# extension promotes them into the vector with these same fiducials).
+_FIXED_COSMO = {"h": 0.6736, "Omega_b": 0.0493, "n_s": 0.9649,
+                "w0": -1.0, "wa": 0.0, "sum_mnu": 0.0}
 _FIXED_HOD = {
     "log10m_star_thresh": 10.0,   # BGS M* > 10 threshold sample
     "beta_sat": 0.9, "bcut": 0.86, "beta_cut": 0.41, "alpha_sat": 1.0,
@@ -161,6 +177,7 @@ _POWELL_LBOL_COEF = 1.26e38
 _POWELL_KBOL_HARD = 20.0
 _POWELL_LOGK = float(np.log10(_POWELL_LBOL_COEF / _POWELL_KBOL_HARD))  # log10 L_X/(M_BH·λ)
 _SIG_MSTAR_XLF = 0.20   # fixed log10 M* scatter entering the (shift-invariant) M_BH–M_halo width
+_SIG_MHI = 0.35         # fixed lognormal scatter of M_HI at fixed M_h [dex]
 # hard(2-10 keV) → soft(0.5-2 keV) energy-flux ratio for a Γ≈1.8 power law
 # (hod_mod.agn.ham convention; becomes Γ-dependent in the multi-band layer).
 from hod_mod.agn.ham import _HARD_TO_SOFT_RATIO as _K_H2S_FID
@@ -242,6 +259,23 @@ def _gnfw_pressure(x, alpha_in, alpha_tr, alpha_out):
 
 # A10 universal GNFW pressure slopes (Arnaud+2010).
 _A10 = dict(P0=8.403, c500=1.177, gamma=0.3081, alpha=1.0510, beta=5.4905)
+
+
+def _c_dk15(sigma, n_eff):
+    r"""Diemer & Kravtsov 2015 c200c(ν, n_eff), Diemer & Joyce 2019 median
+    parameters — a pure-jnp mirror of
+    :func:`hod_mod.core.concentration.c_diemer15` (cross-validated in tests).
+    Cosmology enters through BOTH inputs: ν = δ_c/σ(M, z) and the local P(k)
+    slope n_eff, so the concentration finally responds to σ8, n_s, h and (via
+    growth) to w0/wa/Σm_ν.
+    """
+    phi0, phi1 = 6.58, 1.27
+    eta0, eta1 = 7.28, 1.56
+    alpha, beta = 1.08, 1.77
+    nu = 1.686 / sigma
+    x = nu / (eta0 + n_eff * eta1)
+    c_min = phi0 + n_eff * phi1
+    return 0.5 * c_min * (x ** (-alpha) + x ** beta)     # DK15 Eq. 9 / DJ19 Eq. 30
 
 _LN10 = float(np.log(10.0))
 
@@ -340,6 +374,10 @@ class ForwardModel:
         xray_bands=None,
         xlf_band: str = "hard",
         nh_abs: float = _NH_ABS,
+        cm_relation: str = "dutton14",
+        sfq: str = None,
+        loglr_rlf=None,
+        logmhi_himf=None,
     ):
         self.z_eff = float(z_eff)
         # tier-2 z-evolution: static per-model lever arm ln[(1+z_eff)/(1+z_p)]
@@ -451,6 +489,24 @@ class ForwardModel:
         self.rp_wp_agn = jnp.asarray(rp_wp_agn if rp_wp_agn is not None
                                      else np.logspace(0.0, 1.5, 8))
 
+        # ---- missing-physics extension (docs/missing_physics.rst) -------
+        # concentration–mass relation: "dutton14" (tier-1/2 default, fixed
+        # Planck13 fit) or "diemer15" (cosmology-dependent c(ν, n_eff)).
+        self.cm_relation = str(cm_relation).lower()
+        if self.cm_relation not in ("dutton14", "diemer15"):
+            raise ValueError("cm_relation must be 'dutton14' or 'diemer15'")
+        # SF/quiescent sample split: None (all galaxies, tier-1/2 default),
+        # "sf" or "q" — ZM16 Weibull quenching weights on the occupations.
+        self.sfq = None if sfq is None else str(sfq).lower()
+        if self.sfq not in (None, "sf", "q"):
+            raise ValueError("sfq must be None, 'sf' or 'q'")
+        # radio LF abscissa (5 GHz νLν [erg/s], fundamental-plane observable)
+        self.loglr_rlf = jnp.asarray(loglr_rlf if loglr_rlf is not None
+                                     else np.linspace(36.0, 42.0, 7))
+        # HI mass-function abscissa (log10 M_HI [Msun/h])
+        self.logmhi_himf = jnp.asarray(logmhi_himf if logmhi_himf is not None
+                                       else np.linspace(8.5, 11.0, 7))
+
         # ---- tier-2 multi-band APEC X-ray layer -------------------------
         # xray_bands=None keeps the tier-1 broad-band model; a list of (emin,
         # emax) keV edges switches cl_gX/cl_XX to per-band stacks built from
@@ -519,7 +575,22 @@ class ForwardModel:
             "Omega_cdm": Om - Ob,
             "n_s": g("n_s"),
             "sigma8": theta[_IDX["sigma8"]],
+            # beyond-ΛCDM sector (missing-physics extension).  Their presence
+            # as dict KEYS statically routes growth to the CPL ODE and P(k) to
+            # the ν-suppressed shape; the ΛCDM/massless fiducials keep both
+            # paths numerically at their tier-2 values.
+            "w0": g("w0"),
+            "wa": g("wa"),
+            "sum_mnu": g("sum_mnu"),
         }
+
+    @staticmethod
+    def _e2z(c, z):
+        """E²(z) for flat CPL dark energy (reduces to ΛCDM at w0=−1, wa=0)."""
+        Om = c["Omega_m"]
+        fde = (1.0 + z) ** (3.0 * (1.0 + c["w0"] + c["wa"])) \
+            * jnp.exp(-3.0 * c["wa"] * z / (1.0 + z))
+        return Om * (1.0 + z) ** 3 + (1.0 - Om) * fde
 
     def _hod(self, theta):
         d = {"log10m_star_thresh": self._thr}
@@ -577,7 +648,7 @@ class ForwardModel:
         Om, Ob = c["Omega_m"], c["Omega_b"]
         fbc = Ob / Om
         z = self.z_eff
-        ez2 = Om * (1.0 + z) ** 3 + (1.0 - Om)
+        ez2 = self._e2z(c, z)
         rho_crit_com = _RHO_CRIT0 * ez2 / (1.0 + z) ** 3
         r200 = (3.0 * self.m / (4.0 * jnp.pi * 200.0 * rho_crit_com)) ** (1.0 / 3.0)
         v200sq = _G_KMS2 * self.m / r200                               # (km/s)²
@@ -593,20 +664,46 @@ class ForwardModel:
         hp = self._hod(theta)
         log10_mstar = _inv_shmr(self.log10m, hp["lg_m1h"], hp["lg_m0star"],
                                 hp["beta"], hp["delta"], hp["gamma"])
-        E_sn = _EPS_SN * 10.0 ** log10_mstar * _E_SN_PER_MSUN
+        E_sn = theta[_IDX["eps_sn"]] * 10.0 ** log10_mstar * _E_SN_PER_MSUN
 
         expelled = jnp.minimum(fbc - _FIXED_BARYON["f_b_min"],
                                (E_agn + E_sn) / (self.m * v200sq))
         return fbc - jnp.maximum(expelled, 0.0)
+
+    def _neff_eh98(self, c):
+        r"""Effective spectral slope n_eff = dln P/dln k at k_R = κ·2π/R(M), (NM,).
+
+        The Diemer & Kravtsov (2015) input alongside the peak height, with the
+        Diemer & Joyce (2019) calibration scale κ = 0.42 (their Table 2 median
+        c200c model — the same convention the _c_dk15 parameters belong to).
+        Computed differentiably from the (ν-suppressed) EH98 shape on a
+        uniform-in-ln k grid (jnp.gradient with scalar spacing).
+        """
+        kappa = 0.42
+        rho_m = _RHO_CRIT0 * c["Omega_m"]
+        R = (3.0 * self.m / (4.0 * jnp.pi * rho_m)) ** (1.0 / 3.0)
+        kg = jnp.logspace(-3.0, 2.0, 256)
+        lnk = jnp.log(kg)
+        lnp = jnp.log(jnp.maximum(self._pk.pk_shape(kg, c), 1e-30))
+        dlnp = jnp.gradient(lnp, float(lnk[1] - lnk[0]))
+        return jnp.interp(jnp.log(kappa * 2.0 * jnp.pi / R), lnk, dlnp)
 
     # ---- shared halo-model quantities on the mass grid ---------------
     def _halo_common(self, theta, z):
         c = self._cosmo(theta)
         Om = c["Omega_m"]
         # 200c halo radius (comoving h-units) and NFW FT
-        ez2 = Om * (1.0 + z) ** 3 + (1.0 - Om)
+        ez2 = self._e2z(c, z)
         rho_crit_com = _RHO_CRIT0 * ez2 / (1.0 + z) ** 3
-        conc = concentration_dutton14_jax(self.m, float(z))            # (NM,)
+        if self.cm_relation == "diemer15":
+            # cosmology-dependent c(ν, n_eff) — Diemer & Kravtsov 2015 with
+            # Diemer & Joyce 2019 parameters (validated against
+            # hod_mod.core.concentration.c_diemer15); responds to σ8/n_s/h and,
+            # through the growth factor, to the beyond-ΛCDM sector.
+            sig = self._hmf.sigma(self.m, float(z), c)
+            conc = _c_dk15(sig, self._neff_eh98(c))
+        else:
+            conc = concentration_dutton14_jax(self.m, float(z))       # (NM,)
         r_delta = (3.0 * self.m / (4.0 * jnp.pi * 200.0 * rho_crit_com)) ** (1.0 / 3.0)
         r_s = r_delta / conc
         uk = nfw_uk_jax(self.k, r_s, conc)                             # (Nk, NM)
@@ -706,13 +803,16 @@ class ForwardModel:
         Self-similar E(z)² / E(z)^{2/3} scalings are hardcoded; the free lx_zs /
         kt_zs slopes (via _theta_eff) parameterize departures from them.
         """
-        Om = self._cosmo(theta)["Omega_m"]
-        ez = jnp.sqrt(Om * (1.0 + z) ** 3 + (1.0 - Om))
+        ez = jnp.sqrt(self._e2z(self._cosmo(theta), z))
         log10_m500c = self.log10m + jnp.log10(0.72)                     # M500c ≈ 0.72 M200 (comoving)
         lx = 10.0 ** (theta[_IDX["lx_norm"]] - 45.0
                       + theta[_IDX["lx_slope"]] * (log10_m500c - _LX_PIVOT)) * ez ** 2
         kT = 10.0 ** (theta[_IDX["kt_slope"]] * (log10_m500c - _KT_PIVOT)
                       + theta[_IDX["kt_norm"]]) * ez ** (2.0 / 3.0)
+        # SF/quiescent split (missing-physics): quenched centrals carry an
+        # L_X–M offset at fixed halo mass — the Zhang+2025 eROSITA CGM signal.
+        if self.sfq == "q":
+            lx = lx * 10.0 ** theta[_IDX["dlx_quenched"]]
         return lx, kT
 
     def _gas_log10Z(self, theta):
@@ -784,8 +884,7 @@ class ForwardModel:
 
         u_shape = _profile_uk_normalized(self.k, r_max, f_nodes(r_max[:, None] * self.gx[None, :]),
                                          self.gx, self.gw)
-        Om = self._cosmo(theta)["Omega_m"]
-        ez = jnp.sqrt(Om * (1.0 + H["z"]) ** 3 + (1.0 - Om))
+        ez = jnp.sqrt(self._e2z(self._cosmo(theta), H["z"]))
         log10_m500c = self.log10m + jnp.log10(0.72)
         beta_p = 2.0 / 3.0 + 0.12 + theta[_IDX["beta_pressure"]]        # A10 self-similar + tilt
         # thermal energy ∝ gas mass ∝ f_b(M)  → shared baryon sector.  The GNFW
@@ -900,7 +999,7 @@ class ForwardModel:
         c = self._cosmo(theta)
         h, Om = c["h"], c["Omega_m"]
         z = self.z_shear
-        chi = comoving_distance(z, h, Om) * h                          # (Nz,) Mpc/h
+        chi = comoving_distance(z, h, Om, c["w0"], c["wa"]) * h        # (Nz,) Mpc/h
         a = 1.0 / (1.0 + z)
         # source distribution per unit χ (n_s(z) dz = n_s(χ) dχ), renormalised
         dz_dchi = jnp.gradient(z) / jnp.gradient(chi)
@@ -956,14 +1055,16 @@ class ForwardModel:
         """
         c = self._cosmo(theta)
         h, Om = c["h"], c["Omega_m"]
-        chi_star = comoving_distance(jnp.array([self.z_star]), h, Om)[0] * h
+        chi_star = comoving_distance(jnp.array([self.z_star]), h, Om,
+                                     c["w0"], c["wa"])[0] * h
         return (1.5 * Om / _C_OVER_H0 ** 2 * chi * (1.0 + z)
                 * jnp.clip(chi_star - chi, 0.0, None) / chi_star)
 
     def _cl_gkCMB(self, theta, Hs_zgrid):
         """Galaxy × CMB-lensing C_ℓ: galaxy window × κ_CMB kernel, via P_gm."""
         c = self._cosmo(theta)
-        chi = comoving_distance(self.z_grid, c["h"], c["Omega_m"]) * c["h"]
+        chi = comoving_distance(self.z_grid, c["h"], c["Omega_m"],
+                                c["w0"], c["wa"]) * c["h"]
         dndchi = self.nz / jnp.trapezoid(self.nz, chi)
         Wc = self._cmb_kernel(theta, chi, self.z_grid)
         stack = jnp.stack([jnp.log(jnp.maximum(self._pk_gg_gm(H, theta)[1], 1e-30)) for H in Hs_zgrid])
@@ -988,7 +1089,8 @@ class ForwardModel:
     def _cl_kCMB(self, theta):
         """CMB-lensing auto C_ℓ^{κκ_CMB} over the high-z LOS grid."""
         c = self._cosmo(theta)
-        chi = comoving_distance(self.z_cmb, c["h"], c["Omega_m"]) * c["h"]
+        chi = comoving_distance(self.z_cmb, c["h"], c["Omega_m"],
+                                c["w0"], c["wa"]) * c["h"]
         Wc = self._cmb_kernel(theta, chi, self.z_cmb)
         stack = self._pmm_logstack(theta, self.z_cmb)
         return self._limber_kernels(chi, Wc, Wc, stack)
@@ -1029,7 +1131,7 @@ class ForwardModel:
         """C_ℓ = ∫ dχ/χ² W_g(χ) P(k=(ℓ+½)/χ, z(χ)) from a precomputed (Nz,Nk) stack."""
         c = self._cosmo(theta)
         h, Om = c["h"], c["Omega_m"]
-        chi = comoving_distance(self.z_grid, h, Om) * h                # (Nz,) Mpc/h
+        chi = comoving_distance(self.z_grid, h, Om, c["w0"], c["wa"]) * h   # (Nz,) Mpc/h
         dndchi = self.nz / jnp.trapezoid(self.nz, chi)
         klim = jnp.log(jnp.maximum((self.ell[:, None] + 0.5) / chi[None, :], 1e-4))
 
@@ -1084,6 +1186,70 @@ class ForwardModel:
         K = jnp.sum(erdf[None, None, :] * gk, axis=2) * self.dlam      # (Nlx, NM)  pdf in dex(L_X)
         ferdf = 10.0 ** theta[_IDX["agn_log10_ferdf"]]                 # active fraction
         return jnp.trapezoid(dndlogm[None, :] * K * ferdf, self.log10m, axis=1)  # (Nlx,)
+
+    def _rlf(self, theta):
+        r"""Radio luminosity function Φ(log L_R) [(Mpc/h)⁻³ dex⁻¹] via the
+        fundamental plane of black-hole activity (missing-physics extension).
+
+        Per (M_h, λ) cell the FP maps the Powell chain's X-ray luminosity and
+        black-hole mass to 5 GHz νL_ν:
+
+        .. math::
+
+            \log L_R = \xi_{RX}\log L_X + \xi_{RM}\log M_{\rm BH} + b_R
+            = \xi_{RX}(\log k + \lambda) + (\xi_{RX}+\xi_{RM})\log M_{\rm BH} + b_R,
+
+        so the M_BH scatter σ_lm enters with coefficient (ξ_RX + ξ_RM) — it is
+        the SAME deviate in L_X and M_BH — and the FP scatter σ_R adds in
+        quadrature.  Exact identity (tested): at (ξ_RX, ξ_RM, b_R, σ_R) =
+        (1, 0, 0, 0) the rlf equals the hard-band xlf on the same abscissas.
+        """
+        c = self._cosmo(theta)
+        dndm = self._hmf.dndm(self.m, float(self.z_eff), c)
+        dndlogm = dndm * self.m * _LN10
+
+        mean_bh, sig_lm, erdf = self._agn_kernel_parts(theta)
+        xi_rx = theta[_IDX["agn_xi_rx"]]
+        xi_rm = theta[_IDX["agn_xi_rm"]]
+        sig_r = jnp.sqrt((xi_rx + xi_rm) ** 2 * sig_lm ** 2
+                         + theta[_IDX["agn_sig_r"]] ** 2)
+        mu0 = (xi_rx * _POWELL_LOGK + (xi_rx + xi_rm) * mean_bh
+               + theta[_IDX["agn_b_r"]])                                # (NM,)
+        t = self.loglr_rlf[:, None, None] - mu0[None, :, None] \
+            - xi_rx * self.loglam[None, None, :]                        # (Nlr, NM, Nlam)
+        gk = jnp.exp(-0.5 * (t / sig_r) ** 2) / (jnp.sqrt(2.0 * jnp.pi) * sig_r)
+        K = jnp.sum(erdf[None, None, :] * gk, axis=2) * self.dlam       # (Nlr, NM)
+        ferdf = 10.0 ** theta[_IDX["agn_log10_ferdf"]]
+        return jnp.trapezoid(dndlogm[None, :] * K * ferdf, self.log10m, axis=1)
+
+    # ---- cold gas / neutral hydrogen (missing-physics extension) ------
+    def _mhi(self, theta):
+        r"""M_HI(M_h) [Msun/h] halo model (Villaescusa-Navarro et al. 2018):
+
+        .. math::
+
+            M_{\rm HI}(M_h) = M_0\,(M_h/M_{\rm min})^{\alpha}\,
+            \exp\!\left[-(M_{\rm min}/M_h)^{0.35}\right]
+        """
+        m0 = 10.0 ** theta[_IDX["log10_M0_hi"]]
+        mmin = 10.0 ** theta[_IDX["log10_Mmin_hi"]]
+        return (m0 * (self.m / mmin) ** theta[_IDX["alpha_hi"]]
+                * jnp.exp(-((mmin / self.m) ** 0.35)))                  # (NM,)
+
+    def _himf(self, theta, H):
+        r"""HI mass function Φ(log M_HI) [(Mpc/h)⁻³ dex⁻¹]: the M_HI(M_h)
+        relation with a fixed 0.35 dex lognormal scatter (the conditional-
+        scatter pattern of the SMF/XLF kernels)."""
+        dndlogm = H["dndm"] * self.m * _LN10
+        t = self.logmhi_himf[:, None] - jnp.log10(self._mhi(theta))[None, :]
+        gk = jnp.exp(-0.5 * (t / _SIG_MHI) ** 2) / (jnp.sqrt(2.0 * jnp.pi) * _SIG_MHI)
+        return jnp.trapezoid(dndlogm[None, :] * gk, self.log10m, axis=1)
+
+    def _pk_gHI(self, theta, H):
+        """galaxy × HI power spectrum: the C_ℓ^{gX} machinery with the HI mass
+        (NFW-distributed, 10^10-referenced model units) as the tracer field."""
+        X = (self._mhi(theta) / 1.0e10)[None, :] * H["uk"]              # (Nk, NM)
+        return self._pk_gX_of(theta, H, X, jnp.zeros_like(self.m))
 
     # ---- Powell AGN chain: shared kernel, occupation, emission, clustering --
     def _agn_kernel_parts(self, theta):
@@ -1213,11 +1379,24 @@ class ForwardModel:
         Bin mode ([lo, hi)) is the exact difference of two threshold
         occupations — each with its own M_min(thr)-derived msat/mcut — and both
         differences are ≥ 0 because N_cen and N_sat decrease with the threshold.
+
+        SF/quiescent mode (``sfq``) weights the occupations by the ZM16 Weibull
+        quenched fractions f_Q(M_h); by construction the "sf" and "q" samples
+        sum EXACTLY to the unsplit sample (the regression invariant).
         """
         nc, ns = self._occ_above(theta, self._thr)
         if self._thr_hi is not None:
             nc_hi, ns_hi = self._occ_above(theta, self._thr_hi)
             nc, ns = nc - nc_hi, ns - ns_hi
+        if self.sfq is not None:
+            fq_c = f_red_cen_zu16(self.log10m, theta[_IDX["log10_Mq_cen"]],
+                                  theta[_IDX["mu_q_cen"]])
+            fq_s = f_red_sat_zu16(self.log10m, theta[_IDX["log10_Mq_sat"]],
+                                  theta[_IDX["mu_q_sat"]])
+            if self.sfq == "q":
+                nc, ns = nc * fq_c, ns * fq_s
+            else:
+                nc, ns = nc * (1.0 - fq_c), ns * (1.0 - fq_s)
         return nc, ns
 
     def _n_gal(self, theta, H):
@@ -1249,7 +1428,7 @@ class ForwardModel:
         theta = self._theta_eff(theta)      # tier-2 z-evolution (identity at fiducial)
         which = which or OBSERVABLES
         out = {}
-        if any(o in which for o in ("wp", "ds", "n_gal", "smf", "wp_agn")):
+        if any(o in which for o in ("wp", "ds", "n_gal", "smf", "wp_agn", "himf")):
             H0 = self._halo_common(theta, self.z_eff)
             if "wp" in which or "ds" in which:
                 P_gg, P_gm = self._pk_gg_gm(H0, theta)
@@ -1263,12 +1442,15 @@ class ForwardModel:
                 out["smf"] = self._smf(theta, H0)
             if "wp_agn" in which:
                 out["wp_agn"] = self._wp_agn(theta, H0)
+            if "himf" in which:
+                out["himf"] = self._himf(theta, H0)
         # Galaxy-window angular spectra (gas cross + galaxy×CMB-lensing) share the
         # per-z halo quantities on the galaxy n(z) grid.
-        ang = [o for o in ("cl_gX", "cl_gy", "cl_XX") if o in which]
+        ang = [o for o in ("cl_gX", "cl_gy", "cl_XX", "cl_gHI") if o in which]
         if ang or "cl_gkCMB" in which:
             Hs = [self._halo_common(theta, float(z)) for z in np.asarray(self.z_grid)]
-            fns = {"cl_gX": self._pk_gX, "cl_gy": self._pk_gy, "cl_XX": self._pk_XX}
+            fns = {"cl_gX": self._pk_gX, "cl_gy": self._pk_gy, "cl_XX": self._pk_XX,
+                   "cl_gHI": self._pk_gHI}
             for o in ang:
                 if self.xray_bands is not None and o in ("cl_gX", "cl_XX"):
                     # band mode: P is (Nb, Nk) per z → one Limber per band,
@@ -1295,6 +1477,8 @@ class ForwardModel:
             out["cl_kCMB"] = self._cl_kCMB(theta)
         if "xlf" in which:
             out["xlf"] = self._xlf(theta)
+        if "rlf" in which:
+            out["rlf"] = self._rlf(theta)
         return out
 
     def cl_gg_fiducial(self, theta):
@@ -1319,6 +1503,7 @@ class ForwardModel:
         return {"wp": self.rp_wp, "ds": self.rp_ds,
                 "xlf": self.loglx_xlf, "n_gal": jnp.array([0.0]),
                 "smf": self.logmstar_smf,
+                "rlf": self.loglr_rlf, "himf": self.logmhi_himf,
                 "wp_agn": jnp.asarray(np.tile(np.asarray(self.rp_wp_agn),
                                               len(self.agn_lx_bins)))}[name]
 
@@ -1375,7 +1560,7 @@ class ForwardModel:
             g = np.asarray(self.grid_of(name))
             if name in ("wp", "ds", "wp_agn"):
                 sel = np.where(g > float(rmin))[0]
-            elif name in ("xlf", "n_gal", "smf"):
+            elif name in ("xlf", "n_gal", "smf", "rlf", "himf"):
                 sel = np.arange(g.size)            # abundance: no scale cut
             else:
                 sel = np.where(g < ell_max)[0]
