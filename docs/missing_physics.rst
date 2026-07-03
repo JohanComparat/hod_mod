@@ -54,10 +54,24 @@ link below was resolved and checked against title and first author.
    νL_ν completeness limit, a dedicated local (z ≤ 0.06, ALFALFA-like) HIMF
    block (at Δz = 0.1 shell depths the 21 cm flux limit flags everything —
    physical, so the HIMF is local by design), 21 cm × galaxy crosses per
-   cell, and the sSFR datum per non-quenched cell.  Still open (wave 3
-   candidates): ν/HMF emulator distillation beyond first order, the
-   continuous sSFR distribution and SFR-selected samples, multi-band
-   SEDs/CLF, morphology.
+   cell, and the sSFR datum per non-quenched cell.
+
+   **Wave 3** (same branch, vector 83 → 90): the **continuous sSFR
+   distribution** — the double-lognormal p(log sSFR | M*) with free MS scatter
+   ``sigma_ms`` and quenched offset ``dssfr_q``, **sSFR-threshold selection**
+   (``ForwardModel(ssfr_cut=...)``, ELG-like samples, composable with the SF/Q
+   split with exact additivity), the **SFR density** ``sfrd`` per cell
+   (ρ_SFR ∝ 10^{sSFR_MS} exactly) and the **z-resolved [OII] LF** ``oiilf``
+   (Kennicutt-like ``loii_norm`` on the SHMR + main sequence, line-flux
+   completeness in the noise); the **radio-loud jet population**
+   (``f_loud0``/``beta_loud``/``b_jet`` — not ERDF-tied, so the ferdf
+   amplitude identity of the FP-only rlf breaks by design, tested); the **AGN
+   infrared LF** ``ilf`` (``agn_bc_ir`` on L_bol; obscuration-robust — zero
+   f_abs response, tested — the cross-band check of the obscured fraction);
+   ``IRSurvey`` + [OII]/SFRD noise and ``Tier2Forecast(include_ir=True)`` /
+   extended ``include_ssfr`` blocks with driver flags.  Still open (wave 4
+   candidates): ν/HMF emulator distillation beyond first order, multi-band
+   SEDs/CLF (route 1/2), morphology.
 
 Summary and suggested order
 ---------------------------

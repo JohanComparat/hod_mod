@@ -46,12 +46,13 @@ from hod_mod.forecast.tier2 import Tier2Forecast  # noqa: E402
 # probe groups for the cumulative attribution (galaxy grid → lensing →
 # X-ray/tSZ crosses → AGN abundance → AGN clustering)
 PROBE_GROUPS = [
-    ("galaxy grid", ("wp", "ds", "n_gal", "ssfr")),
+    ("galaxy grid", ("wp", "ds", "n_gal", "ssfr", "sfrd", "oiilf")),
     ("+lensing", ("cl_kk", "cl_kCMB", "cl_shear_kCMB", "cl_gkCMB")),
     ("+X-ray/tSZ", ("cl_gX", "cl_XX", "cl_gy")),
     ("+XLF(z)", ("xlf",)),
     ("+wp_agn", ("wp_agn",)),
     ("+radio LF", ("rlf",)),
+    ("+IR AGN", ("ilf",)),
     ("+HI", ("himf", "cl_gHI")),
 ]
 EVOL_PARAMS = list(TIER2_ZSLOPES) + ["z_gas_zs", "agn_mu_bh_zs"]
@@ -119,7 +120,10 @@ def main():
     ap.add_argument("--include-hi", action="store_true",
                     help="add the HIMF (low-z shells) and 21cm×galaxy crosses")
     ap.add_argument("--include-ssfr", action="store_true",
-                    help="add the main-sequence mean sSFR datum per cell")
+                    help="add the MS sSFR + SFR-density data per cell and the "
+                         "z-resolved [OII] LF per shell")
+    ap.add_argument("--include-ir", action="store_true",
+                    help="add the AGN infrared LF per shell")
     ap.add_argument("--no-plots", action="store_true")
     args = ap.parse_args()
 
@@ -140,7 +144,8 @@ def main():
                            n_gl=args.n_gl, split_sfq=args.split_sfq,
                            include_radio=args.include_radio,
                            include_hi=args.include_hi,
-                           include_ssfr=args.include_ssfr)
+                           include_ssfr=args.include_ssfr,
+                           include_ir=args.include_ir)
 
     fid = t2.fiducial()
     names = PARAM_NAMES

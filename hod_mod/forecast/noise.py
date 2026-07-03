@@ -164,6 +164,13 @@ class SpectroSurvey:
     f_cv0: float = 0.005         # relative cosmic variance × [V/(Gpc/h)³]^{-1/2}
     pi_max: float = 100.0        # w_p projection depth [Mpc/h]
     ssfr_err: float = 0.05       # absolute σ on the mean MS log10 sSFR per cell [dex]
+    sfrd_rel: float = 0.12       # relative σ on the cell SFR density (MD14-like)
+    foii_lim: float = 1.0e-16    # [OII] line-flux limit [erg/s/cm²] (DESI-like)
+
+    def loii_lim(self, z, h, Om):
+        """Faintest detectable L_[OII] [erg/s] at redshift z."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
+        return 4.0 * np.pi * d_l ** 2 * self.foii_lim
 
     def cv_rel(self, volume):
         """Relative cosmic-variance floor for a cell of ``volume`` (Mpc/h)³."""
@@ -184,6 +191,23 @@ class RadioSurvey:
 
     def l_lim(self, z, h, Om):
         """Faintest detectable 5 GHz νL_ν [erg/s] at redshift z."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
+        return 4.0 * np.pi * d_l ** 2 * self.nulnu_lim
+
+
+@dataclass
+class IRSurvey:
+    """WISE/SPHEREx-like all-sky infrared AGN survey.
+
+    ``nulnu_lim`` is the 6 μm νL_ν-equivalent detection threshold — the IR
+    analogue of the Athena/radio flux limits, driving the L_lim(z)
+    completeness of the AGN IR luminosity function.
+    """
+    f_sky: float = 0.65
+    nulnu_lim: float = 1.0e-14   # νL_ν(6 μm)-equivalent limit [erg/s/cm²]
+
+    def l_lim(self, z, h, Om):
+        """Faintest detectable 6 μm νL_ν [erg/s] at redshift z."""
         d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
         return 4.0 * np.pi * d_l ** 2 * self.nulnu_lim
 
