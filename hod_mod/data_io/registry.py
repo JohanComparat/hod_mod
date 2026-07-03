@@ -53,10 +53,11 @@ from pathlib import Path
 
 import pooch
 
-# Zenodo data-record DOI.  This is the version DOI of the first deposit; switch
-# to the concept DOI to always track the latest version, or override at runtime
-# with ``$HOD_MOD_DATA_DOI``.
-DEFAULT_DATA_DOI = "10.5281/zenodo.21079850"
+# Zenodo data-record DOI.  This is the version DOI of the current deposit
+# (v2: + tier-2 forecast products); switch to the concept DOI
+# (10.5281/zenodo.21078473) to always track the latest version, or override at
+# runtime with ``$HOD_MOD_DATA_DOI``.
+DEFAULT_DATA_DOI = "10.5281/zenodo.21155158"
 
 # Sentinel DOI used before any record is published; :func:`fetch` refuses to
 # download while this is the active DOI.
