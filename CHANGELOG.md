@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] — branch `feature/missing-physics`
+
+First implementation wave of the `docs/missing_physics.rst` roadmap
+(parameter vector 61 → 77, all fiducial-preserving; gates in
+`tests/test_missing_physics.py`):
+
+- **Cosmology-dependent concentration**: `ForwardModel(cm_relation="diemer15")`
+  uses Diemer & Kravtsov c(ν, n_eff) with Diemer & Joyce 2019 median
+  parameters — differentiable through σ(M, z) and the EH98 slope, so c(M)
+  finally responds to σ8/n_s/h and the beyond-ΛCDM sector.  Fixed a factor-~2
+  bug in the pre-existing `core.concentration.c_diemer15` (DK15 Eq. 9 form)
+  and the κ = 0.42 n_eff convention; values now match COLOSSUS anchors.
+- **Beyond-ΛCDM**: `w0`, `wa`, `sum_mnu` in the vector; CPL growth ODE
+  (`growth_factor` dispatcher, RK4 via `lax.scan`, <0.2% vs exact ΛCDM);
+  w0/wa threaded through all forecast distances and E(z); first-order
+  massive-ν suppression of the EH98 shape (σ8-anchored, exactly massless at
+  the 0 eV fiducial).
+- **SF/quiescent split**: `ForwardModel(sfq="sf"|"q")` — ZM16 Weibull
+  quenching on the occupations (SF + Q ≡ unsplit, exact) + the
+  `dlx_quenched` hot-gas offset targeted at the eROSITA CGM SF-vs-Q data.
+- **AGN fundamental plane**: `rlf` observable (5 GHz radio LF) from
+  (ξ_RX, ξ_RM, b_R, σ_R) on the Powell chain; identity-collapses onto the
+  hard-band XLF at (1, 0, 0, 0).
+- **HI sector**: VN18 M_HI(M_h) halo model, `himf` and `cl_gHI` observables
+  reusing the existing kernels; C_ℓ^{gHI} ∝ M_0 exactly.
+- `eps_sn` promoted (energy-closure SN coupling now free).
+
 ## [0.2.0] — 2026-07-03
 
 The **tier-2 sensitivity study**: all 61 parameters free (nothing fixed), a
