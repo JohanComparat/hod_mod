@@ -21,6 +21,26 @@ link below was resolved and checked against title and first author.
    :local:
    :depth: 1
 
+.. admonition:: Implementation status (2026-07, branch ``feature/missing-physics``)
+
+   The parameter vector grew 61 → **77** (``MISSING_PHYSICS`` block, appended
+   fiducial-preservingly).  Implemented: the **Diemer & Kravtsov c(ν, n_eff)**
+   wiring (``cm_relation="diemer15"``; the exercise exposed and fixed a factor
+   ~2 bug in the pre-existing ``core.concentration.c_diemer15`` — the DK15
+   Eq. 9 half and second exponent — now COLOSSUS-anchored), the **eps_sn**
+   promotion, the **CPL growth ODE** (``growth_factor`` dispatcher in
+   :mod:`hod_mod.core.halo_mass_function`, RK4/`lax.scan`; w0/wa also threaded
+   through every Limber distance and E(z) in the forecast), the **ν
+   suppression** of the EH98 shape (fiducial Σm_ν = 0 eV, bit-identical), the
+   **SF/quiescent split** (``sfq="sf"|"q"`` with the ZM16 Weibull fractions +
+   ``dlx_quenched``; SF+Q ≡ unsplit exactly, tested), the **fundamental-plane
+   radio LF** (``rlf`` observable; collapses exactly onto the hard-band XLF at
+   (ξ_RX, ξ_RM, b_R, σ_R) = (1,0,0,0), tested), and the **HI sector**
+   (``himf``/``cl_gHI``; C_ℓ^{gHI} ∝ M_0 exactly, tested).  Gates in
+   ``tests/test_missing_physics.py``.  Still open: the CAMB-ratio and
+   ν/HMF distillation tables, the ``Tier2Forecast`` SF/Q split-cell assembly
+   and physical noise for the new observables, SEDs, and morphology.
+
 Summary and suggested order
 ---------------------------
 
