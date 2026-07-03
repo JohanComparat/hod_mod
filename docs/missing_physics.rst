@@ -37,9 +37,27 @@ link below was resolved and checked against title and first author.
    radio LF** (``rlf`` observable; collapses exactly onto the hard-band XLF at
    (ξ_RX, ξ_RM, b_R, σ_R) = (1,0,0,0), tested), and the **HI sector**
    (``himf``/``cl_gHI``; C_ℓ^{gHI} ∝ M_0 exactly, tested).  Gates in
-   ``tests/test_missing_physics.py``.  Still open: the CAMB-ratio and
-   ν/HMF distillation tables, the ``Tier2Forecast`` SF/Q split-cell assembly
-   and physical noise for the new observables, SEDs, and morphology.
+   ``tests/test_missing_physics.py``.
+
+   **Wave 2** (same branch, vector 77 → 83): the **linearized CAMB/EH98
+   ratio table** (``forecast/pk_camb_ratio.py`` + shipped
+   ``data/pk_ratio/camb_eh98_ratio.npz``; max :math:`|\ln R_0|` = 3.8%,
+   derivative rows for h/Ω_b/Ω_m/n_s/Σm_ν; enable with
+   ``ForwardModel(pk_correction="camb_linear")``), **SN wind mass loading**
+   (``eta_w_norm``/``alpha_w``, Muratov-style η_w(V_c) coupled into the η(M)
+   gas-concentration slot, exactly the tier-2 sigmoid at η₀ = 0), the
+   **star-forming main sequence** (``ssfr`` per-cell observable with
+   norm/slope and the standard ``_zs`` evolution), the **quenched-HI deficit**
+   (``dhi_quenched``), and the **survey wiring**: ``RadioSurvey`` /
+   ``HISurvey`` noise models and ``Tier2Forecast(include_radio=True,
+   include_hi=True, include_ssfr=True)`` — the radio LF per shell with its
+   νL_ν completeness limit, a dedicated local (z ≤ 0.06, ALFALFA-like) HIMF
+   block (at Δz = 0.1 shell depths the 21 cm flux limit flags everything —
+   physical, so the HIMF is local by design), 21 cm × galaxy crosses per
+   cell, and the sSFR datum per non-quenched cell.  Still open (wave 3
+   candidates): ν/HMF emulator distillation beyond first order, the
+   continuous sSFR distribution and SFR-selected samples, multi-band
+   SEDs/CLF, morphology.
 
 Summary and suggested order
 ---------------------------

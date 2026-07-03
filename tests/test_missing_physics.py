@@ -271,6 +271,111 @@ def test_tier2_split_sfq_assembly(fid, tmp_path):
 def test_vector_and_sectors_extended():
     from hod_mod.forecast.forward_jax import PARAM_NAMES, N_PARAM, MISSING_PHYSICS
     from hod_mod.forecast.params import SECTORS
-    assert N_PARAM == 77 and len(MISSING_PHYSICS) == 16
+    assert N_PARAM == 83 and len(MISSING_PHYSICS) == 22
     flat = [n for sec in SECTORS.values() for n in sec]
     assert sorted(flat) == sorted(PARAM_NAMES)
+
+
+# ---------------------------------------------------------------- wave 2 --
+
+def test_wind_loading(model, fid):
+    """η_w0 = 0 is exactly the tier-2 sigmoid; winds puff low-mass gas most."""
+    from hod_mod.forecast.forward_jax import ForwardModel, _IDX, _RHO_CRIT0
+    import jax.numpy as jnp
+    th = model._theta_eff(fid)
+    _, eta0 = model._fb_eta(th)
+    # manual tier-2 sigmoid (no wind term)
+    eta_min = 10.0 ** float(th[_IDX["log10_eta_min"]])
+    m_eta = 10.0 ** float(th[_IDX["log10_M_eta"]])
+    beta = float(th[_IDX["beta_eta"]])
+    sig = 1.0 - (1.0 - eta_min) / (1.0 + (np.asarray(model.m) / m_eta) ** beta)
+    np.testing.assert_allclose(np.asarray(eta0), sig, rtol=1e-12)
+    # switch winds on: eta drops, more at low mass (low V_c)
+    tw = np.asarray(fid).copy()
+    tw[_IDX["eta_w_norm"]] = 0.5
+    _, eta_w = model._fb_eta(model._theta_eff(jnp.asarray(tw)))
+    ratio = np.asarray(eta_w) / np.asarray(eta0)
+    assert np.all(ratio < 1.0) and ratio[0] < ratio[-1]
+    # the coupling is live at the fiducial (∂η/∂η_w0 ≠ 0)
+    g = jax.jacfwd(lambda t: model._fb_eta(model._theta_eff(t))[1])(fid)
+    assert np.abs(np.asarray(g)[:, _IDX["eta_w_norm"]]).max() > 0
+
+
+def test_ssfr_observable(model, fid):
+    from hod_mod.forecast.forward_jax import ForwardModel, _IDX
+    v = float(model.predict(fid, ["ssfr"])["ssfr"][0])
+    norm = float(fid[_IDX["ssfr_ms_norm"]])
+    slope = float(fid[_IDX["ssfr_ms_slope"]])
+    mstar_c = model._thr + 0.25
+    np.testing.assert_allclose(v, norm + slope * (mstar_c - 10.5), rtol=1e-12)
+    # evolution slope acts through _theta_eff with the standard lever arm
+    f = lambda t: model.predict(t, ["ssfr"])["ssfr"]
+    J = np.asarray(jax.jacfwd(f)(fid))
+    np.testing.assert_allclose(J[0, _IDX["ssfr_ms_zs"]], model._x_evol,
+                               rtol=1e-12)
+
+
+def test_dhi_quenched_only_touches_quenched_hi(fid):
+    from hod_mod.forecast.forward_jax import ForwardModel, _IDX
+    kw = dict(z_eff=_Z, **_TINY)
+    for sfq, active in ((None, False), ("sf", False), ("q", True)):
+        m = ForwardModel(sfq=sfq, **kw)
+        f = lambda t: m.predict(t, ["cl_gHI"])["cl_gHI"]
+        col = np.asarray(jax.jacfwd(f)(fid))[:, _IDX["dhi_quenched"]]
+        assert (np.abs(col).max() > 0) == active, sfq
+
+
+def test_camb_ratio_correction(fid):
+    """The linearized CAMB ratio: bounded, differentiable, and it moves the
+    P(k) shape derivatives the EH98 form gets slightly wrong."""
+    from hod_mod.forecast.pk_camb_ratio import load
+    from hod_mod.forecast.forward_jax import ForwardModel, _IDX
+    tab = load()
+    assert np.abs(np.asarray(tab["lnr0"])).max() < 0.1        # EH98 is ~4% off
+    assert set(tab["names"]) == {"h", "Omega_b", "Omega_m", "n_s", "sum_mnu"}
+
+    kw = dict(z_eff=_Z, **_TINY)
+    m0 = ForwardModel(pk_correction="none", **kw)
+    mc = ForwardModel(pk_correction="camb_linear", **kw)
+    wp0 = np.asarray(m0.predict(fid, ["wp"])["wp"])
+    wpc = np.asarray(mc.predict(fid, ["wp"])["wp"])
+    assert np.all(np.isfinite(wpc))
+    dev = np.abs(wpc / wp0 - 1.0)
+    assert 0.0 < dev.max() < 0.10          # a small, nonzero shape correction
+    # the correction changes the n_s response (the derivative row is live)
+    for m, tag in ((m0, "none"), (mc, "camb")):
+        J = np.asarray(jax.jacfwd(lambda t: m.predict(t, ["wp"])["wp"])(fid))
+        assert np.all(np.isfinite(J)), tag
+    Jn = np.asarray(jax.jacfwd(lambda t: mc.predict(t, ["wp"])["wp"])(fid))
+    J0 = np.asarray(jax.jacfwd(lambda t: m0.predict(t, ["wp"])["wp"])(fid))
+    i = _IDX["n_s"]
+    assert np.abs(Jn[:, i] - J0[:, i]).max() > 0
+
+
+def test_tier2_wave2_observables(fid, tmp_path):
+    """Radio LF, HIMF, 21cm cross and sSFR enter the tier-2 assembly + noise."""
+    from hod_mod.forecast.tier2 import Tier2Forecast
+    t2 = Tier2Forecast(
+        z_edges=[0.2, 0.3], mstar_edges=[10.0, 10.4],
+        n_bands=[(0.5, 2.0)], n_shear_bins=2,
+        agn_lx_bins=[(42.0, 43.0)], agn_z_centers=(0.25,),
+        include_radio=True, include_hi=True, include_ssfr=True,
+        n_k=32, n_m=32, n_gl=12, n_z=3,
+        rp_wp=np.logspace(-1, 1.3, 4), rp_ds=np.logspace(-1, 1.2, 4),
+        ell=np.logspace(1.0, 3.0, 4), rp_wp_agn=np.logspace(0.1, 1.3, 3))
+    cell = next(b for b in t2.blocks if b.kind == "cell")
+    shell = next(b for b in t2.blocks if b.label.endswith("_shell"))
+    assert "cl_gHI" in cell.which and "ssfr" in cell.which
+    assert "rlf" in shell.which and "himf" not in shell.which
+    hi_local = next(b for b in t2.blocks if b.label == "hi_local")
+    assert hi_local.which == ("himf",) and hi_local.z_hi <= 0.1
+    fidv = t2.fiducial()
+    d0, J, meta = t2.data_and_jacobian(fidv, cache_dir=str(tmp_path),
+                                       verbose=False)
+    assert np.all(np.isfinite(d0)) and np.all(np.isfinite(J))
+    sig = t2.noise_sigma(fidv, d0, meta, verbose=False)
+    for o in ("rlf", "himf", "cl_gHI", "ssfr"):
+        s = sig[meta["obs"] == o]
+        assert s.size > 0 and np.all(s > 0), o
+        # at least part of each new observable carries finite noise
+        assert np.isfinite(s).any(), o

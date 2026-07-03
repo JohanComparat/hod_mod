@@ -102,6 +102,10 @@ PARAM_NAMES = [
     "dlx_quenched",                                       # L_X–M offset of quenched centrals [dex]
     "agn_xi_rx", "agn_xi_rm", "agn_b_r", "agn_sig_r",     # fundamental plane of BH activity
     "log10_M0_hi", "log10_Mmin_hi", "alpha_hi",           # M_HI(M_h) halo model (VN18)
+    # ---- missing-physics wave 2 ----
+    "eta_w_norm", "alpha_w",                              # SN wind mass loading (Muratov+15 form)
+    "ssfr_ms_norm", "ssfr_ms_slope", "ssfr_ms_zs",        # star-forming main sequence (Speagle+14)
+    "dhi_quenched",                                       # HI deficit of quenched centrals [dex]
 ]
 _IDX = {n: i for i, n in enumerate(PARAM_NAMES)}
 N_PARAM = len(PARAM_NAMES)
@@ -111,15 +115,18 @@ TIER2_PROMOTED = PARAM_NAMES[31:47]
 TIER2_ZSLOPES = PARAM_NAMES[47:54]
 TIER2_SPECTRAL = PARAM_NAMES[54:61]
 # Missing-physics extension (docs/missing_physics.rst): SN coupling, beyond-ΛCDM
-# cosmology, SF/quiescent quenching, the AGN fundamental plane, and the HI sector.
-MISSING_PHYSICS = PARAM_NAMES[61:77]
+# cosmology, SF/quiescent quenching, the AGN fundamental plane, the HI sector,
+# and (wave 2) SN wind loading, the star-forming main sequence and the
+# quenched-HI deficit.
+MISSING_PHYSICS = list(PARAM_NAMES[61:])
 TIER2_EXTENSION = list(PARAM_NAMES[31:])
 
 # base parameter → its ln(1+z) evolution slope (applied in ForwardModel._theta_eff)
 _Z_EVOL = {"lg_m1h": "lg_m1h_zs", "lg_m0star": "lg_m0star_zs",
            "sigma_lnmstar": "sigma_lnmstar_zs", "lx_norm": "lx_zs",
            "kt_norm": "kt_zs", "agn_log10_ferdf": "agn_log10_ferdf_zs",
-           "agn_log10_lstar": "agn_log10_lstar_zs", "agn_mu_bh": "agn_mu_bh_zs"}
+           "agn_log10_lstar": "agn_log10_lstar_zs", "agn_mu_bh": "agn_mu_bh_zs",
+           "ssfr_ms_norm": "ssfr_ms_zs"}
 # (z_gas_zs acts on log10 Z inside _gas_log10Z — the base z_gas_norm is linear)
 
 OBSERVABLES = ["wp", "ds", "cl_gX", "cl_gy", "cl_XX", "cl_kk",
@@ -378,6 +385,7 @@ class ForwardModel:
         sfq: str = None,
         loglr_rlf=None,
         logmhi_himf=None,
+        pk_correction: str = "none",
     ):
         self.z_eff = float(z_eff)
         # tier-2 z-evolution: static per-model lever arm ln[(1+z_eff)/(1+z_p)]
@@ -405,7 +413,17 @@ class ForwardModel:
         # pivot M_hi so the parameter vector is unchanged for a clean comparison).
         self.baryon_model = str(baryon_model).lower()
         self._fb_model = make_baryon_fraction(self.baryon_model)
-        self._pk = EisensteinHu98PkLinear()
+        # linear P(k): the EH98 shape, optionally corrected by the linearized
+        # CAMB ratio table (missing-physics wave 2; spectrum + first
+        # derivatives CAMB-accurate near the fiducial)
+        self.pk_correction = str(pk_correction).lower()
+        if self.pk_correction == "camb_linear":
+            from hod_mod.forecast.pk_camb_ratio import load as _load_ratio
+            self._pk = EisensteinHu98PkLinear(camb_ratio=_load_ratio())
+        elif self.pk_correction == "none":
+            self._pk = EisensteinHu98PkLinear()
+        else:
+            raise ValueError("pk_correction must be 'none' or 'camb_linear'")
         self._hmf = HaloMassFunction(self._pk.as_hmf_pk_func(), model="tinker08", Delta=200.0)
 
         self.k = jnp.logspace(-4.0, jnp.log10(200.0), n_k)
@@ -630,6 +648,19 @@ class ForwardModel:
         eta_min = 10.0 ** theta[_IDX["log10_eta_min"]]
         M_eta = 10.0 ** theta[_IDX["log10_M_eta"]]
         eta = 1.0 - (1.0 - eta_min) / (1.0 + (self.m / M_eta) ** theta[_IDX["beta_eta"]])
+        # SN wind mass loading (missing-physics wave 2, Muratov+15 form):
+        # η_w = η_0 (V_c/200 km/s)^{−α_w} additionally puffs out the low-mass
+        # hot gas, η_eff = η_sigmoid/(1 + η_w).  At the fiducial η_0 = 0 this
+        # is exactly the tier-2 sigmoid (bit-identical); α_w interpolates the
+        # momentum-driven (1) to energy-driven (2) scalings.
+        eta_w0 = theta[_IDX["eta_w_norm"]]
+        z = self.z_eff
+        ez2 = self._e2z(c, z)
+        rho_crit_com = _RHO_CRIT0 * ez2 / (1.0 + z) ** 3
+        r200 = (3.0 * self.m / (4.0 * jnp.pi * 200.0 * rho_crit_com)) ** (1.0 / 3.0)
+        v_c = jnp.sqrt(_G_KMS2 * self.m / r200)                        # [km/s]
+        eta_w = eta_w0 * (v_c / 200.0) ** (-theta[_IDX["alpha_w"]])
+        eta = eta / (1.0 + eta_w)
         return fb, eta
 
     def _fb_energy(self, theta, c):
@@ -1247,9 +1278,34 @@ class ForwardModel:
 
     def _pk_gHI(self, theta, H):
         """galaxy × HI power spectrum: the C_ℓ^{gX} machinery with the HI mass
-        (NFW-distributed, 10^10-referenced model units) as the tracer field."""
-        X = (self._mhi(theta) / 1.0e10)[None, :] * H["uk"]              # (Nk, NM)
+        (NFW-distributed, 10^10-referenced model units) as the tracer field.
+
+        In quenched mode the cross probes the HI around quenched centrals — the
+        ``dhi_quenched`` deficit rescales M_HI (0 dex fiducial; the
+        NeutralUniverseMachine phenomenology)."""
+        mhi = self._mhi(theta)
+        if self.sfq == "q":
+            mhi = mhi * 10.0 ** theta[_IDX["dhi_quenched"]]
+        X = (mhi / 1.0e10)[None, :] * H["uk"]                           # (Nk, NM)
         return self._pk_gX_of(theta, H, X, jnp.zeros_like(self.m))
+
+    # ---- star-forming main sequence (missing-physics wave 2) -----------
+    def _ssfr(self, theta):
+        r"""Mean main-sequence log10 sSFR [yr⁻¹] of THIS cell's M* sample, (1,).
+
+        Speagle+2014-style linear main sequence with the tier-2 evolution
+        mechanism (``ssfr_ms_zs`` acts on the normalisation via _theta_eff):
+
+        .. math:: \langle\log_{10}{\rm sSFR}\rangle = {\rm norm}
+                  + {\rm slope}\,(\log_{10}M_*^{\rm cell} - 10.5)
+
+        The datum per (z, M*) cell directly constrains the MS normalisation,
+        slope and evolution (COSMOS/Euclid main-sequence measurements).
+        """
+        mstar_c = (0.5 * (self._thr + self._thr_hi) if self._thr_hi is not None
+                   else self._thr + 0.25)
+        return jnp.array([theta[_IDX["ssfr_ms_norm"]]
+                          + theta[_IDX["ssfr_ms_slope"]] * (mstar_c - 10.5)])
 
     # ---- Powell AGN chain: shared kernel, occupation, emission, clustering --
     def _agn_kernel_parts(self, theta):
@@ -1479,6 +1535,8 @@ class ForwardModel:
             out["xlf"] = self._xlf(theta)
         if "rlf" in which:
             out["rlf"] = self._rlf(theta)
+        if "ssfr" in which:
+            out["ssfr"] = self._ssfr(theta)
         return out
 
     def cl_gg_fiducial(self, theta):
@@ -1502,7 +1560,7 @@ class ForwardModel:
             return self.ell
         return {"wp": self.rp_wp, "ds": self.rp_ds,
                 "xlf": self.loglx_xlf, "n_gal": jnp.array([0.0]),
-                "smf": self.logmstar_smf,
+                "smf": self.logmstar_smf, "ssfr": jnp.array([0.0]),
                 "rlf": self.loglr_rlf, "himf": self.logmhi_himf,
                 "wp_agn": jnp.asarray(np.tile(np.asarray(self.rp_wp_agn),
                                               len(self.agn_lx_bins)))}[name]
@@ -1560,7 +1618,7 @@ class ForwardModel:
             g = np.asarray(self.grid_of(name))
             if name in ("wp", "ds", "wp_agn"):
                 sel = np.where(g > float(rmin))[0]
-            elif name in ("xlf", "n_gal", "smf", "rlf", "himf"):
+            elif name in ("xlf", "n_gal", "smf", "rlf", "himf", "ssfr"):
                 sel = np.arange(g.size)            # abundance: no scale cut
             else:
                 sel = np.where(g < ell_max)[0]
