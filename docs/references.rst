@@ -908,6 +908,36 @@ all-galaxy ZM15 connection (see :doc:`missing_physics`).
    observable is compared against.
    `arXiv:1403.0007 <https://arxiv.org/abs/1403.0007>`_
 
+.. [Murphy2011] Murphy E.J. et al. 2011, ApJ 737, 67.
+   Extinction-free SFR diagnostics calibrated with 33 GHz free–free emission
+   — the L_ν(1.4 GHz)–SFR calibration behind ``l14_sfr``.
+   `arXiv:1105.4877 <https://arxiv.org/abs/1105.4877>`_
+
+.. [KennicuttEvans2012] Kennicutt R.C. & Evans N.J. 2012, ARA&A 50, 531.
+   Star formation in the Milky Way and nearby galaxies — the total-IR and
+   Hα SFR calibrations behind ``lir_sfr`` and ``lha_norm``.
+   `arXiv:1204.3552 <https://arxiv.org/abs/1204.3552>`_
+
+.. [Runnoe2012] Runnoe J.C., Brotherton M.S. & Shang Z. 2012, MNRAS 422, 478.
+   Updated quasar bolometric corrections — the 1450 Å and 4400 Å values
+   behind ``agn_bc_uv`` / ``agn_bc_opt``.
+   `arXiv:1201.5155 <https://arxiv.org/abs/1201.5155>`_
+
+.. [Wright2010] Wright E.L. et al. 2010, AJ 140, 1868.
+   The Wide-field Infrared Survey Explorer (WISE) — the 3.4/4.6/12 μm bands
+   the tier-3 IR intensity maps emulate.
+   `arXiv:1008.0031 <https://arxiv.org/abs/1008.0031>`_
+
+.. [Dore2014] Doré O. et al. 2014, arXiv e-prints.
+   Cosmology with the SPHEREx all-sky spectral survey — the near-IR
+   intensity-mapping context of the tier-3 IR maps.
+   `arXiv:1412.4872 <https://arxiv.org/abs/1412.4872>`_
+
+.. [Bacon2018] Bacon D.J. et al. (SKA Cosmology SWG) 2020, PASA 37, e007.
+   Cosmology with Phase 1 of the Square Kilometre Array (Red Book 2018) —
+   the radio continuum survey spec the tier-3 radio maps emulate.
+   `arXiv:1811.02743 <https://arxiv.org/abs/1811.02743>`_
+
 .. [Behroozi2019] Behroozi P. et al. 2019, MNRAS 488, 3143.
    UniverseMachine: empirical galaxy–halo connection with per-halo SFR
    histories — the reference empirical model for SFR-resolved occupations.

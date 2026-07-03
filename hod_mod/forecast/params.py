@@ -85,6 +85,14 @@ _FIDUCIAL_DEFAULT = {
     "loii_norm": 40.85,           # log10 L[OII]/SFR (Kennicutt-like)
     "f_loud0": 0.01, "beta_loud": 2.0, "b_jet": 41.0,
     "agn_bc_ir": -0.52,           # L_IR(6um) ≈ 0.3 L_bol
+    # --- tier 3: multi-wavelength SED calibrations (radio/IR maps, band LFs).
+    "l14_sfr": 28.20, "alpha_syn": 0.70,     # radio-FIR (Murphy+11) + synchrotron slope
+    "lir_sfr": 43.41, "bir_color": 0.0,      # L_IR/SFR (Kennicutt-Murphy) + dust color tilt
+    "ml_nir": 33.20, "ml_opt": 33.10,        # log10 nuLnu/M* (3.4um; r band, SF)
+    "dopt_q": -0.20,                         # quiescent r-band offset [dex]
+    "luv_norm": 42.65, "tau_uv_mslope": 0.0,  # UV/SFR incl. attenuation + its M* slope
+    "lha_norm": 41.27,                       # log10 L_Halpha/SFR (Kennicutt)
+    "agn_bc_uv": -0.62, "agn_bc_opt": -0.72,  # AGN bolometric corrections (1450A, 4400A)
 }
 
 # Planck 2018 1σ priors (planck_prior.PLANCK18_SIGMAS) on the free cosmo params.
@@ -141,6 +149,11 @@ BROAD_PRIOR_SIGMA = {
     "sigma_ms": 0.15, "dssfr_q": 0.5, "loii_norm": 0.3,
     "f_loud0": 0.05, "beta_loud": 1.5, "b_jet": 2.0,
     "agn_bc_ir": 0.3,
+    # tier 3
+    "l14_sfr": 0.2, "alpha_syn": 0.15, "lir_sfr": 0.2, "bir_color": 0.5,
+    "ml_nir": 0.3, "ml_opt": 0.3, "dopt_q": 0.3,
+    "luv_norm": 0.3, "tau_uv_mslope": 0.3, "lha_norm": 0.2,
+    "agn_bc_uv": 0.3, "agn_bc_opt": 0.3,
 }
 
 PARAM_LATEX = {
@@ -199,6 +212,15 @@ PARAM_LATEX = {
     "loii_norm": r"$\log_{10}L_{\rm [OII]}/{\rm SFR}$",
     "f_loud0": r"$f_{\rm loud,0}$", "beta_loud": r"$\beta_{\rm loud}$",
     "b_jet": r"$b_{\rm jet}$", "agn_bc_ir": r"${\rm BC}_{\rm IR}$",
+    # tier 3
+    "l14_sfr": r"$\log_{10}L_{1.4}/{\rm SFR}$", "alpha_syn": r"$\alpha_{\rm syn}$",
+    "lir_sfr": r"$\log_{10}L_{\rm IR}/{\rm SFR}$", "bir_color": r"$b_{\rm IR}$",
+    "ml_nir": r"$\Upsilon_{\rm NIR}$", "ml_opt": r"$\Upsilon_{\rm opt}$",
+    "dopt_q": r"$\Delta_{\rm opt}^{\rm Q}$",
+    "luv_norm": r"$\log_{10}L_{\rm UV}/{\rm SFR}$",
+    "tau_uv_mslope": r"$\partial_M\tau_{\rm UV}$",
+    "lha_norm": r"$\log_{10}L_{{\rm H}\alpha}/{\rm SFR}$",
+    "agn_bc_uv": r"${\rm BC}_{\rm UV}$", "agn_bc_opt": r"${\rm BC}_{\rm opt}$",
 }
 
 # Parameter sectors for the tier-2 cosmology-vs-astrophysics decomposition
@@ -222,12 +244,17 @@ SECTORS = {
             "agn_sig_mstar", "agn_log10_ferdf_zs", "agn_log10_lstar_zs",
             "agn_gamma", "agn_fabs", "agn_mu_bh_zs",
             "agn_xi_rx", "agn_xi_rm", "agn_b_r", "agn_sig_r",
-            "f_loud0", "beta_loud", "b_jet", "agn_bc_ir"],
+            "f_loud0", "beta_loud", "b_jet", "agn_bc_ir",
+            "agn_bc_uv", "agn_bc_opt"],
     # SF/quiescent split (ZM16 halo quenching, the quenched-CGM offset, and
     # the star-forming main sequence)
     "sfq": ["log10_Mq_cen", "mu_q_cen", "log10_Mq_sat", "mu_q_sat",
             "dlx_quenched", "ssfr_ms_norm", "ssfr_ms_slope", "ssfr_ms_zs",
-            "sigma_ms", "dssfr_q", "loii_norm"],
+            "sigma_ms", "dssfr_q", "loii_norm",
+            # tier 3: SED calibrations tied to SFR / M* (radio, IR, UV, opt, Halpha)
+            "l14_sfr", "alpha_syn", "lir_sfr", "bir_color",
+            "ml_nir", "ml_opt", "dopt_q",
+            "luv_norm", "tau_uv_mslope", "lha_norm"],
     # cold gas / neutral hydrogen (VN18 halo model + quenched deficit)
     "coldgas": ["log10_M0_hi", "log10_Mmin_hi", "alpha_hi", "dhi_quenched"],
     # retired: with agn_emission="powell" the duty cycle leaves the emissivity;
