@@ -98,6 +98,12 @@ _FIDUCIAL_DEFAULT = {
     "log10_M_morph": 12.5, "beta_morph": 0.8,
     "f_morph_sat": 0.2,
     "mbh_bt_slope": 0.0,
+    # --- tier 4: morphology observables (joint E/Q, sizes, IA).
+    "rho_morph_q": 0.0,           # 0 = the wave-4 independence, exact
+    "log10_f_size": -1.824,       # log10(R_e/R_200c), Kravtsov 2013 0.015
+    "dsize_early": -0.20,         # early-type size offset [dex] (van der Wel)
+    "f_size_zs": 0.0,
+    "a_ia": 2.0,                  # NLA amplitude of early types
 }
 
 # Planck 2018 1σ priors (planck_prior.PLANCK18_SIGMAS) on the free cosmo params.
@@ -162,6 +168,9 @@ BROAD_PRIOR_SIGMA = {
     # wave 4
     "log10_M_morph": 1.0, "beta_morph": 0.5,
     "f_morph_sat": 0.3, "mbh_bt_slope": 0.5,
+    # tier 4
+    "rho_morph_q": 0.3, "log10_f_size": 0.3, "dsize_early": 0.3,
+    "f_size_zs": 2.0, "a_ia": 1.0,
 }
 
 PARAM_LATEX = {
@@ -234,6 +243,12 @@ PARAM_LATEX = {
     "beta_morph": r"$\beta_{\rm morph}$",
     "f_morph_sat": r"$f_{\rm morph}^{\rm sat}$",
     "mbh_bt_slope": r"$\partial_{B/T}M_{\rm BH}$",
+    # tier 4
+    "rho_morph_q": r"$\rho_{\rm morph,Q}$",
+    "log10_f_size": r"$\log_{10}R_e/R_{200}$",
+    "dsize_early": r"$\Delta_{\rm size}^{\rm E}$",
+    "f_size_zs": r"$\partial_z R_e/R_{200}$",
+    "a_ia": r"$A_{\rm IA}$",
 }
 
 # Parameter sectors for the tier-2 cosmology-vs-astrophysics decomposition
@@ -272,7 +287,10 @@ SECTORS = {
     "coldgas": ["log10_M0_hi", "log10_Mmin_hi", "alpha_hi", "dhi_quenched"],
     # galaxy morphology (wave 4): early-type Weibull + the BH-bulge link
     "morphology": ["log10_M_morph", "beta_morph", "f_morph_sat",
-                   "mbh_bt_slope"],
+                   "mbh_bt_slope",
+                   # tier 4: joint E/Q correlation, sizes, IA
+                   "rho_morph_q", "log10_f_size", "dsize_early",
+                   "f_size_zs", "a_ia"],
     # retired: with agn_emission="powell" the duty cycle leaves the emissivity;
     # its only remaining consumer is the (off-by-default) energy-closure mode.
     "retired": ["log10DC"],

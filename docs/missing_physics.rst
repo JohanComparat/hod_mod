@@ -417,13 +417,16 @@ Galaxy morphology
 Where the model stands
 ~~~~~~~~~~~~~~~~~~~~~~
 
-**Implemented (wave 4)** — :mod:`hod_mod.connection.morphology` provides the
-conditional early-type fraction below; ``ForwardModel(morph="early"|"late")``
-splits any sample, the per-cell ``f_early`` observable enters the tier
-forecasts (``--include-morph``), and ``mbh_bt_slope`` couples the bulge
-proxy into the Powell chain.  See
-:doc:`missing_physics_implementation` (wave 4).  The assembly-bias hook
-(item 3 below) remains open.
+**Implemented (wave 4 + tier 4)** — :mod:`hod_mod.connection.morphology`
+provides the conditional early-type fraction below;
+``ForwardModel(morph="early"|"late")`` splits any sample, the per-cell
+``f_early`` observable enters the tier forecasts (``--include-morph``), and
+``mbh_bt_slope`` couples the bulge proxy into the Powell chain.  The tier-4
+extension (:doc:`tier4_forecast`) adds the joint E/Q census
+(``rho_morph_q``), Kravtsov sizes, the morphology-carried NLA intrinsic
+alignments, the AGN-host early fraction and the Mandelbaum-style
+morphology-split w_p/ΔΣ blocks.  The assembly-bias hook (item 3 below)
+remains open.
 
 Proposed implementation
 ~~~~~~~~~~~~~~~~~~~~~~~
