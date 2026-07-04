@@ -258,3 +258,61 @@ def test_tier4_parallel_equals_serial():
                        env=dict(os.environ, JAX_PLATFORMS="cpu"))
     assert r.returncode == 0, r.stdout + r.stderr
     assert "T4 PARALLEL==SERIAL OK" in r.stdout
+
+
+# ------------------------------------------------------ coverage gaps --
+
+def test_wgp_noise_unit():
+    """wgp_noise: shape, positivity, source-density scaling, CV floor."""
+    from hod_mod.forecast import noise
+    rp = np.logspace(-1, 1.2, 6)
+    wgp = 0.05 * (rp / 1.0) ** -0.8
+    sh = noise.ShearSurvey()
+    sp = noise.SpectroSurvey()
+    sig = noise.wgp_noise(rp, wgp, 0.4, 1e-3, 1e8, 0.6736, 0.31, sh, sp)
+    assert sig.shape == rp.shape and np.all(np.isfinite(sig)) and np.all(sig > 0)
+    # doubling the source density lowers the shape-noise term
+    sh2 = noise.ShearSurvey(n_eff=60.0)
+    sig2 = noise.wgp_noise(rp, wgp, 0.4, 1e-3, 1e8, 0.6736, 0.31, sh2, sp)
+    assert np.all(sig2 < sig)
+    # a huge signal activates the cosmic-variance floor
+    sig_big = noise.wgp_noise(rp, 1e4 * wgp, 0.4, 1e-3, 1e8, 0.6736, 0.31,
+                              sh, sp)
+    assert np.all(sig_big >= sp.cv_rel(1e8) * 1e4 * wgp * 0.999)
+
+
+def test_driver_group_mask():
+    """The __kind__ sentinel selects morph_cell rows; named groups exclude
+    them (no double counting in the cumulative attribution)."""
+    from hod_mod.scripts.forecasts.run_tier4_forecast import _group_mask
+    meta = {"obs": np.array(["wp", "wp", "size", "wgp"]),
+            "kind": np.array(["cell", "morph_cell", "cell", "cell"])}
+    m_named = _group_mask(meta, ("wp",))
+    np.testing.assert_array_equal(m_named, [True, False, False, False])
+    m_kind = _group_mask(meta, ("__kind__morph_cell",))
+    np.testing.assert_array_equal(m_kind, [False, True, False, False])
+    m_both = _group_mask(meta, ("size", "__kind__morph_cell"))
+    np.testing.assert_array_equal(m_both, [False, True, True, False])
+
+
+def test_tier4_block_composition():
+    """Observable placement rules, ctor-only (no Jacobians): f_early_q on
+    ONE variant per (z, M*) cell; size/wgp on every cell; f_early_agn on
+    main shells but not hi_local; morph_cell count follows the wide-tier
+    completeness gate."""
+    t4 = _tiny_tier4(z_edges=[0.2, 0.4, 0.6], mstar_edges=[9.4, 9.6, 10.6])
+    cells = [b for b in t4.blocks if b.kind == "cell"]
+    n_zm = len({(b.z_lo, b.m_lo) for b in cells})
+    n_feq = sum(1 for b in cells if "f_early_q" in b.which)
+    assert n_feq == n_zm                       # one copy per (z, M*) cell
+    assert all("size" in b.which and "wgp" in b.which and
+               "f_early" in b.which for b in cells)
+    shells = [b for b in t4.blocks if b.kind == "shell"]
+    for b in shells:
+        assert ("f_early_agn" in b.which) == (b.label != "hi_local")
+    # wide-tier gate: z_hi=0.4 -> lim 9.4 (both bins pass); z_hi=0.6 ->
+    # lim 9.6 (only the 9.6 bin passes) => (2+1) bins x 2 morphs = 6
+    mc = [b for b in t4.blocks if b.kind == "morph_cell"]
+    assert len(mc) == 6
+    assert all(set(b.which) == {"wp", "ds", "n_gal"} for b in mc)
+    assert all(b.spectro is t4.spectro for b in mc)
