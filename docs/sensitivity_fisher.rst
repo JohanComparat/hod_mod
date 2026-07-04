@@ -684,9 +684,11 @@ Parameters that could be freed
 .. admonition:: Now implemented — the tier-2 study
 
    The 16 promotions below, plus redshift-evolution slopes and an X-ray
-   spectral sector, are now in the vector (61 parameters) and freed by the
-   :doc:`tier-2 forecast <tier2_forecast>`; the tier-1 scripts pin them to
-   their fiducials by default (``--free-tier2`` to release).
+   spectral sector, are now in the vector and freed by the
+   :doc:`tier-2 forecast <tier2_forecast>` (61 parameters in the original
+   design; 90 with the :doc:`missing-physics extension <missing_physics>`);
+   the tier-1 scripts pin the extension to its fiducials by default
+   (``--free-tier2`` to release).
 
 Beyond the 31 in the vector, about **21 more parameters** could be freed: **16**
 currently-fixed nuisance shape parameters the machinery already supports (only a
@@ -764,7 +766,10 @@ shear×\ :math:`\kappa_{\rm CMB}` :math:`C_\ell^{\kappa\kappa_c}`); multi-bin
 tomography is available as :class:`~hod_mod.forecast.tomography.TomographicForecast`
 (see the status box below).  What follows is the menu of observables the **same
 differentiable pipeline** could *still* predict — i.e. the ones not yet in the
-vector — grouped by how much new machinery each needs.
+vector — grouped by how much new machinery each needs.  The published
+measurements each one would be fit against — and which parts of the model the
+*existing* data can already constrain — are compiled on
+:doc:`sensitivity_benchmark`.
 
 *Immediately available from quantities the model already computes:*
 

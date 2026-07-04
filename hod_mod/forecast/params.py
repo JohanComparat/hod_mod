@@ -24,6 +24,7 @@ from hod_mod.forecast.forward_jax import (
     TIER2_PROMOTED,
     TIER2_ZSLOPES,
     TIER2_EXTENSION,
+    TIER3_EXTENSION,
 )
 
 # --- hard-coded fallbacks (values read from the MAP JSONs, see module docstring)
