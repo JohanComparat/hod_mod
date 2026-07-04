@@ -20,7 +20,7 @@ every tier-1/2 observable are bit-identical (the append-only house rule).
 Reproduce with::
 
     JAX_PLATFORMS=cpu python -m hod_mod.scripts.forecasts.run_tier3_forecast \
-        --jobs 8
+        --jobs 6
     # fast end-to-end check (2x2 cells, tiny grids, ~4 min):
     JAX_PLATFORMS=cpu python -m hod_mod.scripts.forecasts.run_tier3_forecast --smoke
 

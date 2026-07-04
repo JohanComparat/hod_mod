@@ -167,7 +167,9 @@ def main():
     print(f"[noise] median rel err = {np.median(rel[finite]):.3g}; "
           f"{np.sum(~finite)} rows at sigma=inf (completeness)")
 
-    fix = () if args.free_log10dc else ("log10DC",)
+    # pin the tier-3 additions so this study keeps its documented 90-parameter
+    # meaning (the 102-vector study is run_tier3_forecast)
+    fix = (() if args.free_log10dc else ("log10DC",)) + tuple(params.TIER3_EXTENSION)
     prior = params.regularizing_prior(fix=fix)
     scale = params.regularizing_prior()          # conditioning scale (finite)
 
@@ -217,7 +219,8 @@ def main():
     rm0 = args.rmin[0]
     r0 = results[rm0]
     lines = [f"TIER-2 FORECAST SUMMARY ({tag})",
-             f"params={len(names)}  rows={d0.size}  cells={n_cells}  "
+             f"params={len(names) - len(fix)} free ({len(fix)} pinned)  "
+             f"rows={d0.size}  cells={n_cells}  "
              f"bands={len(t2.bands)}  shear_bins={t2.n_shear_bins}", ""]
     lines.append(f"--- marginalized 1-sigma at rmin={rm0} Mpc/h "
                  f"(vs cosmo-pinned for astro; vs astro-pinned for cosmo) ---")

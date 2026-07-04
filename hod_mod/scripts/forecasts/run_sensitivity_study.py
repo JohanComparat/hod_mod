@@ -66,9 +66,9 @@ def main():
     fid = params.fiducial_vector()
     # Weakly-informative regularizing prior (bounds flat nuisance directions →
     # well-defined marginalised errors); tight Planck prior on Ω_m, σ8 optional.
-    # The tier-2 extension parameters are pinned by default so this tier-1 study
-    # keeps its published fixed-nuisance meaning (see run_tier2_forecast).
-    fix = () if args.free_tier2 else tuple(params.TIER2_EXTENSION)
+    # The tier-2/3 extension parameters are pinned by default so this tier-1
+    # study keeps its published fixed-nuisance meaning (see run_tier2_forecast).
+    fix = () if args.free_tier2 else tuple(params.TIER2_EXTENSION) + tuple(params.TIER3_EXTENSION)
     prior = params.regularizing_prior(add_planck=args.add_planck_prior, fix=fix)
 
     print(f"[setup] {len(names)} parameters, observables={args.observables}, z_eff={args.z_eff}")

@@ -1,5 +1,5 @@
-Tier-2 forecast: 61 parameters, nothing fixed
-=============================================
+Tier-2 forecast: nothing fixed (90 parameters)
+==============================================
 
 The :doc:`tier-1 studies <stage4_forecast>` ask what a Stage-IV survey
 combination measures when the model keeps its historically fixed nuisance
@@ -12,20 +12,27 @@ Every parameter the forward model contains is free — the 31-entry tier-1
 vector, the 16 formerly hard-coded nuisance shapes that
 :doc:`sensitivity_fisher` flagged as "parameters that could be freed", 7
 redshift-evolution slopes, and 7 X-ray spectral parameters enabled by energy
-bands: **61 in total**.  The only pinned entry is the *retired*
-``log10DC`` duty cycle: with the Powell AGN chain providing the point-source
-emission (``agn_emission="powell"``), the duty cycle leaves the emissivity
-entirely and its only remaining consumer is the optional energy-closure mode.
+bands: **61 in the original tier-2 design**.  The
+:doc:`missing-physics extension <missing_physics>` has since appended 29 more
+(the CPL dark-energy pair :math:`w_0, w_a` and :math:`\sum m_\nu`; the
+star-forming/quenched split and continuous sSFR sector; the cold-gas/HI
+sector; SN/wind energetics; and the radio-loud, X-ray–radio and infrared AGN
+channels), so the production run frees **90 parameters**.  The only pinned
+entry is the *retired* ``log10DC`` duty cycle: with the Powell AGN chain
+providing the point-source emission (``agn_emission="powell"``), the duty
+cycle leaves the emissivity entirely and its only remaining consumer is the
+optional energy-closure mode.
 
 Reproduce with::
 
     JAX_PLATFORMS=cpu python -m hod_mod.scripts.forecasts.run_tier2_forecast \
-        --rmin 0.1 0.5 2.5 --n-bands 6
+        --rmin 0.1 0.5 2.5 --n-bands 6 \
+        --split-sfq --include-radio --include-hi --include-ssfr --include-ir
     # fast end-to-end check (2x2 cells, tiny grids, ~2 min):
     JAX_PLATFORMS=cpu python -m hod_mod.scripts.forecasts.run_tier2_forecast --smoke
 
-The 61-parameter vector
------------------------
+The parameter vector (61 → 90)
+------------------------------
 
 The vector grows append-only from the tier-1 layout (indices 0–30 unchanged),
 so every tier-1 script keeps working — they pin the extension
@@ -55,6 +62,16 @@ default and grow a ``--free-tier2`` flag.
   slopes; fiducial the DPM :math:`Z(0.3R_{200})=0.3\,Z_\odot`), ``agn_gamma``
   (photon index, fiducial 1.8) and ``agn_fabs`` (obscured fraction at
   :math:`N_H=10^{22}` cm\ :math:`^{-2}`).
+* **Missing-physics additions (29).**  Documented on the
+  :doc:`missing_physics` page: extended cosmology (``w0, wa, sum_mnu`` via the
+  CPL growth ODE), the SF/quenched split + continuous sSFR + [OII] sector
+  (``log10_Mq_cen, mu_q_cen, log10_Mq_sat, mu_q_sat, dlx_quenched,
+  ssfr_ms_norm, ssfr_ms_slope, ssfr_ms_zs, dssfr_q, sigma_ms, loii_norm``),
+  the cold-gas sector (``log10_M0_hi, log10_Mmin_hi, alpha_hi,
+  dhi_quenched``), SN/wind energetics (``eps_sn, eta_w_norm, alpha_w``), and
+  the AGN radio/IR channels (``agn_xi_rx, agn_xi_rm, agn_b_r, agn_sig_r,
+  f_loud0, beta_loud, b_jet, agn_bc_ir``).
+
 * **Not freed, deliberately.**  The bolometric correction (exactly degenerate
   with ``agn_mu_bh`` — both shift the L_X zero point), ``f_b_min`` (a
   test-reserved limiting parameter), the radial metallicity shape (DPM-fixed;
@@ -70,10 +87,15 @@ M_* \le 11.6` — **80 cells**.  A bin sample is the exact difference of two
 ZM15 threshold occupations, :math:`N^{\rm bin} = N(>M_{*,\rm lo}) -
 N(>M_{*,\rm hi})`, each satellite term with its own threshold-derived cutoff
 masses; the binned count density *is* the stellar-mass-function datum, so
-``smf`` is not a separate observable.  Per cell the forecast predicts
-``(wp, ds, cl_gX × bands, cl_gy, cl_gkCMB, n_gal)``; per shell (M*-independent)
-the soft-band AGN XLF and the band X-ray autos ``cl_XX``; globally the
-tomographic shear block; plus the AGN clustering samples.
+``smf`` is not a separate observable.  In the production run every cell is
+further split into a star-forming and a quiescent sample (``--split-sfq``) —
+**160 samples** over the 80-cell grid.  Per cell the forecast predicts
+``(wp, ds, cl_gX × bands, cl_gy, cl_gkCMB, n_gal)`` plus the main-sequence
+sSFR and SFR-density data (``--include-ssfr``); per shell (M*-independent)
+the soft-band AGN XLF, the band X-ray autos ``cl_XX``, and the radio,
+[OII] and AGN-infrared luminosity functions (``--include-radio/-ssfr/-ir``);
+the HI mass function and 21cm×galaxy crosses at low z (``--include-hi``);
+globally the tomographic shear block; plus the AGN clustering samples.
 
 .. figure:: _images/tier2_forecast__cell_grid.png
    :width: 98%
@@ -110,12 +132,16 @@ three independent handles:
   measures the width :math:`\sigma_{lm}` of the L_X–halo relation (an
   abundance-vs-bias split the XLF alone cannot do).  *Honest finding of the
   production run:* because ``agn_rho``, ``agn_sig_mstar`` and ``agn_sig_bh``
-  enter the kernel **only** through :math:`\sigma_{lm} = \sqrt{\alpha_{\rm
-  BH}^2\sigma_{M_*}^2(1-\rho) + \sigma_{\rm BH}^2}`, the combination is pinned
-  but the three parameters remain internally degenerate — ``agn_rho`` stays
-  prior-bound (σ = 0.49 vs prior 0.5) and forms the two flattest AGN
-  directions.  Breaking it needs an observable outside this kernel (e.g. the
-  M_BH census, or halo-mass-resolved AGN fractions);
+  enter this kernel **only** through :math:`\sigma_{lm} = \sqrt{\alpha_{\rm
+  BH}^2\sigma_{M_*}^2(1-\rho) + \sigma_{\rm BH}^2}`, the X-ray probes alone
+  leave the three internally degenerate (in the original 61-parameter run
+  ``agn_rho`` stayed prior-bound, σ = 0.49 vs prior 0.5).  The 90-parameter
+  production run adds observables outside the kernel — the X-ray–radio
+  correlation ``agn_xi_rx`` sector and the AGN infrared LF — which shrink
+  the individual σ's dramatically (``agn_rho``: σ = 6.6×10⁻³), yet the
+  *pairwise* correlations of the triple remain ±1.000: the flat direction is
+  narrowed, not opened.  A direct M_BH census or halo-mass-resolved AGN
+  fractions would still be the clean way to break it;
 * the **point-source term** in every band ``cl_gX``/``cl_XX``, tied to the
   same parameters (the tier-1 :math:`L\propto M` surrogate is retired together
   with ``log10DC``).
@@ -231,7 +257,7 @@ Results: cosmology vs astrophysics
 ----------------------------------
 
 The headline deliverable is the decomposition.  For every scale cut the driver
-reports (i) the cosmology block marginalized over all 55 astrophysical
+reports (i) the cosmology block marginalized over all 81 astrophysical
 parameters vs the same data with astrophysics pinned — the *cost of honesty*;
 (ii) each astrophysics sector marginalized vs cosmology externally pinned —
 what the data teach about galaxies, gas and black holes independent of the
@@ -239,45 +265,57 @@ cosmological application; and (iii) the information gained per sector in bits,
 :math:`\tfrac12\log_2\det C_{\rm prior}/\det C_{\rm post}`.
 
 Headline numbers of the production run (6 bands, :math:`R_{\min}=0.1` Mpc/h,
-10,411 data rows, all 61 parameters free):
+22,539 data rows, all 90 parameters free):
 
 * **Cosmology is cheap to keep honest.**  :math:`\sigma(\Omega_m) =
-  2.9\times10^{-4}` (0.09%), :math:`\sigma(\sigma_8) = 4.4\times10^{-4}`
-  (0.05%), :math:`\sigma(S_8) = 2.3\times10^{-4}` — only factors 2.2 / 2.7 /
-  1.8 above the astrophysics-pinned limit.  The optimistic data scenario pays
+  1.8\times10^{-4}` (0.06%), :math:`\sigma(\sigma_8) = 2.9\times10^{-4}`
+  (0.04%), :math:`\sigma(S_8) = 1.8\times10^{-4}` — only factors 2.3 / 2.4 /
+  1.4 above the astrophysics-pinned limit.  The optimistic data scenario pays
   for full marginalization: the cumulative build-up gives
-  :math:`\sigma(\Omega_m)` = 4.6 → 3.5 → 2.9 :math:`\times10^{-4}` for the
-  galaxy grid → +lensing → +X-ray/tSZ; the AGN probes add little *to
-  cosmology* (their value is the AGN sector itself).
-* **Astrophysics dominates the information budget**: 165 bits in the SHMR
-  sector, 109 in the gas, 81 in the AGN, versus 28 in cosmology.  Redshift
-  evolution — inaccessible to tier-1 — is measured at
-  :math:`\sigma(\partial_z \lg M_1) = 3.3\times10^{-3}` per :math:`\ln(1+z)`,
-  and the departure from self-similar L_X evolution at
-  :math:`\sigma(\rm lx\_zs) = 7\times10^{-3}` dex.
+  :math:`\sigma(\Omega_m)` = 3.1 → 2.7 → 1.9 :math:`\times10^{-4}` for the
+  galaxy grid → +lensing → +X-ray/tSZ; the AGN probes and the new radio / IR /
+  HI legs add little *to cosmology* (their value is the astrophysical sectors
+  themselves).  The extended-cosmology block is measured alongside:
+  :math:`\sigma(w_0) = 3.2\times10^{-3}`, :math:`\sigma(w_a) = 1.4\times10^{-2}`,
+  :math:`\sigma(\sum m_\nu) = 3.2\times10^{-5}` eV (growth-only, EH98 shape —
+  see the caveats).
+* **Astrophysics dominates the information budget**: 178 bits in the SHMR
+  sector, 153 in the gas, 149 in the SF/quenched sector, 127 in the baryon
+  sector, 35 in the cold-gas sector, versus 71 in cosmology (the AGN-sector
+  determinant is singular — the :math:`\sigma_{lm}` triple below — so its
+  bits are not well-defined).  Redshift evolution — inaccessible to tier-1 —
+  is measured at :math:`\sigma(\partial_z \lg M_1) = 1.4\times10^{-3}` per
+  :math:`\ln(1+z)`, and the departure from self-similar L_X evolution at
+  :math:`\sigma(\rm lx\_zs) = 5.4\times10^{-3}` dex.
 * **The energy bands work as spectroscopy**: :math:`\sigma(\Gamma_{\rm AGN}) =
-  5.0\times10^{-4}`, :math:`\sigma(f_{\rm abs}) = 5.6\times10^{-4}` (their
-  correlation drops from +1.000 with one broad band to +0.93 with six),
-  :math:`\sigma(\Gamma_T) = 0.041` for the temperature-profile tilt, and the
-  ICM metallicity is recovered to :math:`\sigma(Z) = 0.13\,Z_\odot` with its
-  mass slope to 0.43 dex/dex — its *redshift* slope stays prior-dominated.
-  The 1-band control run (``--n-bands 1``) makes the point sharply: without
-  band ratios :math:`\Gamma_{\rm AGN}` and :math:`f_{\rm abs}` sit at their
-  priors (σ ≈ 0.25, a factor ~500 worse), the metallicity carries **zero**
-  information (σ = prior), and :math:`kT^{\rm norm}` collapses to a flat
-  direction — the temperature scaling is measured *through* the band ratios.
-* **What stays degenerate** even with everything combined: the A10 pressure
-  shape triple (:math:`c_{500}\times\beta_{P,\rm out}` at −0.996), the AGN
-  evolution block (:math:`\partial_z\lambda_*\times\partial_z\mu_{\rm BH}` at
-  −0.996), and the :math:`\sigma_{lm}` internal directions discussed above.
+  3.8\times10^{-4}`, :math:`\sigma(f_{\rm abs}) = 4.2\times10^{-4}` (their
+  correlation drops from +1.000 with one broad band to +0.94 with six),
+  :math:`\sigma(\Gamma_T) = 0.032` for the temperature-profile tilt, and the
+  ICM metallicity is recovered to :math:`\sigma(Z) = 0.09\,Z_\odot` with its
+  mass slope to 0.023 dex/dex and its *redshift* slope to 0.16 dex per
+  :math:`\ln(1+z)` — though the three metallicity parameters remain almost
+  perfectly internally correlated (±1.000).  The 1-band control run
+  (``--n-bands 1``, kept in the original 61-parameter configuration) makes
+  the point sharply: without band ratios :math:`\Gamma_{\rm AGN}` and
+  :math:`f_{\rm abs}` sit at their priors (σ ≈ 0.25, a factor ~500 worse),
+  the metallicity carries **zero** information (σ = prior), and
+  :math:`kT^{\rm norm}` collapses to a flat direction — the temperature
+  scaling is measured *through* the band ratios.
+* **What stays degenerate** even with everything combined: the
+  :math:`\sigma_{lm}` triple (``agn_sig_bh × agn_rho × agn_sig_mstar`` at
+  ±1.000), the ICM-metallicity triple (norm × mass-slope × z-slope at
+  ±1.000), the A10 pressure shape (:math:`c_{500}\times\beta_{P,\rm out}` at
+  −0.998), the two HI break masses (+0.996), and the sSFR↔[OII]
+  normalisations (−0.992).
 * **Audits**: pinning any sector never loosens any σ; adding rows never
   loosens any σ; a reference cell recomputed at (n_k, n_m, n_gl) = (256, 256,
-  96) shifts no σ by more than 2.9% (median 0.0%).
+  96) shifts no σ by more than 2.9% (median 0.0%; audit of the 61-parameter
+  configuration).
 
 .. figure:: _images/tier2_forecast__cosmo_constraints.png
    :width: 70%
 
-   :math:`\Omega_m`–:math:`\sigma_8` with all 61 parameters free vs
+   :math:`\Omega_m`–:math:`\sigma_8` with all 90 parameters free vs
    astrophysics pinned.
 
 .. figure:: _images/tier2_forecast__astro_sectors.png
@@ -297,7 +335,7 @@ Headline numbers of the production run (6 bands, :math:`R_{\min}=0.1` Mpc/h,
    :width: 85%
 
    Cumulative probe build-up: galaxy grid → +shear tomography → +X-ray
-   bands/tSZ → +XLF(z) → +AGN clustering.
+   bands/tSZ → +XLF(z) → +AGN clustering → +radio LF → +IR AGN → +HI.
 
 .. figure:: _images/tier2_forecast__degeneracies.png
    :width: 85%
@@ -314,9 +352,12 @@ Caveats
 * **Evolution-model rigidity.**  One :math:`\ln(1+z)` slope per parameter over
   :math:`0<z<1` can overstate the evolution constraints; quadratic slopes are
   a drop-in extension.
-* **EH98 cosmology.**  No massive neutrinos, :math:`w=-1`; the extended-
-  cosmology targets need a differentiable :math:`P(k)` upgrade
-  (:doc:`sensitivity_fisher`).
+* **EH98 shape, growth-only extensions.**  :math:`w_0, w_a, \sum m_\nu` are
+  free (missing-physics extension) but enter through the CPL growth ODE only:
+  the :math:`P(k)` *shape* is still ΛCDM EH98, with no neutrino free-streaming
+  suppression — so :math:`\sigma(\sum m_\nu)` here reflects growth information
+  alone and needs a differentiable :math:`P(k)` upgrade to be taken at face
+  value (:doc:`sensitivity_fisher`).
 * **Tomographic-shear covariance** is Knox-diagonal per spectrum; the full
   Gaussian cross-covariance among the 15 pairs is out of scope.
 * **Fixed radial metallicity shape** (DPM) and the static NH transmission
