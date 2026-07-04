@@ -142,9 +142,67 @@ Production configuration
 
 The tier-4 run is THE morphology-enabled production (the 102-parameter
 tier-3 run is its baseline): the tier-3 block set (fresh cache — the vector
-grew) plus ~150 light morph-split blocks and the per-cell/shell morphology
-rows; 111 parameters, ``--jobs 6`` batched pools.  Results are folded in
-here when the run completes, with three headline questions: the morphology
-sector's information content, σ(``mbh_bt_slope``) from the AGN-host data,
-and how much the IA self-calibration protects (or costs) the shear
-cosmology.
+grew) plus the morph-split blocks and the per-cell/shell morphology rows;
+111 parameters, ``--jobs 6`` batched pools.
+
+Results (2026-07-04 run)
+------------------------
+
+396 blocks, 65 431 rows (260 SF/Q cells + **104** morph-split blocks — the
+wide-tier completeness gate trims the naive 156: at z_hi = 1.2 imaging
+morphology only survives above M* ≈ 10^{10.2}).  At
+:math:`r_\mathrm{min} = 0.1\,h^{-1}` Mpc, all 111 free:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 20 22 14
+
+   * - Parameter
+     - All 111 free
+     - Astrophysics pinned
+     - Degradation
+   * - :math:`\Omega_\mathrm{m}`
+     - :math:`4.89\times10^{-5}`
+     - :math:`3.33\times10^{-5}`
+     - ×1.5
+   * - :math:`\sigma_8`
+     - :math:`7.23\times10^{-5}`
+     - :math:`5.25\times10^{-5}`
+     - ×1.4
+   * - :math:`w_0`
+     - :math:`7.23\times10^{-4}`
+     - :math:`4.58\times10^{-4}`
+     - ×1.6
+   * - :math:`w_a`
+     - :math:`3.35\times10^{-3}`
+     - :math:`2.10\times10^{-3}`
+     - ×1.6
+
+Answers to the three headline questions:
+
+* **The morphology sector is fully measured** (84 bits of information; no
+  prior-bound directions): the Weibull transition at the sub-permille level
+  (σ(``log10_M_morph``) = 5.4×10⁻⁴, σ(``beta_morph``) = 7.2×10⁻⁴), the
+  satellite boost and joint E∩Q correlation at a few ×10⁻³
+  (σ(``rho_morph_q``) = 3.0×10⁻³), and the size relation to 1.9×10⁻³ dex
+  with its early-type offset at 5.0×10⁻⁴ (the ``log10_f_size``–
+  ``dsize_early`` pair is the sector's strongest internal degeneracy,
+  ρ = +0.996).
+* **σ(mbh_bt_slope) = 7.7×10⁻⁴** — the BH–bulge coupling is constrained
+  ~650× beyond its prior by the AGN-host early fractions and the
+  morphology-coupled AGN LFs: the coevolution question becomes decisively
+  testable in this data scenario.
+* **The IA amplitude self-calibrates to σ(a_ia) ≈ 0.010** (0.5% of the
+  fiducial A_IA = 2) — the dominant weak-lensing systematic is pinned by
+  the morphology sector *for free*, with no cost to the shear cosmology.
+
+On the cosmology side, the new information comes almost entirely from the
+**morph-split w_p/ΔΣ blocks**, which tighten
+:math:`\sigma(\Omega_\mathrm{m})` by 17% (5.89 → 4.89×10⁻⁵) and
+:math:`\sigma(\sigma_8)` by 9% over the tier-3 baseline — the scalar
+morphology fractions and sizes constrain the sector itself rather than
+cosmology, exactly as designed.  The tier-3 conditioning caveat stands
+(:math:`\Sigma m_\nu` and the agn-sector determinant hit the prior-scaled
+eigenvalue floor at this dynamic range).  SUMMARY, npz and the
+``tier4_forecast__*`` figure suite live in
+``$HOD_MOD_RESULTS/tier4_forecast/``.
