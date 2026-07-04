@@ -46,10 +46,11 @@ def test_vector_layout_tier3():
         PARAM_NAMES, N_PARAM, MISSING_PHYSICS, TIER2_EXTENSION,
         TIER3_EXTENSION)
     from hod_mod.forecast.params import SECTORS
-    assert N_PARAM == 102
+    from hod_mod.forecast.forward_jax import WAVE4_MORPHOLOGY
+    assert N_PARAM == 102 + len(WAVE4_MORPHOLOGY)
     assert list(MISSING_PHYSICS) == list(PARAM_NAMES[61:90])
     assert list(TIER2_EXTENSION) == list(PARAM_NAMES[31:90])
-    assert list(TIER3_EXTENSION) == list(PARAM_NAMES[90:])
+    assert list(TIER3_EXTENSION) == list(PARAM_NAMES[90:102])
     assert TIER3_EXTENSION[0] == "l14_sfr" and len(TIER3_EXTENSION) == 12
     flat = [n for sec in SECTORS.values() for n in sec]
     assert sorted(flat) == sorted(PARAM_NAMES)

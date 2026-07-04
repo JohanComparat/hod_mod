@@ -174,6 +174,7 @@ class SpectroSurvey:
     sfrd_rel: float = 0.12       # relative σ on the cell SFR density (MD14-like)
     foii_lim: float = 1.0e-16    # [OII] line-flux limit [erg/s/cm²] (DESI-like)
     fha_lim: float = 1.0e-16     # Hα line-flux limit [erg/s/cm²]
+    fmorph_err: float = 0.02     # early-type-fraction calibration floor (abs)
     mstar_lim0: float = None     # log10 M* completeness limit at z = 0
     mstar_lim_slope: float = 0.0 # its d(log10 M*)/dz slope
 

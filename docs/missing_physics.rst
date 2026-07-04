@@ -417,9 +417,13 @@ Galaxy morphology
 Where the model stands
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Nothing.  No morphological variable — bulge-to-total ratio, Sérsic index,
-early/late-type fraction — appears anywhere in the package; the ZM15
-connection describes all galaxies of a given stellar mass identically.
+**Implemented (wave 4)** — :mod:`hod_mod.connection.morphology` provides the
+conditional early-type fraction below; ``ForwardModel(morph="early"|"late")``
+splits any sample, the per-cell ``f_early`` observable enters the tier
+forecasts (``--include-morph``), and ``mbh_bt_slope`` couples the bulge
+proxy into the Powell chain.  See
+:doc:`missing_physics_implementation` (wave 4).  The assembly-bias hook
+(item 3 below) remains open.
 
 Proposed implementation
 ~~~~~~~~~~~~~~~~~~~~~~~
