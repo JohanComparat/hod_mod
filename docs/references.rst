@@ -1279,12 +1279,6 @@ current state of the art per probe.
    cosmic time from the largest JWST mosaic.
    `arXiv:2502.03532 <https://arxiv.org/abs/2502.03532>`_
 
-.. [Mandelbaum2006] Mandelbaum R. et al. 2006, MNRAS 368, 715.
-   SDSS galaxy–galaxy lensing: halo masses vs stellar mass, luminosity,
-   MORPHOLOGY and environment — the archetype of the tier-4 morph-split
-   w_p/ΔΣ blocks (early types occupy more massive haloes at high M*).
-   `arXiv:astro-ph/0511164 <https://arxiv.org/abs/astro-ph/0511164>`_
-
 .. [Skibba2009] Skibba R.A. et al. 2009, MNRAS 399, 966.
    Galaxy Zoo: disentangling the environmental dependence of morphology and
    colour — morphology-marked clustering statistics.
