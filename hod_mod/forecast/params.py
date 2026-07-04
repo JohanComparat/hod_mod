@@ -94,6 +94,17 @@ _FIDUCIAL_DEFAULT = {
     "luv_norm": 42.65, "tau_uv_mslope": 0.0,  # UV/SFR incl. attenuation + its M* slope
     "lha_norm": 41.27,                       # log10 L_Halpha/SFR (Kennicutt)
     "agn_bc_uv": -0.62, "agn_bc_opt": -0.72,  # AGN bolometric corrections (1450A, 4400A)
+    # --- wave 4: conditional galaxy morphology (early-type Weibull) + the
+    # BH-bulge coupling (0 fiducial = the pure Powell chain).
+    "log10_M_morph": 12.5, "beta_morph": 0.8,
+    "f_morph_sat": 0.2,
+    "mbh_bt_slope": 0.0,
+    # --- tier 4: morphology observables (joint E/Q, sizes, IA).
+    "rho_morph_q": 0.0,           # 0 = the wave-4 independence, exact
+    "log10_f_size": -1.824,       # log10(R_e/R_200c), Kravtsov 2013 0.015
+    "dsize_early": -0.20,         # early-type size offset [dex] (van der Wel)
+    "f_size_zs": 0.0,
+    "a_ia": 2.0,                  # NLA amplitude of early types
 }
 
 # Planck 2018 1σ priors (planck_prior.PLANCK18_SIGMAS) on the free cosmo params.
@@ -155,6 +166,12 @@ BROAD_PRIOR_SIGMA = {
     "ml_nir": 0.3, "ml_opt": 0.3, "dopt_q": 0.3,
     "luv_norm": 0.3, "tau_uv_mslope": 0.3, "lha_norm": 0.2,
     "agn_bc_uv": 0.3, "agn_bc_opt": 0.3,
+    # wave 4
+    "log10_M_morph": 1.0, "beta_morph": 0.5,
+    "f_morph_sat": 0.3, "mbh_bt_slope": 0.5,
+    # tier 4
+    "rho_morph_q": 0.3, "log10_f_size": 0.3, "dsize_early": 0.3,
+    "f_size_zs": 2.0, "a_ia": 1.0,
 }
 
 PARAM_LATEX = {
@@ -222,6 +239,17 @@ PARAM_LATEX = {
     "tau_uv_mslope": r"$\partial_M\tau_{\rm UV}$",
     "lha_norm": r"$\log_{10}L_{{\rm H}\alpha}/{\rm SFR}$",
     "agn_bc_uv": r"${\rm BC}_{\rm UV}$", "agn_bc_opt": r"${\rm BC}_{\rm opt}$",
+    # wave 4
+    "log10_M_morph": r"$\log_{10}M_{\rm morph}$",
+    "beta_morph": r"$\beta_{\rm morph}$",
+    "f_morph_sat": r"$f_{\rm morph}^{\rm sat}$",
+    "mbh_bt_slope": r"$\partial_{B/T}M_{\rm BH}$",
+    # tier 4
+    "rho_morph_q": r"$\rho_{\rm morph,Q}$",
+    "log10_f_size": r"$\log_{10}R_e/R_{200}$",
+    "dsize_early": r"$\Delta_{\rm size}^{\rm E}$",
+    "f_size_zs": r"$\partial_z R_e/R_{200}$",
+    "a_ia": r"$A_{\rm IA}$",
 }
 
 # Parameter sectors for the tier-2 cosmology-vs-astrophysics decomposition
@@ -258,6 +286,12 @@ SECTORS = {
             "luv_norm", "tau_uv_mslope", "lha_norm"],
     # cold gas / neutral hydrogen (VN18 halo model + quenched deficit)
     "coldgas": ["log10_M0_hi", "log10_Mmin_hi", "alpha_hi", "dhi_quenched"],
+    # galaxy morphology (wave 4): early-type Weibull + the BH-bulge link
+    "morphology": ["log10_M_morph", "beta_morph", "f_morph_sat",
+                   "mbh_bt_slope",
+                   # tier 4: joint E/Q correlation, sizes, IA
+                   "rho_morph_q", "log10_f_size", "dsize_early",
+                   "f_size_zs", "a_ia"],
     # retired: with agn_emission="powell" the duty cycle leaves the emissivity;
     # its only remaining consumer is the (off-by-default) energy-closure mode.
     "retired": ["log10DC"],

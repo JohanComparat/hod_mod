@@ -39,7 +39,8 @@ from hod_mod.scripts.forecasts.run_tier2_forecast import (  # noqa: E402
 
 # cumulative probe attribution, tier-2 order + the tier-3 families
 PROBE_GROUPS = [
-    ("galaxy grid", ("wp", "ds", "n_gal", "ssfr", "sfrd", "oiilf")),
+    ("galaxy grid", ("wp", "ds", "n_gal", "ssfr", "sfrd", "oiilf",
+                     "f_early")),
     ("+lensing", ("cl_kk", "cl_kCMB", "cl_shear_kCMB", "cl_gkCMB")),
     ("+X-ray/tSZ", ("cl_gX", "cl_XX", "cl_gy")),
     ("+XLF(z)", ("xlf",)),

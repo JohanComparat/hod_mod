@@ -1,6 +1,5 @@
 Bibliography
 ============
-
 Consolidated reference list for all papers cited in ``hod_mod``.
 Entries are grouped by topic and ordered chronologically within each group
 to show the progression of the field.
@@ -1256,3 +1255,73 @@ current state of the art per probe.
    and X-ray luminosities — the broken-power-law ERDF used by the Powell
    chain (``agn_log10_lstar``, ``agn_delta1``, ``agn_delta2``).
    `arXiv:2201.05603 <https://arxiv.org/abs/2201.05603>`_
+.. [EuclidQ1Morph2025] Euclid Collaboration: Walmsley M. et al. 2025.
+   Euclid Q1: first visual morphology catalogue — 378k detailed morphologies
+   (Zoobot + Galaxy Zoo), 0.4% of the eventual ~100M; the f_early(M*, z)
+   data source of the tier-4 forecast.
+   `arXiv:2503.15310 <https://arxiv.org/abs/2503.15310>`_
+
+.. [EuclidZoobot2024] Euclid Collaboration 2024 (prep. XLIII).
+   Measuring detailed galaxy morphologies for Euclid with machine learning.
+   `arXiv:2402.10187 <https://arxiv.org/abs/2402.10187>`_
+
+.. [Kartaltepe2023] Kartaltepe J.S. et al. 2023, ApJL 946, L15.
+   CEERS Key Paper III: the diversity of galaxy structure and morphology at
+   z = 3–9 with JWST — the high-z anchor of f_early(z).
+   `arXiv:2210.14713 <https://arxiv.org/abs/2210.14713>`_
+
+.. [Ferreira2023] Ferreira L. et al. 2023, ApJ 955, 94.
+   Galaxy morphology from z ~ 6 through the eyes of JWST.
+   `arXiv:2305.02478 <https://arxiv.org/abs/2305.02478>`_
+
+.. [COSMOSWeb2025Hubble] COSMOS-Web 2025.
+   The emergence of the Hubble sequence — morphological fractions across
+   cosmic time from the largest JWST mosaic.
+   `arXiv:2502.03532 <https://arxiv.org/abs/2502.03532>`_
+
+.. [Mandelbaum2006] Mandelbaum R. et al. 2006, MNRAS 368, 715.
+   SDSS galaxy–galaxy lensing: halo masses vs stellar mass, luminosity,
+   MORPHOLOGY and environment — the archetype of the tier-4 morph-split
+   w_p/ΔΣ blocks (early types occupy more massive haloes at high M*).
+   `arXiv:astro-ph/0511164 <https://arxiv.org/abs/astro-ph/0511164>`_
+
+.. [Skibba2009] Skibba R.A. et al. 2009, MNRAS 399, 966.
+   Galaxy Zoo: disentangling the environmental dependence of morphology and
+   colour — morphology-marked clustering statistics.
+   `arXiv:0811.3970 <https://arxiv.org/abs/0811.3970>`_
+
+.. [Masters2010] Masters K.L. et al. 2010, MNRAS 405, 783.
+   Galaxy Zoo: passive red spirals — the E/Q off-diagonal census behind the
+   ``f_early_q`` observable and ``rho_morph_q``.
+   `arXiv:0910.4113 <https://arxiv.org/abs/0910.4113>`_
+
+.. [Schawinski2014] Schawinski K. et al. 2014, MNRAS 440, 889.
+   The green valley is a red herring: two evolutionary pathways to quenching
+   for early- and late-type galaxies.
+   `arXiv:1402.4814 <https://arxiv.org/abs/1402.4814>`_
+
+.. [Bluck2022] Bluck A.F.L. et al. 2022, A&A 659, A160.
+   The quenching of galaxies, bulges and disks since cosmic noon — the
+   morphology–quenching causality the joint fractions constrain.
+   `arXiv:2201.07814 <https://arxiv.org/abs/2201.07814>`_
+
+.. [Kravtsov2013] Kravtsov A.V. 2013, ApJL 764, L31.
+   The size–virial radius relation: R_e ≈ 0.015 R_200c with 0.2 dex scatter
+   over eight decades of M* — the ``size`` observable's backbone.
+   `arXiv:1212.2980 <https://arxiv.org/abs/1212.2980>`_
+
+.. [vanderWel2014] van der Wel A. et al. 2014, ApJ 788, 28.
+   3D-HST+CANDELS: the galaxy size–mass distribution since z = 3 — early
+   types smaller and faster-evolving (``dsize_early``, ``f_size_zs``).
+   `arXiv:1404.2844 <https://arxiv.org/abs/1404.2844>`_
+
+.. [Georgiou2025] Georgiou C. et al. 2025, A&A.
+   KiDS-1000 bright sample intrinsic alignments: dependence on colour,
+   luminosity, MORPHOLOGY and galaxy scale — IA is driven by morphology,
+   the basis of the ``a_ia · f_early`` NLA scaling.
+   `arXiv:2502.09452 <https://arxiv.org/abs/2502.09452>`_
+
+.. [KormendyHo2013] Kormendy J. & Ho L.C. 2013, ARA&A 51, 511.
+   Coevolution (or not) of supermassive black holes and host galaxies — the
+   M_BH–M_bulge anchor of the ``mbh_bt_slope`` coupling.
+   `arXiv:1304.7762 <https://arxiv.org/abs/1304.7762>`_

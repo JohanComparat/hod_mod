@@ -103,6 +103,7 @@ class Tier3Forecast(Tier2Forecast):
         kw.setdefault("include_hi", True)
         kw.setdefault("include_ssfr", True)
         kw.setdefault("include_ir", True)
+        kw.setdefault("include_morph", True)
         super().__init__(
             z_edges=(z_edges if z_edges is not None
                      else np.arange(0.0, 2.01, 0.2)),
