@@ -44,6 +44,7 @@ from hod_mod.core.halo_mass_function import (
     HaloMassFunction,
     _growth_factor_flat_jax,
     _RHO_CRIT0,
+    growth_factor,
 )
 from hod_mod.core.halo_profiles import nfw_uk_jax, concentration_dutton14_jax
 from hod_mod.connection.hod.zumandelbaum15 import (
@@ -123,6 +124,11 @@ PARAM_NAMES = [
     "log10_M_morph", "beta_morph",                        # early-type Weibull transition (centrals)
     "f_morph_sat",                                        # satellite early-type boost
     "mbh_bt_slope",                                       # M_BH-bulge coupling (0 = pure Powell chain)
+    # ---- tier 4: morphology observables ----
+    "rho_morph_q",                                        # morphology-quenching correlation at fixed M_h
+    "log10_f_size", "dsize_early",                        # R_e/R_200c (Kravtsov13) + early offset [dex]
+    "f_size_zs",                                          # size-ratio evolution slope (via _Z_EVOL)
+    "a_ia",                                               # NLA IA amplitude carried by early types
 ]
 _IDX = {n: i for i, n in enumerate(PARAM_NAMES)}
 N_PARAM = len(PARAM_NAMES)
@@ -140,14 +146,16 @@ TIER2_EXTENSION = list(PARAM_NAMES[31:90])
 # Tier-3 extension: multi-wavelength SED calibrations (radio/IR maps, band LFs).
 TIER3_EXTENSION = list(PARAM_NAMES[90:102])
 # Missing-physics wave 4: conditional galaxy morphology + the BH-bulge link.
-WAVE4_MORPHOLOGY = list(PARAM_NAMES[102:])
+WAVE4_MORPHOLOGY = list(PARAM_NAMES[102:106])
+# Tier-4 morphology observables: joint E/Q fractions, sizes, AGN hosts, IA.
+TIER4_MORPHOLOGY = list(PARAM_NAMES[106:])
 
 # base parameter → its ln(1+z) evolution slope (applied in ForwardModel._theta_eff)
 _Z_EVOL = {"lg_m1h": "lg_m1h_zs", "lg_m0star": "lg_m0star_zs",
            "sigma_lnmstar": "sigma_lnmstar_zs", "lx_norm": "lx_zs",
            "kt_norm": "kt_zs", "agn_log10_ferdf": "agn_log10_ferdf_zs",
            "agn_log10_lstar": "agn_log10_lstar_zs", "agn_mu_bh": "agn_mu_bh_zs",
-           "ssfr_ms_norm": "ssfr_ms_zs"}
+           "ssfr_ms_norm": "ssfr_ms_zs", "log10_f_size": "f_size_zs"}
 # (z_gas_zs acts on log10 Z inside _gas_log10Z — the base z_gas_norm is linear)
 
 OBSERVABLES = ["wp", "ds", "cl_gX", "cl_gy", "cl_XX", "cl_kk",
@@ -1931,10 +1939,28 @@ class ForwardModel:
         quenched fractions f_Q(M_h); by construction the "sf" and "q" samples
         sum EXACTLY to the unsplit sample (the regression invariant).
         """
+        if self.morph is not None and self.sfq is not None:
+            # tier 4: the 4-way (early/late × SF/Q) partition uses the JOINT
+            # fractions with the rho_morph_q correlation — at rho = 0 this is
+            # the wave-4 independent product exactly.  The four weights
+            # (E∩Q, E∩SF, L∩Q, L∩SF) partition unity by construction.
+            nc, ns = self._occ_base(theta)
+            fq_c, fq_s, s_ms, s_q = self._sfq_weights(theta)
+            fe_c, fe_s = self._morph_fractions(theta)
+            feq_c, feq_s = self._morph_q_joint(theta)
+            if self.morph == "early" and self.sfq == "q":
+                wc, ws = feq_c * s_q, feq_s * s_q
+            elif self.morph == "early":                     # early ∩ SF
+                wc, ws = (fe_c - feq_c) * s_ms, (fe_s - feq_s) * s_ms
+            elif self.sfq == "q":                           # late ∩ Q
+                wc, ws = (fq_c - feq_c) * s_q, (fq_s - feq_s) * s_q
+            else:                                           # late ∩ SF
+                wc = (1.0 - fe_c - fq_c + feq_c) * s_ms
+                ws = (1.0 - fe_s - fq_s + feq_s) * s_ms
+            return nc * wc, ns * ws
         nc, ns = self._occ_sfq(theta)
         if self.morph is not None:
-            # wave 4: early/late Weibull weights (independent of the SF/Q
-            # selection at fixed M_h — a documented simplification)
+            # marginal early/late weights (no SF/Q selection on this sample)
             fe_c, fe_s = self._morph_fractions(theta)
             if self.morph == "early":
                 nc, ns = nc * fe_c, ns * fe_s
@@ -1982,6 +2008,25 @@ class ForwardModel:
                            theta[_IDX["f_morph_sat"]])
         return fe_c, fe_s
 
+    def _morph_q_joint(self, theta):
+        r"""(f_{E∩Q}^cen, f_{E∩Q}^sat) joint early∩quenched fractions (tier 4):
+
+        .. math:: f_{E\cap Q} = f_E f_Q + \rho_{\rm morph,Q}
+            \sqrt{f_E(1-f_E)\,f_Q(1-f_Q)}
+
+        — the bounded-correlation form; at the ρ = 0 fiducial this is the
+        wave-4 independent product exactly.  The floor inside the square root
+        keeps the Jacobian finite where the Weibulls saturate to exactly 0/1.
+        """
+        fe_c, fe_s = self._morph_fractions(theta)
+        fq_c, fq_s, _, _ = self._sfq_weights(theta)
+        rho = theta[_IDX["rho_morph_q"]]
+        v_c = jnp.sqrt(jnp.maximum(fe_c * (1.0 - fe_c)
+                                   * fq_c * (1.0 - fq_c), 1e-24))
+        v_s = jnp.sqrt(jnp.maximum(fe_s * (1.0 - fe_s)
+                                   * fq_s * (1.0 - fq_s), 1e-24))
+        return fe_c * fq_c + rho * v_c, fe_s * fq_s + rho * v_s
+
     def _f_early(self, theta, H):
         r"""Mean early-type fraction of THIS cell's sample, (1,) — the cheap
         morphology observable of the roadmap (Euclid-VIS-like
@@ -1991,13 +2036,95 @@ class ForwardModel:
             (N_c f_{e,c} + N_s f_{e,s})}{\int dM\,\frac{dn}{dM}\,(N_c + N_s)}
 
         Measured on the (possibly SF/Q-selected) sample BEFORE any morphology
-        split — the tier integration uses morph=None cells.
+        split — the tier integration uses morph=None cells.  For SF/Q-selected
+        samples the CONDITIONAL early fractions are used (tier 4):
+        f_E|Q = f_{E∩Q}/f_Q and f_E|SF = (f_E − f_{E∩Q})/(1 − f_Q) — at the
+        ρ_morph,Q = 0 fiducial both reduce to the marginal f_E, so the split
+        cells' f_early data measure the morphology–quenching correlation.
         """
         nc, ns = self._occ_sfq(theta)
         fe_c, fe_s = self._morph_fractions(theta)
+        if self.sfq in ("sf", "q"):
+            fq_c, fq_s, _, _ = self._sfq_weights(theta)
+            feq_c, feq_s = self._morph_q_joint(theta)
+            if self.sfq == "q":
+                fe_c = feq_c / jnp.maximum(fq_c, 1e-12)
+                fe_s = feq_s / jnp.maximum(fq_s, 1e-12)
+            else:
+                fe_c = (fe_c - feq_c) / jnp.maximum(1.0 - fq_c, 1e-12)
+                fe_s = (fe_s - feq_s) / jnp.maximum(1.0 - fq_s, 1e-12)
         num = jnp.trapezoid(H["dndm"] * (nc * fe_c + ns * fe_s), self.m)
         den = jnp.trapezoid(H["dndm"] * (nc + ns), self.m)
         return jnp.array([num / den])
+
+    # ---- tier 4: morphology observables --------------------------------
+    def _f_early_q(self, theta, H):
+        r"""Joint early∩quenched fraction of the cell's BASE sample, (1,) —
+        the red-spiral / blue-elliptical census (Galaxy Zoo × SDSS), the
+        direct measurement of ``rho_morph_q``:
+
+        .. math:: f_{E\cap Q} = \frac{\int dM\,\frac{dn}{dM}\,
+            (N_c f_{E\cap Q,c} + N_s f_{E\cap Q,s})}
+            {\int dM\,\frac{dn}{dM}\,(N_c + N_s)}
+        """
+        nc, ns = self._occ_base(theta)
+        feq_c, feq_s = self._morph_q_joint(theta)
+        num = jnp.trapezoid(H["dndm"] * (nc * feq_c + ns * feq_s), self.m)
+        den = jnp.trapezoid(H["dndm"] * (nc + ns), self.m)
+        return jnp.array([num / den])
+
+    def _size_mean(self, theta, H):
+        r"""Mean galaxy size of the cell's centrals, ⟨log10 R_e⟩, (1,):
+
+        .. math:: \langle\log_{10} R_e\rangle = \log_{10} f_{\rm size}
+            + \langle\log_{10} R_{200c}\rangle_{N_c}
+            + \Delta_{\rm size}^{E}\, f_{\rm early}^{\rm cell}
+
+        — the Kravtsov (2013) R_e ≈ 0.015 R_200c relation with a free
+        normalisation (evolving via ``f_size_zs``) and the van-der-Wel-like
+        early-type offset.  R_200c is the comoving ``r_delta`` of the halo
+        grid [Mpc/h]; the constant unit offset to physical kpc is absorbed by
+        ``log10_f_size``.  Centrals only (satellite sizes do not follow the
+        host halo radius); the cosmology enters through
+        R_200c ∝ (M/ρ_crit)^{1/3}.
+        """
+        nc, _ = self._occ_sample(theta)
+        w = jnp.trapezoid(H["dndm"] * nc, self.m)
+        mean_lr = jnp.trapezoid(H["dndm"] * nc
+                                * jnp.log10(H["r_delta"]), self.m) / w
+        return (theta[_IDX["log10_f_size"]] + mean_lr
+                + theta[_IDX["dsize_early"]] * self._f_early(theta, H))
+
+    def _f_early_agn(self, theta, H):
+        r"""Early-type fraction among the shell's AGN hosts, (1,) — the
+        bulge-dominance of X-ray-selected AGN (Kocevski-style), the direct
+        probe of the BH–bulge coupling: with ``mbh_bt_slope`` > 0 the AGN
+        occupation shifts toward early-type-rich haloes."""
+        n_a = self._agn_occupation_obs(theta, 42.0, 44.0)
+        fe_c, _ = self._morph_fractions(theta)
+        num = jnp.trapezoid(H["dndm"] * n_a * fe_c, self.m)
+        den = jnp.trapezoid(H["dndm"] * n_a, self.m)
+        return jnp.array([num / den])
+
+    def _wgp(self, theta, H):
+        r"""Galaxy–intrinsic-alignment cross w_{g+}(r_p) of the cell, NLA
+        with the alignment carried by the early-type fraction (tier 4):
+
+        .. math:: w_{g+}(r_p) = a_{\rm IA}\, f_{\rm early}^{\rm cell}\,
+            \frac{C_1\rho_{\rm crit}\Omega_m}{D(z)}\;
+            \Delta\Sigma\text{-transform}\big[b_g P_{\rm lin}\big]
+
+        with C₁ρ_crit = 0.0134 (the NLA convention) and D(z) normalised to
+        D(0) = 1 through the growth dispatcher (CPL-aware).  Reuses the
+        ``_delta_sigma`` J₂-type transform verbatim.  Data: KiDS-1000 /
+        DESI direct IA — the amplitude is driven by morphology, so w_{g+}
+        self-calibrates the shear IA systematic through this sector.
+        """
+        c = self._cosmo(theta)
+        d_z = growth_factor(self.z_eff, c)           # already D(z)/D(0)
+        prefac = (theta[_IDX["a_ia"]] * self._f_early(theta, H)[0]
+                  * 0.0134 * c["Omega_m"] / d_z)
+        return self._delta_sigma(prefac * H["b_eff"] * H["pk_lin"], theta)
 
     def _sfq_weights(self, theta):
         r"""(f_Q^cen, f_Q^sat, S_MS, S_Q): the ZM16 quenched fractions and the
@@ -2052,7 +2179,8 @@ class ForwardModel:
         out = {}
         if any(o in which for o in ("wp", "ds", "n_gal", "smf", "wp_agn",
                                     "himf", "sfrd", "ds_agn", "ncl",
-                                    "f_early")):
+                                    "f_early", "f_early_q", "size",
+                                    "f_early_agn", "wgp")):
             H0 = self._halo_common(theta, self.z_eff)
             if "wp" in which or "ds" in which:
                 P_gg, P_gm = self._pk_gg_gm(H0, theta)
@@ -2081,6 +2209,14 @@ class ForwardModel:
                 out["ncl"] = self._ncl(theta, H0)
             if "f_early" in which:
                 out["f_early"] = self._f_early(theta, H0)
+            if "f_early_q" in which:
+                out["f_early_q"] = self._f_early_q(theta, H0)
+            if "size" in which:
+                out["size"] = self._size_mean(theta, H0)
+            if "f_early_agn" in which:
+                out["f_early_agn"] = self._f_early_agn(theta, H0)
+            if "wgp" in which:
+                out["wgp"] = self._wgp(theta, H0)
         # Galaxy-window angular spectra (gas cross + galaxy×CMB-lensing) share the
         # per-z halo quantities on the galaxy n(z) grid.
         ang = [o for o in ("cl_gX", "cl_gy", "cl_XX", "cl_gHI") if o in which]
@@ -2197,6 +2333,8 @@ class ForwardModel:
                 "smf": self.logmstar_smf, "ssfr": jnp.array([0.0]),
                 "sfrd": jnp.array([0.0]), "ncl": jnp.array([0.0]),
                 "f_early": jnp.array([0.0]),
+                "f_early_q": jnp.array([0.0]), "size": jnp.array([0.0]),
+                "f_early_agn": jnp.array([0.0]), "wgp": self.rp_ds,
                 "rlf": self.loglr_rlf, "himf": self.logmhi_himf,
                 "oiilf": self.logloii_oiilf, "ilf": self.loglir_ilf,
                 "uvlf": self.logluv_uvlf, "optlf": self.loglopt_optlf,
@@ -2236,7 +2374,7 @@ class ForwardModel:
             jnp.asarray([self.z_eff]), _FIXED_COSMO["h"], 0.31)).ravel()[0]) * _FIXED_COSMO["h"]
         ell_max = chi_eff / float(rmin)
         row_obs = np.asarray(row_obs)
-        proj = np.isin(row_obs, ["wp", "ds", "wp_agn", "ds_agn"])
+        proj = np.isin(row_obs, ["wp", "ds", "wp_agn", "ds_agn", "wgp"])
         ang = np.array([str(o).startswith("cl_") for o in row_obs])
         keep = np.ones(len(row_obs), dtype=bool)          # abundance (xlf/n_gal/smf): always kept
         keep = np.where(proj, row_x > float(rmin), keep)
@@ -2258,11 +2396,12 @@ class ForwardModel:
         idx = {}
         for name in which:
             g = np.asarray(self.grid_of(name))
-            if name in ("wp", "ds", "wp_agn", "ds_agn"):
+            if name in ("wp", "ds", "wp_agn", "ds_agn", "wgp"):
                 sel = np.where(g > float(rmin))[0]
             elif name in ("xlf", "n_gal", "smf", "rlf", "himf", "ssfr",
                           "sfrd", "oiilf", "ilf", "ncl", "uvlf", "optlf",
-                          "nirlf", "half", "qlf_uv", "qlf_opt", "f_early"):
+                          "nirlf", "half", "qlf_uv", "qlf_opt", "f_early",
+                          "f_early_q", "size", "f_early_agn"):
                 sel = np.arange(g.size)            # abundance: no scale cut
             else:
                 sel = np.where(g < ell_max)[0]
