@@ -379,8 +379,9 @@ def make_all(npz_path, out_dir, compare=None):
     # so a tier-3 run cannot overwrite the tier-2 docs images
     global _PFX, _COPY_TO_DOCS
     base = os.path.basename(npz_path)
-    if base.startswith("tier3"):
-        _PFX = "tier3_forecast__"
+    for fam in ("tier3", "tier4"):
+        if base.startswith(fam):
+            _PFX = f"{fam}_forecast__"
     if "smoke" in base:
         _COPY_TO_DOCS = False
     d = _load(npz_path)

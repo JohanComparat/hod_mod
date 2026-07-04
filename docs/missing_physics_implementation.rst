@@ -4,9 +4,11 @@ The extended model: implementation of the missing physics
 *The implemented counterpart of* :doc:`missing_physics`.
 
 Between 2026-07-03 and 2026-07-04 (branch ``feature/missing-physics``) the
-propositions of :doc:`missing_physics` were implemented in three waves,
+propositions of :doc:`missing_physics` were implemented in four waves,
 growing the differentiable parameter vector from the tier-2 61 entries to
-**90** — every addition fiducial-preserving, so the :doc:`tier2_forecast`
+**90** (waves 1–3), then to **102** (the :doc:`tier3_forecast` SED
+calibrations) and **106** (wave 4, galaxy morphology) — every addition
+fiducial-preserving, so the :doc:`tier2_forecast`
 predictions are reproduced exactly (or to a stated tolerance) at the fiducial,
 and every mechanism carries an exact invariant that is enforced by
 ``tests/test_missing_physics.py``.  This page documents the architecture, the
@@ -451,6 +453,68 @@ WISE-selected halo statistics [Donoso2014]_, [Petter2023]_ probe from the
 clustering side.  Noise: :class:`~hod_mod.forecast.noise.IRSurvey`
 (WISE/SPHEREx-like, νL_ν(6 μm) completeness limit).
 
+Wave 4 — galaxy morphology
+--------------------------
+
+The last roadmap topic with no code at all.  Vector 102 → 106
+(:data:`~hod_mod.forecast.forward_jax.WAVE4_MORPHOLOGY`, sector
+``morphology``); the ``TIER3_EXTENSION`` slice is frozen at [90:102].
+
+The conditional early-type fraction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:mod:`hod_mod.connection.morphology` mirrors the ZM16 halo-quenching
+pattern: a Weibull early-type fraction of centrals,
+
+.. math::
+
+    f_{\rm early,c}(M_h) = 1 - \exp\!\left[-\left(M_h/M_{\rm morph}
+    \right)^{\beta_{\rm morph}}\right],
+
+with fiducial :math:`\log_{10} M_{\rm morph} = 12.5`,
+:math:`\beta_{\rm morph} = 0.8`, and a satellite boost toward early types
+:math:`f_{\rm early,s} = f_{\rm early,c} + f_{\rm morph,sat}
+(1 - f_{\rm early,c})` (environmental transformation; ∈ [0, 1] by
+construction).  ``ForwardModel(morph="early"|"late")`` weights the
+occupations exactly like the SF/Q split — EARLY + LATE ≡ unsplit, and the
+four-way SF/Q × early/late partition sums exactly to the unsplit sample
+(both tested to 1e-12; morphology and quenching selections are treated as
+independent at fixed M_h, a documented simplification).
+
+The f_early observable
+~~~~~~~~~~~~~~~~~~~~~~
+
+The roadmap's cheap route: one Euclid-VIS-like datum
+:math:`f_{\rm early}(M_*, z)` per (z, M*) cell — the occupation-weighted
+mean early-type fraction of the cell's sample
+(``Tier2Forecast(include_morph=True)`` / ``--include-morph``; default ON in
+:class:`~hod_mod.forecast.tier3.Tier3Forecast`).  Noise is binomial counting
+over the cell (negligible for wide cells) plus a morphological-calibration
+floor (``SpectroSurvey.fmorph_err`` = 0.02 absolute).  Data:
+Euclid VIS morphologies, COSMOS-Web/HSC at higher z, group-catalogue
+morphology–halo-mass trends [Yang2007groups]_, [Tinker2021groups]_.
+
+The black-hole–bulge coupling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``mbh_bt_slope`` inserts the bulge proxy into the Powell chain
+(:math:`M_{\rm BH} \propto (B/T \cdot M_*)`-like coevolution
+[Yang2019BHbulge]_), with :math:`B/T` proxied by the mean early-type
+fraction of the halo:
+
+.. math::
+
+    \langle \log M_{\rm BH} \rangle \mathrel{+}= {\rm mbh\_bt\_slope}
+    \cdot \log_{10}\!\big[f_{\rm early,c}(M_h) + 10^{-4}\big] .
+
+At the ``mbh_bt_slope = 0`` fiducial the chain is **exactly** unchanged
+(zero morphology response of the XLF — tested), while the
+``mbh_bt_slope`` Jacobian column is live at the fiducial and, off-fiducial,
+routes ``log10_M_morph``/``beta_morph`` into the XLF, radio and IR LFs —
+morphology becomes testable through the AGN sector, as the roadmap
+proposed.  (The assembly-bias hook — ordering B/T by formation time through
+the cosmology-dependent c(M) — remains a documented refinement.)
+
 Observables and noise: the full menu
 ------------------------------------
 
@@ -492,6 +556,11 @@ Observables and noise: the full menu
      - mean MS log sSFR of the cell
      - non-Q cell / ``--include-ssfr``
      - 0.05 dex absolute
+     - —
+   * - ``f_early``
+     - early-type fraction of the cell
+     - cell / ``--include-morph``
+     - binomial + 0.02 calibration floor
      - —
    * - ``sfrd``
      - SFR density of the cell

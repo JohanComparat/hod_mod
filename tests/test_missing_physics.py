@@ -283,10 +283,11 @@ def test_tier2_split_sfq_assembly(fid, tmp_path):
 
 def test_vector_and_sectors_extended():
     from hod_mod.forecast.forward_jax import (
-        PARAM_NAMES, N_PARAM, MISSING_PHYSICS, TIER3_EXTENSION)
+        PARAM_NAMES, N_PARAM, MISSING_PHYSICS, TIER3_EXTENSION,
+        WAVE4_MORPHOLOGY)
     from hod_mod.forecast.params import SECTORS
     assert len(MISSING_PHYSICS) == 29 and MISSING_PHYSICS[0] == "eps_sn"
-    assert N_PARAM == 90 + len(TIER3_EXTENSION)
+    assert N_PARAM == 90 + len(TIER3_EXTENSION) + len(WAVE4_MORPHOLOGY)
     flat = [n for sec in SECTORS.values() for n in sec]
     assert sorted(flat) == sorted(PARAM_NAMES)
 
@@ -464,3 +465,105 @@ def test_tier2_wave2_observables(fid, tmp_path):
         assert s.size > 0 and np.all(s > 0), o
         # at least part of each new observable carries finite noise
         assert np.isfinite(s).any(), o
+
+
+# ---------------------------------------------------------------- wave 4 --
+
+def test_wave4_layout():
+    from hod_mod.forecast.forward_jax import (
+        PARAM_NAMES, N_PARAM, TIER3_EXTENSION, WAVE4_MORPHOLOGY)
+    from hod_mod.forecast.params import SECTORS
+    assert N_PARAM == 106
+    assert list(TIER3_EXTENSION) == list(PARAM_NAMES[90:102])
+    assert list(WAVE4_MORPHOLOGY) == list(PARAM_NAMES[102:])
+    assert WAVE4_MORPHOLOGY == ["log10_M_morph", "beta_morph",
+                                "f_morph_sat", "mbh_bt_slope"]
+    assert set(SECTORS["morphology"]) == set(WAVE4_MORPHOLOGY)
+
+
+def test_wave4_f_early_weibull():
+    """f_early_cen: monotone in M_h, 0/1 limits; satellite boost keeps [0,1]
+    and reduces to the central fraction at f_morph_sat = 0."""
+    from hod_mod.connection.morphology import f_early_cen, f_early_sat
+    lm = jnp.linspace(10.0, 16.0, 60)
+    fc = np.asarray(f_early_cen(lm, 12.5, 0.8))
+    d = np.diff(fc)
+    assert np.all(d >= 0)                    # saturates to exactly 1 (underflow)
+    assert np.all(d[np.asarray(lm)[:-1] < 13.5] > 0)   # strict in the transition
+    assert fc[0] < 1e-2 and fc[-1] > 1 - 1e-6
+    fs = np.asarray(f_early_sat(lm, 12.5, 0.8, 0.2))
+    assert np.all(fs >= fc) and np.all(fs <= 1.0)
+    np.testing.assert_allclose(np.asarray(f_early_sat(lm, 12.5, 0.8, 0.0)),
+                               fc, rtol=1e-12)
+
+
+def test_wave4_early_late_additivity(fid):
+    """EARLY + LATE ≡ unsplit (n_gal), and the 4-way SF/Q × early/late
+    partition sums exactly to the unsplit sample."""
+    from hod_mod.forecast.forward_jax import ForwardModel
+    kw = dict(z_eff=_Z, **_TINY)
+    n_of = lambda m: float(m.predict(fid, ["n_gal"])["n_gal"][0])
+    n_all = n_of(ForwardModel(**kw))
+    n_e = n_of(ForwardModel(morph="early", **kw))
+    n_l = n_of(ForwardModel(morph="late", **kw))
+    np.testing.assert_allclose(n_e + n_l, n_all, rtol=1e-12)
+    tot = sum(n_of(ForwardModel(sfq=sv, morph=mo, **kw))
+              for sv in ("sf", "q") for mo in ("early", "late"))
+    np.testing.assert_allclose(tot, n_all, rtol=1e-12)
+
+
+def test_wave4_f_early_observable(fid):
+    """Per-cell early-type fraction: bounded, mass-trend positive, and the
+    expected parameter responses (more massive pivot -> later types)."""
+    import jax
+    from hod_mod.forecast.forward_jax import ForwardModel, _IDX
+    kw = dict(z_eff=_Z, **_TINY)
+    m_lo = ForwardModel(log10m_star_bin=(10.0, 10.4), **kw)
+    m_hi = ForwardModel(log10m_star_bin=(11.0, 11.4), **kw)
+    f_lo = float(m_lo.predict(fid, ["f_early"])["f_early"][0])
+    f_hi = float(m_hi.predict(fid, ["f_early"])["f_early"][0])
+    assert 0.0 < f_lo < f_hi < 1.0
+    g = jax.jacfwd(lambda t: m_lo.predict(t, ["f_early"])["f_early"])(fid)
+    assert float(g[0, _IDX["log10_M_morph"]]) < 0
+    assert float(g[0, _IDX["f_morph_sat"]]) > 0
+    assert float(g[0, _IDX["mbh_bt_slope"]]) == 0.0    # AGN-only parameter
+
+
+def test_wave4_bh_bulge_coupling(fid):
+    """mbh_bt_slope = 0 leaves the Powell chain exactly (zero morphology
+    response of the XLF at the fiducial); off-fiducial the coupling routes
+    log10_M_morph into the XLF — morphology testable through the AGN sector."""
+    import jax
+    from hod_mod.forecast.forward_jax import ForwardModel, _IDX
+    m = ForwardModel(z_eff=_Z, **_TINY)
+    g0 = jax.jacfwd(lambda t: m.predict(t, ["xlf"])["xlf"])(fid)
+    assert np.abs(np.asarray(g0)[:, _IDX["mbh_bt_slope"]]).max() > 0
+    assert np.allclose(np.asarray(g0)[:, _IDX["log10_M_morph"]], 0.0)
+    th = fid.at[_IDX["mbh_bt_slope"]].set(0.3)
+    g1 = jax.jacfwd(lambda t: m.predict(t, ["xlf"])["xlf"])(th)
+    assert np.abs(np.asarray(g1)[:, _IDX["log10_M_morph"]]).max() > 0
+
+
+def test_wave4_tier2_integration(fid, tmp_path):
+    """include_morph adds the f_early datum per cell with finite binomial +
+    floor noise; the tier-2 assembly runs end-to-end."""
+    from hod_mod.forecast.tier2 import Tier2Forecast
+    t2 = Tier2Forecast(
+        z_edges=[0.2, 0.3], mstar_edges=[10.0, 10.4],
+        n_bands=[(0.5, 2.0)], n_shear_bins=2,
+        agn_lx_bins=[(42.0, 43.0)], agn_z_centers=(0.25,),
+        include_morph=True,
+        n_k=32, n_m=32, n_gl=12, n_z=3,
+        rp_wp=np.logspace(-1, 1.3, 4), rp_ds=np.logspace(-1, 1.2, 4),
+        ell=np.logspace(1.0, 3.0, 4), rp_wp_agn=np.logspace(0.1, 1.3, 3))
+    cell = next(b for b in t2.blocks if b.kind == "cell")
+    assert "f_early" in cell.which
+    fidv = t2.fiducial()
+    d0, J, meta = t2.data_and_jacobian(fidv, cache_dir=str(tmp_path),
+                                       verbose=False)
+    assert np.all(np.isfinite(d0)) and np.all(np.isfinite(J))
+    sig = t2.noise_sigma(fidv, d0, meta, verbose=False)
+    s = meta["obs"] == "f_early"
+    assert s.any() and np.all(np.isfinite(sig[s])) and np.all(sig[s] > 0)
+    # the calibration floor dominates for a big cell
+    assert np.all(sig[s] >= t2.spectro.fmorph_err)

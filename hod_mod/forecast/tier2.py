@@ -122,7 +122,8 @@ class Tier2Forecast:
                  shear=None, cmbl=None, athena=None, spectro=None,
                  tsz=(0.25, 0.9, 0.30), split_sfq=False,
                  include_radio=False, include_hi=False, include_ssfr=False,
-                 include_ir=False, radio=None, hi=None, ir=None, **model_kw):
+                 include_ir=False, include_morph=False,
+                 radio=None, hi=None, ir=None, **model_kw):
         self.z_edges = np.asarray(z_edges if z_edges is not None
                                   else np.arange(0.0, 1.01, 0.1))
         self.mstar_edges = np.asarray(mstar_edges if mstar_edges is not None
@@ -144,6 +145,8 @@ class Tier2Forecast:
         self.include_hi = bool(include_hi)
         self.include_ssfr = bool(include_ssfr)
         self.include_ir = bool(include_ir)
+        # wave 4: the per-cell early-type-fraction observable (Euclid-VIS-like)
+        self.include_morph = bool(include_morph)
         self.radio = radio if radio is not None else noise.RadioSurvey()
         self.hi = hi if hi is not None else noise.HISurvey()
         self.ir = ir if ir is not None else noise.IRSurvey()
@@ -162,6 +165,7 @@ class Tier2Forecast:
                                 self.agn_z_centers, self.split_sfq,
                                 self.include_radio, self.include_hi,
                                 self.include_ssfr, self.include_ir,
+                                self.include_morph,
                                 {k: np.asarray(v).tolist() if hasattr(v, "__len__") else v
                                  for k, v in kw.items()}))
 
@@ -194,6 +198,8 @@ class Tier2Forecast:
                         obs += ("cl_gHI",)
                     if self.include_ssfr and sv != "q":
                         obs += ("ssfr", "sfrd")
+                    if self.include_morph:
+                        obs += ("f_early",)
                     obs += self._cell_extra_obs(sv)
                     blk = _Block(lab, "cell", m, obs, z1, z2, m1, m2)
                     self._decorate_cell(blk)
@@ -251,6 +257,7 @@ class Tier2Forecast:
             spectro=self.spectro, tsz=self.tsz, split_sfq=self.split_sfq,
             include_radio=self.include_radio, include_hi=self.include_hi,
             include_ssfr=self.include_ssfr, include_ir=self.include_ir,
+            include_morph=self.include_morph,
             radio=self.radio, hi=self.hi, ir=self.ir, **self.model_kw)
 
     # ---- tier-3 extension hooks (identity defaults: tier-2 unchanged) --
@@ -531,6 +538,11 @@ class Tier2Forecast:
                             * (d_b[s] + n_hi)
                     elif name == "ssfr":
                         sig_b[s] = sp_b.ssfr_err
+                    elif name == "f_early":
+                        # binomial counting + morphological-calibration floor
+                        f = np.clip(d_b[s], 1e-4, 1.0 - 1e-4)
+                        sig_b[s] = np.sqrt(f * (1.0 - f) / (ngal * v)
+                                           + sp_b.fmorph_err ** 2)
                     elif name == "sfrd":
                         sig_b[s] = sp_b.sfrd_rel * np.abs(d_b[s])
                     elif name == "cl_gkCMB":
