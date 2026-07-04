@@ -159,14 +159,156 @@ class AthenaAllSky:
 
 @dataclass
 class SpectroSurvey:
-    """DESI/4MOST-like spectroscopy over the shear footprint."""
+    """DESI/4MOST-like spectroscopy over the shear footprint.
+
+    Tier-3 stellar-mass completeness: with ``mstar_lim0`` set, a (z, M*) cell
+    is complete iff its lower edge satisfies
+    ``m_lo >= mstar_lim0 + mstar_lim_slope * z_hi`` (a magnitude-limited
+    selection rises roughly linearly in log M* with z).  ``None`` (default)
+    keeps the tier-2 behaviour: complete everywhere.
+    """
     f_sky: float = 0.5
     f_cv0: float = 0.005         # relative cosmic variance × [V/(Gpc/h)³]^{-1/2}
     pi_max: float = 100.0        # w_p projection depth [Mpc/h]
+    ssfr_err: float = 0.05       # absolute σ on the mean MS log10 sSFR per cell [dex]
+    sfrd_rel: float = 0.12       # relative σ on the cell SFR density (MD14-like)
+    foii_lim: float = 1.0e-16    # [OII] line-flux limit [erg/s/cm²] (DESI-like)
+    fha_lim: float = 1.0e-16     # Hα line-flux limit [erg/s/cm²]
+    fmorph_err: float = 0.02     # early-type-fraction calibration floor (abs)
+    size_err: float = 0.02       # mean-log-size calibration floor [dex]
+    fmorph_agn_err: float = 0.05 # AGN-host morphology calibration floor (abs)
+    mstar_lim0: float = None     # log10 M* completeness limit at z = 0
+    mstar_lim_slope: float = 0.0 # its d(log10 M*)/dz slope
+
+    def loii_lim(self, z, h, Om):
+        """Faintest detectable L_[OII] [erg/s] at redshift z."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
+        return 4.0 * np.pi * d_l ** 2 * self.foii_lim
+
+    def lha_lim(self, z, h, Om):
+        """Faintest detectable L_Hα [erg/s] at redshift z."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
+        return 4.0 * np.pi * d_l ** 2 * self.fha_lim
+
+    def complete_for(self, m_lo, z_hi):
+        """Is a cell with lower M* edge ``m_lo`` complete to ``z_hi``?"""
+        if self.mstar_lim0 is None:
+            return True
+        return float(m_lo) >= self.mstar_lim0 + self.mstar_lim_slope * float(z_hi)
 
     def cv_rel(self, volume):
         """Relative cosmic-variance floor for a cell of ``volume`` (Mpc/h)³."""
         return self.f_cv0 / np.sqrt(volume / 1.0e9)
+
+
+@dataclass
+class RadioSurvey:
+    """LOFAR/LoTSS-like radio continuum survey with redshift counterparts.
+
+    ``nulnu_lim`` is the νL_ν detection threshold expressed at the fundamental
+    plane's 5 GHz reference (a 144 MHz flux limit of ~0.8 mJy scaled with a
+    ν^{-0.7} synchrotron spectrum) — the radio analogue of the Athena F_lim,
+    driving the L_lim(z) completeness of the radio luminosity function.
+    """
+    f_sky: float = 0.13          # LoTSS-wide with photo/spec-z counterparts
+    nulnu_lim: float = 3.0e-22   # νL_ν(5 GHz)-equivalent limit [erg/s/cm²]
+
+    def l_lim(self, z, h, Om):
+        """Faintest detectable 5 GHz νL_ν [erg/s] at redshift z."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
+        return 4.0 * np.pi * d_l ** 2 * self.nulnu_lim
+
+
+@dataclass
+class IRSurvey:
+    """WISE/SPHEREx-like all-sky infrared AGN survey.
+
+    ``nulnu_lim`` is the 6 μm νL_ν-equivalent detection threshold — the IR
+    analogue of the Athena/radio flux limits, driving the L_lim(z)
+    completeness of the AGN IR luminosity function.
+    """
+    f_sky: float = 0.65
+    nulnu_lim: float = 1.0e-14   # νL_ν(6 μm)-equivalent limit [erg/s/cm²]
+
+    def l_lim(self, z, h, Om):
+        """Faintest detectable 6 μm νL_ν [erg/s] at redshift z."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
+        return 4.0 * np.pi * d_l ** 2 * self.nulnu_lim
+
+
+@dataclass
+class SKASurvey:
+    """SKA-like radio continuum intensity maps in a few GHz bands.
+
+    Map noise follows the calibrated effective recipe (the tSZ / 21 cm IM
+    precedent): N_b(ℓ) = rn_b (ℓ/100)^an · C_b(ℓ) against the fiducial band
+    auto — thermal noise, calibration residuals and bright-source masking
+    are absorbed into (rn, an), the documented upgrade path being a physical
+    T_sys/confusion model.
+    """
+    f_sky: float = 0.5
+    bands: tuple = (0.95, 1.4, 3.0)   # band centres [GHz]
+    rn: tuple = (0.2, 0.2, 0.3)       # noise-to-signal at ℓ = 100, per band
+    an: float = 0.5                   # its ℓ growth exponent
+
+    def noise_cl(self, ell, cl_band, i):
+        """Effective noise power for band ``i`` against its fiducial auto."""
+        return self.rn[i] * (np.asarray(ell) / 100.0) ** self.an \
+            * np.asarray(cl_band)
+
+
+@dataclass
+class IRMapSurvey:
+    """WISE/SPHEREx-like infrared intensity maps in a few μm bands.
+
+    Same effective (rn, an) noise recipe as :class:`SKASurvey`; zodiacal and
+    stellar residuals dominate, hence the larger rn at 12 μm.
+    """
+    f_sky: float = 0.65
+    bands: tuple = (3.4, 4.9, 12.0)   # band centres [μm]
+    rn: tuple = (0.3, 0.3, 0.4)
+    an: float = 0.5
+
+    def noise_cl(self, ell, cl_band, i):
+        """Effective noise power for band ``i`` against its fiducial auto."""
+        return self.rn[i] * (np.asarray(ell) / 100.0) ** self.an \
+            * np.asarray(cl_band)
+
+
+@dataclass
+class BandLFSurvey:
+    """Generic broad-band luminosity-function survey: an f_sky footprint with
+    a νL_ν-equivalent flux limit driving the L_lim(z) completeness (the
+    Athena/radio/IR pattern, instantiated per band: UV, opt, NIR, AGN UV/opt)."""
+    f_sky: float
+    nulnu_lim: float             # νL_ν-equivalent limit [erg/s/cm²]
+
+    def l_lim(self, z, h, Om):
+        """Faintest detectable νL_ν [erg/s] at redshift z."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h * _MPC_CM      # [cm]
+        return 4.0 * np.pi * d_l ** 2 * self.nulnu_lim
+
+
+@dataclass
+class HISurvey:
+    """Blind HI survey + 21 cm intensity mapping (ALFALFA/MIGHTEE → SKA1 era).
+
+    The HIMF uses Poisson counts with an M_HI detection limit
+    M_lim(z) = 2.36×10⁵ d_L² S_int (the standard 21 cm mass–flux relation);
+    the 21 cm × galaxy cross uses the calibrated effective (rN, aN) recipe
+    (the tSZ precedent) — a CHIME/MeerKLASS-era noise-to-signal.
+    """
+    f_sky: float = 0.16          # ALFALFA-like footprint for the HIMF
+    s_int_lim: float = 0.6       # integrated-flux limit [Jy km/s]
+    z_himf: float = 0.06         # depth of the LOCAL blind-HIMF volume
+    f_sky_im: float = 0.1        # 21 cm IM × galaxies overlap
+    rn_im: float = 2.0           # IM noise-to-signal at ℓ = 100
+    an_im: float = 0.5           # and its ℓ growth exponent
+
+    def mhi_lim(self, z, h, Om):
+        """Faintest detectable M_HI [Msun/h] at redshift z (2.36e5 d_L² S)."""
+        d_l = (1.0 + z) * chi_of(z, h, Om) / h                # [Mpc]
+        return 2.36e5 * max(d_l, 1e-3) ** 2 * self.s_int_lim * h
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +365,29 @@ def delta_sigma_noise(rp, ds, z_l, ngal, volume, h, Om,
     n_lens = ngal * volume
     shape = shear.sigma_e / mean_inv_sc / np.sqrt(n_src * a_ann * n_lens)
     return np.sqrt(shape ** 2 + (spectro.cv_rel(volume) * ds) ** 2)
+
+
+def wgp_noise(rp, wgp, z_l, ngal, volume, h, Om,
+              shear: ShearSurvey, spectro: SpectroSurvey):
+    """Absolute σ on w_g+(r_p) [Mpc/h]: shape noise per annulus + CV floor.
+
+    The delta_sigma_noise geometry WITHOUT the Σ_crit lensing weight — the
+    intrinsic-alignment estimator correlates density tracers with the SHAPES
+    of the same (or an overlapping) sample, so the noise per r_p bin is
+    σ_e/√(n_shape·A_ann·N_dens) projected over 2π_max.  An effective recipe
+    (no IA–clustering cross-covariance), the tSZ/IM documentation precedent.
+    """
+    rp = np.asarray(rp, dtype=float)
+    wgp = np.asarray(wgp, dtype=float)
+    chi_l = chi_of(z_l, h, Om)
+    lo, hi = _bin_edges(rp)
+    rad2arcmin = 180.0 * 60.0 / np.pi
+    a_ann = np.pi * ((hi / chi_l * rad2arcmin) ** 2
+                     - (lo / chi_l * rad2arcmin) ** 2)   # [arcmin²]
+    n_lens = ngal * volume
+    shape = (2.0 * spectro.pi_max * shear.sigma_e
+             / np.sqrt(shear.n_eff * a_ann * n_lens))
+    return np.sqrt(shape ** 2 + (spectro.cv_rel(volume) * wgp) ** 2)
 
 
 def band_mean_photon_energy(bands, gamma_cxb=1.4):
