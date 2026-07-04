@@ -182,6 +182,42 @@ interpreter; the workers inherit the parent's x64 mode through the
 ``JAX_ENABLE_X64`` environment variable so that module-level constants are
 built in the right precision).
 
+Two operational lessons from the production run:
+
+* **Worker memory**: a long-lived worker accumulates JAX compilation caches
+  for every distinct block shape it processes (several GB within a handful
+  of blocks) — eight persistent workers OOM-killed a 64 GB host.
+  ``max_tasks_per_child`` (default 4) therefore recycles each worker,
+  bounding its RSS near the single-block peak for the cost of one forecast
+  rebuild (~seconds) per cycle; the byte-identity is unchanged.
+* The per-block cache is **incremental and atomic**, so an interrupted run
+  (OOM, reboot, Ctrl-C) resumes exactly where it stopped — only missing
+  blocks are recomputed.
+
+Production configuration and results
+------------------------------------
+
+The production run frees all 102 parameters (only the retired ``log10DC``
+pinned) over the full block set:
+
+* **292 blocks**: 260 SF/Q-split (z, M*) cells (13 M* bins × 10 shells ×
+  2 populations; no cells skipped — the deep tier reaches 10⁹ at all z),
+  10 shells (X-ray/radio/IR/[OII] LFs, map autos, AGN crosses, tSZ + 21 cm
+  autos, cluster counts), the global lensing block, 10 AGN clustering +
+  lensing blocks (z = 0.1…1.9) and 10 wide-M* SFRD blocks, plus the local
+  HIMF block;
+* six X-ray bands, three radio + three IR map bands, five tomographic shear
+  bins; scale cuts r_min = 0.1, 0.5, 2.5 Mpc/h;
+* command: ``JAX_PLATFORMS=cpu python -m
+  hod_mod.scripts.forecasts.run_tier3_forecast --jobs 6``.
+
+SUMMARY, npz products, the per-sector information gains and the
+``tier3_forecast__*`` figure suite are written to
+``$HOD_MOD_RESULTS/tier3_forecast/``; the 102-parameter
+cosmology-vs-astrophysics decomposition will be folded into this section
+when the run completes (the tier-2 page carries the 61- and 90-parameter
+baselines it extends).
+
 Verification
 ------------
 
