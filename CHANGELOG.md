@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — branch `feature/missing-physics`
+## [0.2.1] — 2026-07-04
+
+The **missing-physics extension** (waves 1-4) and the **tier-3/tier-4
+multi-wavelength + morphology forecasts**: the differentiable parameter
+vector grows 61 -> 111, every addition fiducial-preserving and gated by an
+exact invariant; three production Fisher runs (90, 102 and 111 parameters)
+with physical survey noise.  Headline: sigma(Omega_m) tightens from
+2.85e-4 (tier-2, 61 params) to 4.89e-5 (tier-4, 111 params) while freeing
+50 additional parameters -- the multi-wavelength data self-calibrate the
+astrophysics, and the intrinsic-alignment amplitude self-calibrates
+through the morphology sector at no cost to the shear cosmology.
 
 First implementation wave of the `docs/missing_physics.rst` roadmap
 (parameter vector 61 → 77, all fiducial-preserving; gates in
