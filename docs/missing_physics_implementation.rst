@@ -7,7 +7,8 @@ Between 2026-07-03 and 2026-07-04 (branch ``feature/missing-physics``) the
 propositions of :doc:`missing_physics` were implemented in four waves,
 growing the differentiable parameter vector from the tier-2 61 entries to
 **90** (waves 1–3), then to **102** (the :doc:`tier3_forecast` SED
-calibrations) and **106** (wave 4, galaxy morphology) — every addition
+calibrations), **106** (wave 4, galaxy morphology) and **111**
+(:doc:`tier4_forecast`, the morphology observables) — every addition
 fiducial-preserving, so the :doc:`tier2_forecast`
 predictions are reproduced exactly (or to a stated tolerance) at the fiducial,
 and every mechanism carries an exact invariant that is enforced by
