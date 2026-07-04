@@ -213,10 +213,65 @@ pinned) over the full block set:
 
 SUMMARY, npz products, the per-sector information gains and the
 ``tier3_forecast__*`` figure suite are written to
-``$HOD_MOD_RESULTS/tier3_forecast/``; the 102-parameter
-cosmology-vs-astrophysics decomposition will be folded into this section
-when the run completes (the tier-2 page carries the 61- and 90-parameter
-baselines it extends).
+``$HOD_MOD_RESULTS/tier3_forecast/`` (2026-07-04 run: 59 779 rows, no
+skipped cells).
+
+**Headline numbers** at :math:`r_\mathrm{min} = 0.1\,h^{-1}` Mpc:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 20 22 14
+
+   * - Parameter
+     - All 102 free
+     - Astrophysics pinned
+     - Degradation
+   * - :math:`\Omega_\mathrm{m}`
+     - :math:`5.89\times10^{-5}`
+     - :math:`3.68\times10^{-5}`
+     - ×1.6
+   * - :math:`\sigma_8`
+     - :math:`7.95\times10^{-5}`
+     - :math:`5.72\times10^{-5}`
+     - ×1.4
+   * - :math:`w_0`
+     - :math:`7.33\times10^{-4}`
+     - :math:`4.60\times10^{-4}`
+     - ×1.6
+   * - :math:`w_a`
+     - :math:`3.39\times10^{-3}`
+     - :math:`2.12\times10^{-3}`
+     - ×1.6
+
+Two structural conclusions:
+
+* **The multi-wavelength data self-calibrate the astrophysics.**  Relative
+  to the 90-parameter tier-2 production (:doc:`tier2_forecast`:
+  :math:`\sigma(\Omega_\mathrm{m}) = 1.82\times10^{-4}`,
+  :math:`\sigma(\sigma_8) = 2.93\times10^{-4}`), the tier-3 combination is
+  ×3.1 / ×3.7 tighter *while freeing 12 more parameters*, and the
+  free-vs-pinned degradation collapses from ×2.3 to ×1.6.  Even
+  :math:`h` and :math:`n_s` become data-dominated
+  (:math:`5.5\times10^{-5}`, :math:`7.0\times10^{-5}` — two orders of
+  magnitude inside their Planck/BBN priors).
+* **The maps and band LFs do the heavy lifting.**  The cumulative
+  attribution runs
+  :math:`\sigma(\Omega_\mathrm{m}): 2.34 \to 1.61 \to 0.98 \to 0.60
+  \times 10^{-4}` for galaxy grid + lensing → +X-ray/tSZ → **+radio/IR
+  maps** → **+band LFs**, with the tSZ/HI autos, cluster counts and AGN
+  lensing adding percent-level refinements.  The radio/IR intensity maps
+  and the UV/opt/NIR luminosity functions — tier-3's new probes — deliver
+  the two largest single gains.
+
+Caveats recorded with the run: 247 rows sit below the survey completeness
+limits (σ = ∞, dominated by high-z faint LF bins); and at this Fisher
+dynamic range (59k rows) the prior-scaled eigenvalue floor of the
+pseudo-inverse sweeps up the prior-bounded directions —
+:math:`\Sigma m_\nu` (and the ``agn`` sector's information-gain
+determinant at the two finer scale cuts) report as unconstrained/NaN
+where the 90-parameter run still resolved them.  The principled fix
+(floor eigenvalues at unity in prior-scaled space instead of dropping
+them) is noted for the tier-4 analysis.
 
 Verification
 ------------
