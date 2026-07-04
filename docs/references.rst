@@ -1321,7 +1321,3 @@ current state of the art per probe.
    the basis of the ``a_ia · f_early`` NLA scaling.
    `arXiv:2502.09452 <https://arxiv.org/abs/2502.09452>`_
 
-.. [KormendyHo2013] Kormendy J. & Ho L.C. 2013, ARA&A 51, 511.
-   Coevolution (or not) of supermassive black holes and host galaxies — the
-   M_BH–M_bulge anchor of the ``mbh_bt_slope`` coupling.
-   `arXiv:1304.7762 <https://arxiv.org/abs/1304.7762>`_
