@@ -124,6 +124,8 @@ def main():
                          "z-resolved [OII] LF per shell")
     ap.add_argument("--include-ir", action="store_true",
                     help="add the AGN infrared LF per shell")
+    ap.add_argument("--include-morph", action="store_true",
+                    help="add the per-cell early-type fraction (wave 4)")
     ap.add_argument("--no-plots", action="store_true")
     args = ap.parse_args()
 
@@ -145,7 +147,8 @@ def main():
                            include_radio=args.include_radio,
                            include_hi=args.include_hi,
                            include_ssfr=args.include_ssfr,
-                           include_ir=args.include_ir)
+                           include_ir=args.include_ir,
+                           include_morph=args.include_morph)
 
     fid = t2.fiducial()
     names = PARAM_NAMES

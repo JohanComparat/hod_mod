@@ -93,6 +93,11 @@ _FIDUCIAL_DEFAULT = {
     "luv_norm": 42.65, "tau_uv_mslope": 0.0,  # UV/SFR incl. attenuation + its M* slope
     "lha_norm": 41.27,                       # log10 L_Halpha/SFR (Kennicutt)
     "agn_bc_uv": -0.62, "agn_bc_opt": -0.72,  # AGN bolometric corrections (1450A, 4400A)
+    # --- wave 4: conditional galaxy morphology (early-type Weibull) + the
+    # BH-bulge coupling (0 fiducial = the pure Powell chain).
+    "log10_M_morph": 12.5, "beta_morph": 0.8,
+    "f_morph_sat": 0.2,
+    "mbh_bt_slope": 0.0,
 }
 
 # Planck 2018 1σ priors (planck_prior.PLANCK18_SIGMAS) on the free cosmo params.
@@ -154,6 +159,9 @@ BROAD_PRIOR_SIGMA = {
     "ml_nir": 0.3, "ml_opt": 0.3, "dopt_q": 0.3,
     "luv_norm": 0.3, "tau_uv_mslope": 0.3, "lha_norm": 0.2,
     "agn_bc_uv": 0.3, "agn_bc_opt": 0.3,
+    # wave 4
+    "log10_M_morph": 1.0, "beta_morph": 0.5,
+    "f_morph_sat": 0.3, "mbh_bt_slope": 0.5,
 }
 
 PARAM_LATEX = {
@@ -221,6 +229,11 @@ PARAM_LATEX = {
     "tau_uv_mslope": r"$\partial_M\tau_{\rm UV}$",
     "lha_norm": r"$\log_{10}L_{{\rm H}\alpha}/{\rm SFR}$",
     "agn_bc_uv": r"${\rm BC}_{\rm UV}$", "agn_bc_opt": r"${\rm BC}_{\rm opt}$",
+    # wave 4
+    "log10_M_morph": r"$\log_{10}M_{\rm morph}$",
+    "beta_morph": r"$\beta_{\rm morph}$",
+    "f_morph_sat": r"$f_{\rm morph}^{\rm sat}$",
+    "mbh_bt_slope": r"$\partial_{B/T}M_{\rm BH}$",
 }
 
 # Parameter sectors for the tier-2 cosmology-vs-astrophysics decomposition
@@ -257,6 +270,9 @@ SECTORS = {
             "luv_norm", "tau_uv_mslope", "lha_norm"],
     # cold gas / neutral hydrogen (VN18 halo model + quenched deficit)
     "coldgas": ["log10_M0_hi", "log10_Mmin_hi", "alpha_hi", "dhi_quenched"],
+    # galaxy morphology (wave 4): early-type Weibull + the BH-bulge link
+    "morphology": ["log10_M_morph", "beta_morph", "f_morph_sat",
+                   "mbh_bt_slope"],
     # retired: with agn_emission="powell" the duty cycle leaves the emissivity;
     # its only remaining consumer is the (off-by-default) energy-closure mode.
     "retired": ["log10DC"],
