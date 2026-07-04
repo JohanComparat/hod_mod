@@ -17,6 +17,15 @@ observables), the *run-today* assessment (§ :ref:`bench-today`), and the
 when (§ :ref:`bench-missing`).  Every entry cites a published measurement;
 the reference list with links is on :doc:`references`.
 
+.. admonition:: The data live in the data repository
+
+   The machine-readable companion of this page is
+   ``$HOD_MOD_DATA_DIR/benchmark_observables/`` — one JSON per
+   (reference, observable, sample), organised per wavelength and tracer,
+   with full metadata, uncertainties and provenance.  See
+   :ref:`bench-data-tree` below for the layout, the file schema and the
+   operator workflow.
+
 .. contents::
    :local:
    :depth: 2
@@ -353,6 +362,113 @@ a published relation it does not yet exploit):
 * **21 cm auto-spectrum.**  The first CHIME auto-power detection
   [CHIMEauto2025]_ upgrades ``cl_HIHI`` from forecast-only to
   benchmarkable.
+
+.. _bench-data-tree:
+
+The benchmark data tree
+-----------------------
+
+The compilation above is materialised as a JSON tree in the data
+repository, ``$HOD_MOD_DATA_DIR/benchmark_observables/`` — **83 files**,
+one per (bibliographic reference, observable, sample):
+
+.. code-block:: text
+
+   benchmark_observables/
+     README.md                # schema + operator workflow
+     index.json               # every file with provenance + extraction flag
+     <wavelength>/<tracer>/<RefKey>__<observable>[__<sample>].json
+
+with ``wavelength`` ∈ {radio, infrared, optical, uv, xray, microwave,
+multiwavelength} and ``tracer`` ∈ {galaxies, agn, clusters, hi, gas,
+lensing, cmb_lensing, blackholes}.  The tree is generated (and
+regenerated after any change) by::
+
+    python -m hod_mod.scripts.data.make_benchmark_observables \
+        --out $HOD_MOD_DATA_DIR/benchmark_observables
+
+File schema (``schema_version`` 1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 74
+
+   * - Field
+     - Content
+   * - ``wavelength``, ``tracer``, ``observable``, ``sample_id``
+     - position in the taxonomy; ``observable`` uses the model's names
+       (``wp``, ``ds``, ``xlf``, ``himf``, …)
+   * - ``reference``
+     - ``key`` (matching the entries on :doc:`references`), ``citation``,
+       ``arxiv`` link, optional ``doi`` and ``note``.  For datasets
+       ingested from the curated ``data/{paper}`` folders the arXiv/DOI
+       come from the folder's ``metadata.json`` (authoritative)
+   * - ``provenance``
+     - ``type`` (see the classes below), ``origin`` (file path or
+       formula), optional ``extraction_method``, and the
+       ``needs_operator_extraction`` flag with its ``extraction_hint``
+   * - ``sample``
+     - survey, redshift, selection and the measurement's own cosmology
+   * - ``units``
+     - per-column units (h-conventions stated where they differ from the
+       model's)
+   * - ``data``
+     - column arrays including uncertainties; ``null`` marks a masked or
+       non-finite entry
+
+Provenance classes
+~~~~~~~~~~~~~~~~~~
+
+* **observed (45)** — real measurements ingested from the curated local
+  sources: the nine benchmark folders under the repo's ``data/``
+  (Zehavi/SDSS ``wp``, Guo 2018/2019, Leauthaud 2012 ΔΣ, More 2015 CMASS
+  ×3 samples, van Uitert 2016 ΔΣ, Zacharegkas 2025 DES, Zu & Mandelbaum
+  2015 per-M*-bin ``wp``/ΔΣ, Lange 2025 DESI DR1 BGS/LRG — see
+  :ref:`data_formats` for the folder convention), the [Comparat2025]_
+  broad-band w(θ) for S1–S7, and the 15×100 eV energy-band w(θ) FITS
+  sets for all seven volume-limited samples (the 16th per-sample FITS,
+  the broad-band sum, is already represented by the broad-band entries).
+* **observed_derived_fit (2)** — points evaluated from a *published*
+  fitting function with published parameters: the [MadauDickinson2014]_
+  SFRD (their Eq. 15, Salpeter IMF) and the ALFALFA HIMF Schechter fit
+  [Jones2018ALFALFA]_.  The binned points behind the fits remain flagged
+  for extraction.
+* **simulated (26)** — the forward-model fiducial prediction with the
+  *forecast* survey noise, dumped from the tier-2 production npz
+  (90 parameters, full grid) or the tier-3 smoke npz (reduced grid — to
+  be refreshed from the tier-3 production npz once that run completes).
+  These are stand-ins: ``y_err`` is the Stage-IV noise model, **not**
+  current-survey errors, and every one names the published table that
+  should replace it (e.g. the [Aird2015]_ electronic XLF tables, the
+  KiDS-Legacy band powers [Wright2025]_, the [Kulkarni2019]_ QLF
+  tables).
+* **placeholder (10)** — no local stand-in is meaningful (data outside
+  the model grid such as the z > 4 UV LFs, scalar relations such as the
+  M_BH census, or external catalogues such as the eRASS1 cluster
+  products); reference + description + extraction hint only.
+
+Operator worklist
+~~~~~~~~~~~~~~~~~
+
+**38 files carry** ``needs_operator_extraction: true`` (all simulated
+and placeholder entries plus the two derived fits).  ``index.json``
+lists them::
+
+    python -c "
+    import json
+    idx = json.load(open('index.json'))
+    for k, v in idx.items():
+        if v['needs_operator_extraction']:
+            print(v['provenance'].ljust(22), k)"
+
+When a published table has been extracted, replace the entry *in place*
+(same file name), set ``provenance.type = 'observed'`` with the
+``extraction_method``, record the source table/figure in
+``provenance.origin``, and clear the flag.  One curated source is an
+intentional empty placeholder: van Uitert 2016 measures only lensing, so
+its ``wp`` CSV documents the GAMA clustering alternatives in its header
+instead of data.
 
 Relation to the other pages
 ---------------------------
