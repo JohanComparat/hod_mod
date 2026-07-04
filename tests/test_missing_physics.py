@@ -284,10 +284,11 @@ def test_tier2_split_sfq_assembly(fid, tmp_path):
 def test_vector_and_sectors_extended():
     from hod_mod.forecast.forward_jax import (
         PARAM_NAMES, N_PARAM, MISSING_PHYSICS, TIER3_EXTENSION,
-        WAVE4_MORPHOLOGY)
+        WAVE4_MORPHOLOGY, TIER4_MORPHOLOGY)
     from hod_mod.forecast.params import SECTORS
     assert len(MISSING_PHYSICS) == 29 and MISSING_PHYSICS[0] == "eps_sn"
-    assert N_PARAM == 90 + len(TIER3_EXTENSION) + len(WAVE4_MORPHOLOGY)
+    assert N_PARAM == (90 + len(TIER3_EXTENSION) + len(WAVE4_MORPHOLOGY)
+                       + len(TIER4_MORPHOLOGY))
     flat = [n for sec in SECTORS.values() for n in sec]
     assert sorted(flat) == sorted(PARAM_NAMES)
 
@@ -471,14 +472,16 @@ def test_tier2_wave2_observables(fid, tmp_path):
 
 def test_wave4_layout():
     from hod_mod.forecast.forward_jax import (
-        PARAM_NAMES, N_PARAM, TIER3_EXTENSION, WAVE4_MORPHOLOGY)
+        PARAM_NAMES, N_PARAM, TIER3_EXTENSION, WAVE4_MORPHOLOGY,
+        TIER4_MORPHOLOGY)
     from hod_mod.forecast.params import SECTORS
-    assert N_PARAM == 106
+    assert N_PARAM == 106 + len(TIER4_MORPHOLOGY)
     assert list(TIER3_EXTENSION) == list(PARAM_NAMES[90:102])
-    assert list(WAVE4_MORPHOLOGY) == list(PARAM_NAMES[102:])
+    assert list(WAVE4_MORPHOLOGY) == list(PARAM_NAMES[102:106])
     assert WAVE4_MORPHOLOGY == ["log10_M_morph", "beta_morph",
                                 "f_morph_sat", "mbh_bt_slope"]
-    assert set(SECTORS["morphology"]) == set(WAVE4_MORPHOLOGY)
+    assert set(SECTORS["morphology"]) == set(WAVE4_MORPHOLOGY
+                                             + TIER4_MORPHOLOGY)
 
 
 def test_wave4_f_early_weibull():
