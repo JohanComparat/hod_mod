@@ -174,6 +174,9 @@ class SpectroSurvey:
     sfrd_rel: float = 0.12       # relative σ on the cell SFR density (MD14-like)
     foii_lim: float = 1.0e-16    # [OII] line-flux limit [erg/s/cm²] (DESI-like)
     fha_lim: float = 1.0e-16     # Hα line-flux limit [erg/s/cm²]
+    fmorph_err: float = 0.02     # early-type-fraction calibration floor (abs)
+    size_err: float = 0.02       # mean-log-size calibration floor [dex]
+    fmorph_agn_err: float = 0.05 # AGN-host morphology calibration floor (abs)
     mstar_lim0: float = None     # log10 M* completeness limit at z = 0
     mstar_lim_slope: float = 0.0 # its d(log10 M*)/dz slope
 
@@ -362,6 +365,29 @@ def delta_sigma_noise(rp, ds, z_l, ngal, volume, h, Om,
     n_lens = ngal * volume
     shape = shear.sigma_e / mean_inv_sc / np.sqrt(n_src * a_ann * n_lens)
     return np.sqrt(shape ** 2 + (spectro.cv_rel(volume) * ds) ** 2)
+
+
+def wgp_noise(rp, wgp, z_l, ngal, volume, h, Om,
+              shear: ShearSurvey, spectro: SpectroSurvey):
+    """Absolute σ on w_g+(r_p) [Mpc/h]: shape noise per annulus + CV floor.
+
+    The delta_sigma_noise geometry WITHOUT the Σ_crit lensing weight — the
+    intrinsic-alignment estimator correlates density tracers with the SHAPES
+    of the same (or an overlapping) sample, so the noise per r_p bin is
+    σ_e/√(n_shape·A_ann·N_dens) projected over 2π_max.  An effective recipe
+    (no IA–clustering cross-covariance), the tSZ/IM documentation precedent.
+    """
+    rp = np.asarray(rp, dtype=float)
+    wgp = np.asarray(wgp, dtype=float)
+    chi_l = chi_of(z_l, h, Om)
+    lo, hi = _bin_edges(rp)
+    rad2arcmin = 180.0 * 60.0 / np.pi
+    a_ann = np.pi * ((hi / chi_l * rad2arcmin) ** 2
+                     - (lo / chi_l * rad2arcmin) ** 2)   # [arcmin²]
+    n_lens = ngal * volume
+    shape = (2.0 * spectro.pi_max * shear.sigma_e
+             / np.sqrt(shear.n_eff * a_ann * n_lens))
+    return np.sqrt(shape ** 2 + (spectro.cv_rel(volume) * wgp) ** 2)
 
 
 def band_mean_photon_energy(bands, gamma_cxb=1.4):
