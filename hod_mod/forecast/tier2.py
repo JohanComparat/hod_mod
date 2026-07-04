@@ -320,7 +320,8 @@ class Tier2Forecast:
         return (np.asarray(d0), np.asarray(J), np.asarray(row_obs),
                 np.asarray(row_x, dtype=float), extras)
 
-    def precompute_blocks(self, fid, cache_dir, jobs=1, verbose=True):
+    def precompute_blocks(self, fid, cache_dir, jobs=1, verbose=True,
+                          max_tasks_per_child=4):
         """Fill the per-block npz cache with ``jobs`` worker processes.
 
         Spawned workers rebuild this exact forecast from ``self._ctor_kwargs``
@@ -329,6 +330,13 @@ class Tier2Forecast:
         :meth:`data_and_jacobian` assembles bit-identical results from the
         cache — the parallel == serial invariant.  Returns the labels that
         were missing on entry.
+
+        ``max_tasks_per_child`` recycles each worker after that many blocks:
+        a worker's JAX compilation cache grows with every distinct block
+        shape it touches (several GB after a handful of blocks), and without
+        recycling a full tier-3 run OOMs the host.  Recycling bounds the
+        per-worker RSS near the single-block peak at the cost of one forecast
+        rebuild (~seconds) per cycle.
         """
         labels = [b.label for b in self.blocks
                   if not os.path.exists(self._cache_path(cache_dir, b, fid))]
@@ -350,7 +358,9 @@ class Tier2Forecast:
             with ProcessPoolExecutor(
                     max_workers=int(jobs), mp_context=ctx,
                     initializer=_precompute_init,
-                    initargs=(type(self), self._ctor_kwargs, x64)) as exe:
+                    initargs=(type(self), self._ctor_kwargs, x64),
+                    max_tasks_per_child=(int(max_tasks_per_child)
+                                         if max_tasks_per_child else None)) as exe:
                 futs = {exe.submit(_precompute_block, lab, fid, cache_dir): lab
                         for lab in labels}
                 for i, f in enumerate(as_completed(futs)):
