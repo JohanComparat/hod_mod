@@ -1,6 +1,5 @@
 Bibliography
 ============
-
 Consolidated reference list for all papers cited in ``hod_mod``.
 Entries are grouped by topic and ordered chronologically within each group
 to show the progression of the field.
@@ -45,7 +44,7 @@ implemented in ``hod_mod``.
 
 .. [Asgari2023] Marika Asgari, Alexander J. Mead, Catherine Heymans 
    OJAp 6E 39A 2023. The halo model for cosmology: a pedagogical review. 
-   `arXiv:astro-ph/2303.08752 <https://arxiv.org/abs/2303.08752>`_
+   `arXiv:2303.08752 <https://arxiv.org/abs/2303.08752>`_
 
 .. [SeljakWarren2004] Seljak U. & Warren M.S. 2004, MNRAS 355, 129.
    First complete halo model predictions for galaxy clustering including
@@ -898,6 +897,46 @@ all-galaxy ZM15 connection (see :doc:`missing_physics`).
    parameterisation for a continuous sSFR model.
    `arXiv:1405.2041 <https://arxiv.org/abs/1405.2041>`_
 
+.. [Kennicutt1998] Kennicutt R.C. 1998, ARA&A 36, 189.
+   Star formation in galaxies along the Hubble sequence — the SFR–line
+   calibrations behind the ``loii_norm`` parameter.
+   `arXiv:astro-ph/9807187 <https://arxiv.org/abs/astro-ph/9807187>`_
+
+.. [MadauDickinson2014] Madau P. & Dickinson M. 2014, ARA&A 52, 415.
+   The cosmic star-formation history — the ρ_SFR(z) data the ``sfrd``
+   observable is compared against.
+   `arXiv:1403.0007 <https://arxiv.org/abs/1403.0007>`_
+
+.. [Murphy2011] Murphy E.J. et al. 2011, ApJ 737, 67.
+   Extinction-free SFR diagnostics calibrated with 33 GHz free–free emission
+   — the L_ν(1.4 GHz)–SFR calibration behind ``l14_sfr``.
+   `arXiv:1105.4877 <https://arxiv.org/abs/1105.4877>`_
+
+.. [KennicuttEvans2012] Kennicutt R.C. & Evans N.J. 2012, ARA&A 50, 531.
+   Star formation in the Milky Way and nearby galaxies — the total-IR and
+   Hα SFR calibrations behind ``lir_sfr`` and ``lha_norm``.
+   `arXiv:1204.3552 <https://arxiv.org/abs/1204.3552>`_
+
+.. [Runnoe2012] Runnoe J.C., Brotherton M.S. & Shang Z. 2012, MNRAS 422, 478.
+   Updated quasar bolometric corrections — the 1450 Å and 4400 Å values
+   behind ``agn_bc_uv`` / ``agn_bc_opt``.
+   `arXiv:1201.5155 <https://arxiv.org/abs/1201.5155>`_
+
+.. [Wright2010] Wright E.L. et al. 2010, AJ 140, 1868.
+   The Wide-field Infrared Survey Explorer (WISE) — the 3.4/4.6/12 μm bands
+   the tier-3 IR intensity maps emulate.
+   `arXiv:1008.0031 <https://arxiv.org/abs/1008.0031>`_
+
+.. [Dore2014] Doré O. et al. 2014, arXiv e-prints.
+   Cosmology with the SPHEREx all-sky spectral survey — the near-IR
+   intensity-mapping context of the tier-3 IR maps.
+   `arXiv:1412.4872 <https://arxiv.org/abs/1412.4872>`_
+
+.. [Bacon2018] Bacon D.J. et al. (SKA Cosmology SWG) 2020, PASA 37, e007.
+   Cosmology with Phase 1 of the Square Kilometre Array (Red Book 2018) —
+   the radio continuum survey spec the tier-3 radio maps emulate.
+   `arXiv:1811.02743 <https://arxiv.org/abs/1811.02743>`_
+
 .. [Behroozi2019] Behroozi P. et al. 2019, MNRAS 488, 3143.
    UniverseMachine: empirical galaxy–halo connection with per-halo SFR
    histories — the reference empirical model for SFR-resolved occupations.
@@ -1070,3 +1109,209 @@ The HI halo model, cold-gas scaling relations and 21 cm data
    Full-sky Galactic HI survey — used in ``hod_mod`` only as the Galactic
    absorption (N_H) template, *not* as extragalactic cold gas.
    `arXiv:1610.06175 <https://arxiv.org/abs/1610.06175>`_
+
+----
+
+Sensitivity-Benchmark Data Anchors
+------------------------------------
+
+The published measurements compiled on :doc:`sensitivity_benchmark` — the
+"already existing observables" the forward model must reproduce, and the
+current state of the art per probe.
+
+.. [Zehavi2011] Zehavi I. et al. 2011, ApJ 736, 59.
+   SDSS DR7 projected correlation functions w_p(r_p) per luminosity/colour
+   sample — the reference low-z clustering benchmark.
+   `arXiv:1005.2413 <https://arxiv.org/abs/1005.2413>`_
+
+.. [Wright2025] Wright A.H. et al. 2025, A&A.
+   KiDS-Legacy cosmic shear (1347 deg², nine bands):
+   S8 = 0.815 (+0.016/−0.021) — the current cosmic-shear state of the art.
+   `arXiv:2503.19441 <https://arxiv.org/abs/2503.19441>`_
+
+.. [Qu2024] Qu F.J. et al. 2024, ApJ 962, 112.
+   ACT DR6 CMB-lensing power spectrum: 43σ (2.3 % amplitude), matching
+   Planck PR4 — the C_ell^{κκ_CMB} benchmark.
+   `arXiv:2304.05202 <https://arxiv.org/abs/2304.05202>`_
+
+.. [Kim2024] Kim J. et al. 2024, JCAP 12, 022.
+   DESI LRG × ACT DR6 CMB lensing in four tomographic bins (0.4 ≤ z ≤ 1):
+   38σ (50σ with Planck PR4), S8 to 2.7 % — the C_ell^{gκ_CMB} benchmark.
+   `arXiv:2407.04606 <https://arxiv.org/abs/2407.04606>`_
+
+.. [Ghirardini2024] Ghirardini V. et al. 2024, A&A.
+   eRASS1 cluster-abundance cosmology (5259 clusters, 12 791 deg²):
+   σ8 = 0.88 ± 0.02, S8 = 0.86 ± 0.01, Σm_ν < 0.43 eV — the live X-ray
+   cluster-counts (``ncl``) benchmark.
+   `arXiv:2402.08458 <https://arxiv.org/abs/2402.08458>`_
+
+.. [DESI2024FS] DESI Collaboration 2025, JCAP 07, 028 (DESI 2024 VII).
+   DR1 full-shape clustering: σ8 = 0.842 ± 0.034 alone,
+   σ8 to 0.65 % with CMB — the RSD/full-shape benchmark.
+   `arXiv:2411.12022 <https://arxiv.org/abs/2411.12022>`_
+
+.. [DESIDR2] DESI Collaboration 2025, Phys. Rev. D 112, 083515.
+   DR2 BAO from >14 million tracers; with CMB a 3.1σ preference for
+   w0waCDM over ΛCDM — the geometric benchmark for the freed (w0, wa).
+   `arXiv:2503.14738 <https://arxiv.org/abs/2503.14738>`_
+
+.. [Schaan2021] Schaan E. et al. (ACT) 2021, Phys. Rev. D 103, 063513.
+   kSZ + tSZ profiles of BOSS CMASS galaxies with ACT — the measured
+   gas-density/pressure profiles a kSZ observable would be fit against.
+   `arXiv:2009.05557 <https://arxiv.org/abs/2009.05557>`_
+
+.. [CHIMEauto2025] CHIME Collaboration 2025 (preprint).
+   First detection of the cosmological 21 cm auto-power spectrum at z ≈ 1
+   with CHIME — the C_ell^{HI×HI} proof of principle.
+   `arXiv:2511.19620 <https://arxiv.org/abs/2511.19620>`_
+
+.. [Bonato2021] Bonato M. et al. 2021, A&A 656, A48.
+   LoTSS Deep Fields: 150 MHz luminosity of star-forming galaxies as an SFR
+   tracer — the measured SF radio LF behind ``l14_sfr``/``rlf``.
+   `arXiv:2109.06735 <https://arxiv.org/abs/2109.06735>`_
+
+.. [Kondapally2022] Kondapally R. et al. 2022, MNRAS 513, 3742.
+   LoTSS Deep Fields: cosmic evolution of low-excitation radio galaxies to
+   z ≈ 2.5 — the radio-AGN (jet-mode) LF benchmark.
+   `arXiv:2204.07588 <https://arxiv.org/abs/2204.07588>`_
+
+.. [Weaver2023] Weaver J.R. et al. 2023, A&A 677, A184.
+   COSMOS2020 galaxy stellar-mass function 0.2 < z < 5.5, total and
+   quiescent — the SMF + quenched-fraction benchmark for the (z, M*) grid.
+   `arXiv:2212.02512 <https://arxiv.org/abs/2212.02512>`_
+
+.. [Driver2022] Driver S.P. et al. 2022, MNRAS 513, 439.
+   GAMA DR4: the low-z galaxy stellar-mass function over 250 deg² —
+   the local SMF anchor.
+   `arXiv:2203.08539 <https://arxiv.org/abs/2203.08539>`_
+
+.. [Popesso2023] Popesso P. et al. 2023, MNRAS 519, 1526.
+   The main sequence of star-forming galaxies over 0 < z < 6 — the
+   sSFR(M*, z) benchmark behind ``ssfr_ms_*``.
+   `arXiv:2203.10487 <https://arxiv.org/abs/2203.10487>`_
+
+.. [Kulkarni2019] Kulkarni G., Worseck G. & Hennawi J.F. 2019, MNRAS 488, 1035.
+   Homogenised type-1 quasar luminosity functions 0 < z < 7.5 — the
+   ``qlf_uv``/``qlf_opt`` benchmark.
+   `arXiv:1807.09774 <https://arxiv.org/abs/1807.09774>`_
+
+.. [KormendyHo2013] Kormendy J. & Ho L.C. 2013, ARA&A 51, 511.
+   The coevolution of supermassive black holes and their host galaxies —
+   the M_BH–M_bulge census that pins the ``agn_mu_bh`` sector externally.
+   `arXiv:1304.7762 <https://arxiv.org/abs/1304.7762>`_
+
+.. [Greene2020] Greene J.E., Strader J. & Ho L.C. 2020, ARA&A 58, 257.
+   The demographics of intermediate-mass and low-mass-galaxy black holes —
+   extends the M_BH census to the tier-3 M* < 10¹⁰ regime.
+   `arXiv:1911.09678 <https://arxiv.org/abs/1911.09678>`_
+
+.. [Sobral2013] Sobral D. et al. 2013, MNRAS 428, 1128.
+   HiZELS: Hα luminosity functions at z = 0.4–2.2 — the ``half``
+   observable benchmark.
+   `arXiv:1202.3436 <https://arxiv.org/abs/1202.3436>`_
+
+.. [Wyder2005] Wyder T.K. et al. 2005, ApJ 619, L15.
+   GALEX local UV luminosity functions — the low-z ``uvlf`` anchor.
+   `arXiv:astro-ph/0411364 <https://arxiv.org/abs/astro-ph/0411364>`_
+
+.. [Moustakas2013] Moustakas J. et al. 2013, ApJ 767, 50.
+   PRIMUS: stellar-mass functions and quenching 0 < z < 1 — a core
+   constraint of the UniverseMachine compilation.
+   `arXiv:1301.1688 <https://arxiv.org/abs/1301.1688>`_
+
+.. [Song2016] Song M. et al. 2016, ApJ 825, 5.
+   UV–stellar-mass relations at z = 4–8 from CANDELS SED stacks — a
+   UniverseMachine constraint re-derived in their Appendix D.
+   `arXiv:1507.05636 <https://arxiv.org/abs/1507.05636>`_
+
+.. [Finkelstein2015] Finkelstein S.L. et al. 2015, ApJ 810, 71.
+   UV luminosity functions at z = 4–8 from CANDELS/HUDF — a
+   UniverseMachine UVLF constraint.
+   `arXiv:1410.5439 <https://arxiv.org/abs/1410.5439>`_
+
+.. [Harikane2023] Harikane Y. et al. 2023, ApJS 265, 5.
+   JWST UV luminosity functions at z ≈ 9–16 — the current high-z frontier
+   of the UVLF benchmark.
+   `arXiv:2208.01612 <https://arxiv.org/abs/2208.01612>`_
+
+.. [Macquart2020] Macquart J.-P. et al. 2020, Nature 581, 391.
+   The FRB dispersion-measure–redshift relation: a direct census of the
+   ionised cosmic baryons — a published probe of the same hot-gas sector.
+   `arXiv:2005.13161 <https://arxiv.org/abs/2005.13161>`_
+
+.. [Kollmeier2017] Kollmeier J.A. et al. 2017, arXiv e-prints.
+   SDSS-V: Pioneering Panoptic Spectroscopy — the Black Hole Mapper
+   time-domain spectroscopic M_BH census now underway.
+   `arXiv:1711.03234 <https://arxiv.org/abs/1711.03234>`_
+
+.. [Powell2022] Powell M.C. et al. 2022, ApJ 938, 77 (BASS XXXVI).
+   Constraining the local SMBH–halo connection by forward-modelling the
+   clustering + luminosity function of Swift/BAT AGN — the AGN–halo model
+   implemented as :class:`hod_mod.agn.powell.PowellAGNModel`.
+   `arXiv:2209.02728 <https://arxiv.org/abs/2209.02728>`_
+
+.. [Ananna2022] Ananna T.T. et al. 2022, ApJS 261, 9 (BASS XXX).
+   Distribution functions of BASS DR2 Eddington ratios, black-hole masses
+   and X-ray luminosities — the broken-power-law ERDF used by the Powell
+   chain (``agn_log10_lstar``, ``agn_delta1``, ``agn_delta2``).
+   `arXiv:2201.05603 <https://arxiv.org/abs/2201.05603>`_
+.. [EuclidQ1Morph2025] Euclid Collaboration: Walmsley M. et al. 2025.
+   Euclid Q1: first visual morphology catalogue — 378k detailed morphologies
+   (Zoobot + Galaxy Zoo), 0.4% of the eventual ~100M; the f_early(M*, z)
+   data source of the tier-4 forecast.
+   `arXiv:2503.15310 <https://arxiv.org/abs/2503.15310>`_
+
+.. [EuclidZoobot2024] Euclid Collaboration 2024 (prep. XLIII).
+   Measuring detailed galaxy morphologies for Euclid with machine learning.
+   `arXiv:2402.10187 <https://arxiv.org/abs/2402.10187>`_
+
+.. [Kartaltepe2023] Kartaltepe J.S. et al. 2023, ApJL 946, L15.
+   CEERS Key Paper III: the diversity of galaxy structure and morphology at
+   z = 3–9 with JWST — the high-z anchor of f_early(z).
+   `arXiv:2210.14713 <https://arxiv.org/abs/2210.14713>`_
+
+.. [Ferreira2023] Ferreira L. et al. 2023, ApJ 955, 94.
+   Galaxy morphology from z ~ 6 through the eyes of JWST.
+   `arXiv:2305.02478 <https://arxiv.org/abs/2305.02478>`_
+
+.. [COSMOSWeb2025Hubble] COSMOS-Web 2025.
+   The emergence of the Hubble sequence — morphological fractions across
+   cosmic time from the largest JWST mosaic.
+   `arXiv:2502.03532 <https://arxiv.org/abs/2502.03532>`_
+
+.. [Skibba2009] Skibba R.A. et al. 2009, MNRAS 399, 966.
+   Galaxy Zoo: disentangling the environmental dependence of morphology and
+   colour — morphology-marked clustering statistics.
+   `arXiv:0811.3970 <https://arxiv.org/abs/0811.3970>`_
+
+.. [Masters2010] Masters K.L. et al. 2010, MNRAS 405, 783.
+   Galaxy Zoo: passive red spirals — the E/Q off-diagonal census behind the
+   ``f_early_q`` observable and ``rho_morph_q``.
+   `arXiv:0910.4113 <https://arxiv.org/abs/0910.4113>`_
+
+.. [Schawinski2014] Schawinski K. et al. 2014, MNRAS 440, 889.
+   The green valley is a red herring: two evolutionary pathways to quenching
+   for early- and late-type galaxies.
+   `arXiv:1402.4814 <https://arxiv.org/abs/1402.4814>`_
+
+.. [Bluck2022] Bluck A.F.L. et al. 2022, A&A 659, A160.
+   The quenching of galaxies, bulges and disks since cosmic noon — the
+   morphology–quenching causality the joint fractions constrain.
+   `arXiv:2201.07814 <https://arxiv.org/abs/2201.07814>`_
+
+.. [Kravtsov2013] Kravtsov A.V. 2013, ApJL 764, L31.
+   The size–virial radius relation: R_e ≈ 0.015 R_200c with 0.2 dex scatter
+   over eight decades of M* — the ``size`` observable's backbone.
+   `arXiv:1212.2980 <https://arxiv.org/abs/1212.2980>`_
+
+.. [vanderWel2014] van der Wel A. et al. 2014, ApJ 788, 28.
+   3D-HST+CANDELS: the galaxy size–mass distribution since z = 3 — early
+   types smaller and faster-evolving (``dsize_early``, ``f_size_zs``).
+   `arXiv:1404.2844 <https://arxiv.org/abs/1404.2844>`_
+
+.. [Georgiou2025] Georgiou C. et al. 2025, A&A.
+   KiDS-1000 bright sample intrinsic alignments: dependence on colour,
+   luminosity, MORPHOLOGY and galaxy scale — IA is driven by morphology,
+   the basis of the ``a_ia · f_early`` NLA scaling.
+   `arXiv:2502.09452 <https://arxiv.org/abs/2502.09452>`_
+

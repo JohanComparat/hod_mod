@@ -73,9 +73,15 @@ def test_top_level_namespace():
     assert not missing, f"hod_mod top-level missing {missing}"
 
 
-def test_version_is_0_1_x():
+def test_version_is_semver():
+    """__version__ matches pyproject and follows MAJOR.MINOR.PATCH."""
+    import re
     import hod_mod
-    assert hod_mod.__version__.startswith("0.1.")
+    assert re.fullmatch(r"\d+\.\d+\.\d+", hod_mod.__version__)
+    import pathlib
+    py = pathlib.Path(__file__).resolve().parents[1] / "pyproject.toml"
+    m = re.search(r'^version = "([^"]+)"', py.read_text(), re.M)
+    assert m and m.group(1) == hod_mod.__version__
 
 
 @pytest.mark.parametrize("old", ["hod_mod.cosmology", "hod_mod.galaxies"])

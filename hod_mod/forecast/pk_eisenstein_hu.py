@@ -27,7 +27,7 @@ import jax
 import jax.numpy as jnp
 
 from hod_mod.core.power_spectrum import eisenstein_hu_pk
-from hod_mod.core.halo_mass_function import _growth_factor_flat_jax
+from hod_mod.core.halo_mass_function import growth_factor
 
 
 # Wavenumber grid used for the σ(R=8) normalisation integral.  Matches the
@@ -43,6 +43,24 @@ def _sigma2_tophat(pk: jnp.ndarray, k: jnp.ndarray, R: float) -> jnp.ndarray:
     return jnp.trapezoid(pk * w ** 2 * k ** 2, k) / (2.0 * jnp.pi ** 2)
 
 
+def _nu_suppression(k: jnp.ndarray, theta: dict) -> jnp.ndarray:
+    r"""Massive-neutrino small-scale suppression of the linear P(k) shape.
+
+    First-order, differentiable form: the asymptotic ΔP/P ≃ −8 f_ν
+    (f_ν = Ω_ν/Ω_m, Ω_ν h² = Σm_ν/93.14 eV) switched on smoothly across the
+    free-streaming scale with a tanh in ln k around
+    k_nr ≈ 0.018 √(Ω_m m_ν,i/1 eV) h/Mpc (three degenerate species).
+    Exactly 1 at Σm_ν = 0 (the massless fiducial is bit-identical); the small
+    mass floor inside √ keeps the jacfwd column finite at 0.  A distilled CAMB
+    ratio table is the documented accuracy upgrade (docs/missing_physics.rst).
+    """
+    mnu = theta["sum_mnu"]
+    f_nu = (mnu / 93.14) / (theta["Omega_m"] * theta["h"] ** 2)
+    k_nr = 0.018 * jnp.sqrt(theta["Omega_m"] * (mnu / 3.0 + 1e-6))
+    step = 0.5 * (1.0 + jnp.tanh(jnp.log(k / k_nr) / 1.5))
+    return 1.0 - 8.0 * f_nu * step
+
+
 class EisensteinHu98PkLinear:
     """σ8-parameterised, JAX-differentiable EH98 linear power spectrum.
 
@@ -50,20 +68,38 @@ class EisensteinHu98PkLinear:
     ----------
     R8 : float
         Top-hat radius for the σ8 normalisation [Mpc/h] (8 by convention).
+    camb_ratio : dict or None
+        Linearized CAMB/EH98 shape-ratio table
+        (:func:`hod_mod.forecast.pk_camb_ratio.load`) — multiplies the shape
+        everywhere (HMF path, σ8 anchor, 2-halo) so the spectrum and its first
+        derivatives become CAMB-accurate near the fiducial.
     """
 
-    def __init__(self, R8: float = 8.0):
+    def __init__(self, R8: float = 8.0, camb_ratio: dict = None):
         self._R8 = float(R8)
+        self._camb_ratio = camb_ratio
 
     # -- shape spectrum, for the HMF -----------------------------------
     def pk_shape(self, k: jnp.ndarray, theta: dict) -> jnp.ndarray:
-        """EH98 shape spectrum (normalised to P(0.05 h/Mpc)=1)."""
-        return eisenstein_hu_pk(jnp.asarray(k), theta)
+        """EH98 shape spectrum (normalised to P(0.05 h/Mpc)=1).
+
+        When ``theta`` carries ``sum_mnu`` (a static dict-membership branch),
+        the massive-neutrino suppression multiplies the shape — consistently
+        here, in the σ8 anchor and in the HMF path, so σ8 keeps its measured-
+        amplitude meaning and only the *shape* responds to Σm_ν.
+        """
+        k = jnp.asarray(k)
+        pk = eisenstein_hu_pk(k, theta)
+        if "sum_mnu" in theta:
+            pk = pk * _nu_suppression(k, theta)
+        if self._camb_ratio is not None:
+            from hod_mod.forecast.pk_camb_ratio import apply_ratio
+            pk = apply_ratio(pk, k, theta, self._camb_ratio)
+        return pk
 
     def _sigma8_shape2(self, theta: dict) -> jnp.ndarray:
         """σ²(R8) of the shape spectrum — the denominator of the σ8 rescale."""
-        pk_shape = eisenstein_hu_pk(_K_INT, theta)
-        return _sigma2_tophat(pk_shape, _K_INT, self._R8)
+        return _sigma2_tophat(self.pk_shape(_K_INT, theta), _K_INT, self._R8)
 
     # -- physical spectrum, for the 2-halo term ------------------------
     def pk_linear(self, k: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
@@ -76,14 +112,14 @@ class EisensteinHu98PkLinear:
                       \left[\frac{D(z)}{D(0)}\right]^2
         """
         k = jnp.asarray(k)
-        pk_shape = eisenstein_hu_pk(k, theta)
+        pk_shape = self.pk_shape(k, theta)
         norm = theta["sigma8"] ** 2 / self._sigma8_shape2(theta)
-        growth = _growth_factor_flat_jax(float(z), theta["Omega_m"])  # D(z)/D(0)
+        growth = growth_factor(float(z), theta)   # D(z)/D(0); CPL ODE if w0/wa present
         return pk_shape * norm * growth ** 2
 
     # -- convenience: a plain callable for make_hmf(pk_func=...) --------
     def as_hmf_pk_func(self):
         """Return a ``(k, z, theta) -> P_shape`` callable for the HMF."""
         def _pk_func(k, z, theta):
-            return eisenstein_hu_pk(jnp.asarray(k), theta)
+            return self.pk_shape(k, theta)
         return _pk_func

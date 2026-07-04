@@ -2,6 +2,172 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] — 2026-07-04
+
+The **missing-physics extension** (waves 1-4) and the **tier-3/tier-4
+multi-wavelength + morphology forecasts**: the differentiable parameter
+vector grows 61 -> 111, every addition fiducial-preserving and gated by an
+exact invariant; three production Fisher runs (90, 102 and 111 parameters)
+with physical survey noise.  Headline: sigma(Omega_m) tightens from
+2.85e-4 (tier-2, 61 params) to 4.89e-5 (tier-4, 111 params) while freeing
+50 additional parameters -- the multi-wavelength data self-calibrate the
+astrophysics, and the intrinsic-alignment amplitude self-calibrates
+through the morphology sector at no cost to the shear cosmology.
+
+First implementation wave of the `docs/missing_physics.rst` roadmap
+(parameter vector 61 → 77, all fiducial-preserving; gates in
+`tests/test_missing_physics.py`):
+
+- **Cosmology-dependent concentration**: `ForwardModel(cm_relation="diemer15")`
+  uses Diemer & Kravtsov c(ν, n_eff) with Diemer & Joyce 2019 median
+  parameters — differentiable through σ(M, z) and the EH98 slope, so c(M)
+  finally responds to σ8/n_s/h and the beyond-ΛCDM sector.  Fixed a factor-~2
+  bug in the pre-existing `core.concentration.c_diemer15` (DK15 Eq. 9 form)
+  and the κ = 0.42 n_eff convention; values now match COLOSSUS anchors.
+- **Beyond-ΛCDM**: `w0`, `wa`, `sum_mnu` in the vector; CPL growth ODE
+  (`growth_factor` dispatcher, RK4 via `lax.scan`, <0.2% vs exact ΛCDM);
+  w0/wa threaded through all forecast distances and E(z); first-order
+  massive-ν suppression of the EH98 shape (σ8-anchored, exactly massless at
+  the 0 eV fiducial).
+- **SF/quiescent split**: `ForwardModel(sfq="sf"|"q")` — ZM16 Weibull
+  quenching on the occupations (SF + Q ≡ unsplit, exact) + the
+  `dlx_quenched` hot-gas offset targeted at the eROSITA CGM SF-vs-Q data.
+- **AGN fundamental plane**: `rlf` observable (5 GHz radio LF) from
+  (ξ_RX, ξ_RM, b_R, σ_R) on the Powell chain; identity-collapses onto the
+  hard-band XLF at (1, 0, 0, 0).
+- **HI sector**: VN18 M_HI(M_h) halo model, `himf` and `cl_gHI` observables
+  reusing the existing kernels; C_ℓ^{gHI} ∝ M_0 exactly.
+- `eps_sn` promoted (energy-closure SN coupling now free).
+
+Wave 2 (vector 77 → 83):
+
+- **CAMB-quality P(k)**: `forecast/pk_camb_ratio.py` — the linearized
+  CAMB/EH98 shape-ratio table (fiducial + derivative rows for
+  h/Ω_b/Ω_m/n_s/Σm_ν; |lnR₀|max = 3.8%), distilled once into
+  `data/pk_ratio/camb_eh98_ratio.npz` and applied differentiably via
+  `ForwardModel(pk_correction="camb_linear")` — spectrum and first
+  derivatives CAMB-accurate near the fiducial (the Fisher requirement).
+- **SN wind mass loading**: `eta_w_norm`/`alpha_w` (Muratov+15 form) coupled
+  into the η(M) gas-concentration slot; exactly the tier-2 sigmoid at the
+  η₀ = 0 fiducial.
+- **Star-forming main sequence**: per-cell `ssfr` observable
+  (`ssfr_ms_norm`/`ssfr_ms_slope` + `ssfr_ms_zs` through the standard
+  evolution mechanism); **quenched-HI deficit** `dhi_quenched`.
+- **Radio/HI enter the forecast**: `RadioSurvey` (LoTSS-like, νL_ν(5 GHz)
+  completeness limit) and `HISurvey` (ALFALFA flux-limited HIMF + effective
+  21 cm-IM noise) in `forecast/noise.py`;
+  `Tier2Forecast(include_radio, include_hi, include_ssfr)` adds the radio LF
+  per shell, a dedicated LOCAL (z ≤ 0.06) HIMF block — at Δz = 0.1 shell
+  depths the 21 cm flux limit flags every bin, so the HIMF is local by
+  design — the 21 cm × galaxy cross per cell and the sSFR datum per
+  non-quenched cell; driver flags
+  `--include-radio --include-hi --include-ssfr --split-sfq`.
+
+Wave 3 (vector 83 → 90):
+
+- **Continuous sSFR distribution**: double-lognormal p(log sSFR | M*) with
+  free MS scatter `sigma_ms` and quenched offset `dssfr_q`;
+  **sSFR-threshold selection** `ForwardModel(ssfr_cut=...)` (ELG-like
+  samples) composable with the SF/Q split — SF-cut + Q-cut ≡ mixture-cut
+  exactly (tested).
+- **SFR density** `sfrd` per cell (ρ_SFR ∝ 10^{sSFR_MS} exactly; SF + Q
+  partition it exactly) and the **z-resolved [OII] LF** `oiilf` — the
+  Kennicutt-like `loii_norm` calibration on the SHMR + main sequence, with
+  the DESI-like line-flux completeness limit in the noise.
+- **Radio-loud jets** (`f_loud0`, `beta_loud`, `b_jet`): a second rlf
+  component from ALL central black holes (HERG/LERG, not ERDF-tied — the
+  ferdf amplitude identity of the FP-only rlf breaks by design, tested).
+- **AGN infrared LF** `ilf` (`agn_bc_ir` on L_bol) — obscuration-robust by
+  construction (zero `agn_fabs` response, tested): the cross-band check of
+  the obscured fraction the soft-X-ray XLF is dimmed by.  `IRSurvey`
+  (WISE/SPHEREx-like) noise + completeness.
+- Driver flags `--include-ir` and extended `--include-ssfr` (sfrd + [OII]
+  per shell); probe groups `+IR AGN`, galaxy-grid `+sfrd/oiilf`.
+
+Tier-3 forecast (vector 90 → 102; `docs/tier3_forecast.rst`; gates in
+`tests/test_forecast_tier3.py`):
+
+- **12 SED calibrations** (`TIER3_EXTENSION`, all feeding only new
+  observables): radio–FIR `l14_sfr` + `alpha_syn`, IR `lir_sfr` +
+  `bir_color`, stellar M/L `ml_nir`/`ml_opt` + `dopt_q`, UV
+  `luv_norm` + `tau_uv_mslope`, Hα `lha_norm`, AGN bolometric corrections
+  `agn_bc_uv`/`agn_bc_opt`.  Slices `MISSING_PHYSICS`/`TIER2_EXTENSION`
+  frozen at [61:90]/[31:90].
+- **Radio/IR intensity maps** (SKA-like 0.95/1.4/3 GHz; WISE/SPHEREx-like
+  3.4/4.9/12 μm): per-halo central νL_ν fields (SF synchrotron + FP cores +
+  jets; dust + stellar continuum + AGN torus) with exact band-scaling and
+  chain-rule gates; observables `cl_gR`/`cl_gI` (cells), `cl_RR`/`cl_II`/
+  `cl_aR`/`cl_aI`/`cl_ag` (shells) through the new generic
+  `_pk_tracer_field` kernel (bit-identical `_pk_gX_of` delegation).
+- **Galaxy band LFs + AGN UV/opt LFs** via one `_lf_lognormal` kernel:
+  `uvlf`, `optlf` (SF/Q mixture, exact collapse at `dopt_q=0`), `nirlf`,
+  `half` (exact `oiilf` clone) and type-1 `qlf_uv`/`qlf_opt`
+  (= `ilf` kernel × (1−f_abs) — the cross-band obscuration system closed).
+- **Extras**: tSZ auto `cl_yy`, 21 cm auto `cl_HIHI`, X-ray cluster counts
+  `ncl` (free L_X–M relation, 0.25 dex selection scatter), AGN lensing
+  `ds_agn`; per-shell wide-M* `sfrd` blocks (Madau–Dickinson).
+- **`Tier3Forecast`** (`forecast/tier3.py`): coarse exploratory grid
+  (Δz = 0.2 to z = 2 × 0.2 dex down to M* = 10⁹, SF/Q split), two-tier
+  spectroscopic completeness (wide M*_lim(z) = 10^{9+z} + deep field;
+  incomplete cells skipped and reported), extended mass grid
+  (`ForwardModel(log10m_min=8.5)`; default 10.0 bit-identical), AGN samples
+  to z = 1.9; new noise models `SKASurvey`/`IRMapSurvey`/`BandLFSurvey`
+  + `SpectroSurvey` M*/Hα limits; tier-2 assembly reused through identity
+  hooks (tier-2 σ regression unchanged).
+- **`--jobs N`** parallel block precompute
+  (`Tier2Forecast.precompute_blocks`): spawned workers rebuild the forecast
+  from its resolved ctor spec and fill the cache atomically; parallel ==
+  serial byte-exact (the x64 mode propagates via `JAX_ENABLE_X64` so
+  module-level constants build in the right precision).
+- Driver `run_tier3_forecast.py` (probe groups `+radio/IR maps`,
+  `+band LFs`, `+tSZ/HI autos`, `+clusters`, `+AGN lensing`); tier-3 figure
+  prefix in `make_tier2_figures`; docs page + 6 arXiv-verified references.
+
+Wave 4 (vector 102 → 106) — galaxy morphology, the last roadmap topic:
+
+- **Conditional early-type fraction** `connection/morphology.py` (ZM16
+  Weibull pattern): `f_early_cen(M_h; log10_M_morph, beta_morph)` + the
+  satellite boost `f_morph_sat`; `ForwardModel(morph="early"|"late")`
+  splits any sample with EARLY + LATE ≡ unsplit exact, composable with the
+  SF/Q split (4-way partition sums exactly — tested to 1e-12).
+- **`f_early` observable**: one Euclid-VIS-like early-type-fraction datum
+  per (z, M*) cell (`include_morph` / `--include-morph`, default ON in
+  `Tier3Forecast`); binomial + `SpectroSurvey.fmorph_err = 0.02`
+  calibration-floor noise.
+- **BH–bulge coupling** `mbh_bt_slope` (Yang+2019-like): the mean
+  early-type fraction proxies B/T inside the Powell chain's M_BH — exactly
+  the pure chain at the 0 fiducial (zero XLF morphology response, tested),
+  and off-fiducial it routes the morphology parameters into the
+  XLF/radio/IR LFs.
+- Slice freeze `TIER3_EXTENSION = PARAM_NAMES[90:102]`; new `morphology`
+  sector; wave-4 gates in `tests/test_missing_physics.py`.
+
+Tier-4 morphology observables (vector 106 → 111):
+
+- **Joint E/Q fractions** (`rho_morph_q`): the 4-way early/late × SF/Q
+  partition uses bounded-correlation joint fractions (exact independence at
+  the 0 fiducial; unity partition at any rho, tested); split-cell `f_early`
+  becomes conditional (f_E|Q vs f_E|SF) so the grid itself measures rho;
+  per-cell `f_early_q` = the Galaxy Zoo red-spiral/blue-elliptical census.
+- **Sizes** (`log10_f_size`, `dsize_early`, `f_size_zs`): per-cell
+  <log10 R_e> through Kravtsov R_e = 0.015 R_200c (centrals, 0.2 dex
+  scatter) — cosmology enters via R_200c ∝ (M/rho_crit)^(1/3); exact
+  unit-response and _Z_EVOL chain-rule gates.
+- **Intrinsic alignments** (`a_ia`): per-cell w_g+ in the NLA form with the
+  amplitude carried by f_early (KiDS-1000: IA is driven by morphology),
+  reusing the ΔΣ J2 transform verbatim; exact 1/a_ia and strict
+  w_g+ ∝ f_early gates — the shear IA systematic becomes self-calibrated
+  through the morphology sector.
+- **AGN hosts**: per-shell `f_early_agn` (early fraction among L_X-selected
+  hosts) — the direct mbh_bt_slope probe (Kocevski-style bulge dominance).
+- **Morphology-split lensing/clustering**: early/late (wp, ΔΣ, n_gal)
+  "morph_cell" blocks per (z, M*) cell to z = 1.2 (wide-tier cells only) —
+  Mandelbaum-2006 at Euclid scale.
+- `Tier4Forecast` + `run_tier4_forecast.py` (probe groups incl. a
+  block-kind-selected morph-split group); `noise.wgp_noise`;
+  `SpectroSurvey.size_err/fmorph_agn_err`; docs page with the 14
+  arXiv-verified references; gates in tests/test_forecast_tier4.py.
+
 ## [0.2.0] — 2026-07-03
 
 The **tier-2 sensitivity study**: all 61 parameters free (nothing fixed), a

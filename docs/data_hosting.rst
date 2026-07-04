@@ -32,6 +32,13 @@ Data tiers
        and headline figures
      - Zenodo data record; the 60k+ intermediate ``.npz`` are **not** archived
        (regenerable from the chains + a committed config)
+   * - 4 — data repository
+     - The benchmark-observables JSON tree — published measurements and
+       simulated stand-ins per wavelength / tracer / reference
+       (:ref:`bench-data-tree`)
+     - ``$HOD_MOD_DATA_DIR/benchmark_observables/``; regenerable via
+       ``hod_mod.scripts.data.make_benchmark_observables`` (only tables
+       extracted later by the operator are original content)
 
 Where generated results go
 --------------------------

@@ -26,6 +26,7 @@ from hod_mod.forecast.forward_jax import PARAM_NAMES, _IDX, TIER2_ZSLOPES  # noq
 from hod_mod.forecast import params, fisher  # noqa: E402
 
 _PFX = "tier2_forecast__"
+_COPY_TO_DOCS = True   # smoke-run figures must never replace the docs images
 _DPI = 120
 # fixed sector colors (categorical, assigned by entity — matplotlib tab10)
 _SEC_COLOR = {"cosmology": "C0", "shmr": "C1", "gas": "C2",
@@ -58,6 +59,8 @@ def _save(fig, out_dir, name):
     fig.savefig(p, dpi=_DPI)
     plt.close(fig)
     print("[fig]", p)
+    if not _COPY_TO_DOCS:
+        return
     try:
         root = os.path.dirname(os.path.abspath(__file__))
         for _ in range(6):
@@ -87,13 +90,16 @@ def fig_cell_grid(d, out_dir):
             sel = cells & (meta["m_lo"] == m1) & (meta["zeff"] == z)
             g = sel & (meta["obs"] == "n_gal")
             if g.any():
-                ngal[i, j] = d["d0"][g][0]
+                # a cell may hold several sub-samples (SF/Q split): total density
+                ngal[i, j] = d["d0"][g].sum()
             snr[i, j] = np.sqrt(snr_row[sel].sum())
+    dz2 = 0.5 * (np.median(np.diff(zc)) if len(zc) > 1 else 0.1)
+    dm = np.median(np.diff(mlo)) if len(mlo) > 1 else 0.2
     fig, axes = plt.subplots(1, 2, figsize=(10.5, 3.8))
     for ax, val, ttl in ((axes[0], np.log10(ngal), r"$\log_{10}\bar n_g$ [$h^3$Mpc$^{-3}$]"),
                          (axes[1], np.log10(snr), r"$\log_{10}$ total S/N per cell")):
         im = ax.imshow(val, origin="lower", aspect="auto", cmap="viridis",
-                       extent=[zc[0] - 0.05, zc[-1] + 0.05, mlo[0], mlo[-1] + 0.2])
+                       extent=[zc[0] - dz2, zc[-1] + dz2, mlo[0], mlo[-1] + dm])
         ax.set_xlabel(r"$z$"); ax.set_ylabel(r"$\log_{10} M_*$ bin")
         ax.set_title(ttl, fontsize=10)
         fig.colorbar(im, ax=ax, fraction=0.046)
@@ -159,7 +165,7 @@ def fig_cosmo_constraints(d, out_dir):
     fig, ax = plt.subplots(figsize=(5.2, 4.4))
     x0, y0 = d["fid"][iom], d["fid"][is8]
     _ellipse(ax, cov[np.ix_([iom, is8], [iom, is8])], x0, y0, "C0",
-             "all 61 params free")
+             f"all {len(names)} params free")
     _ellipse(ax, cov_ap[np.ix_([iom, is8], [iom, is8])], x0, y0, "C1",
              "astrophysics pinned")
     ax.autoscale_view()
@@ -178,7 +184,7 @@ def fig_astro_sectors(d, out_dir):
     sig = d[f"sigma_rmin{rm}"]
     sig_cp = d["sigma_cosmo_pinned"]
     order = [n for sec in ("cosmology", "shmr", "gas", "baryon", "agn")
-             for n in params.SECTORS[sec]]
+             for n in params.SECTORS[sec] if n in names]
     y = np.arange(len(order))
     ratio = np.array([sig[names.index(n)] / d["prior"][names.index(n)]
                       for n in order])
@@ -213,12 +219,13 @@ def fig_zevolution(d, out_dir):
     rm = d["rmin"][0]
     sig = d[f"sigma_rmin{rm}"]
     cov = d[f"cov_rmin{rm}"]
+    evol = [n for n in EVOL_PARAMS if n in names]
     fig, axes = plt.subplots(1, 2, figsize=(10.0, 3.9))
-    y = np.arange(len(EVOL_PARAMS))
-    vals = [sig[names.index(n)] for n in EVOL_PARAMS]
+    y = np.arange(len(evol))
+    vals = [sig[names.index(n)] for n in evol]
     axes[0].barh(y, vals, color="C1", height=0.6)
     axes[0].set_yticks(y)
-    axes[0].set_yticklabels([params.PARAM_LATEX.get(n, n) for n in EVOL_PARAMS],
+    axes[0].set_yticklabels([params.PARAM_LATEX.get(n, n) for n in evol],
                             fontsize=9)
     axes[0].set_xscale("log")
     axes[0].set_xlabel(r"$\sigma$ (slope per $\ln(1+z)$)")
@@ -226,7 +233,8 @@ def fig_zevolution(d, out_dir):
     axes[0].set_title("Redshift-evolution constraints", fontsize=10)
 
     i0, i1 = names.index("lg_m1h"), names.index("lg_m1h_zs")
-    z = np.linspace(0.05, 0.95, 60)
+    z_hi = float(np.max(d["meta"]["zeff"])) if "meta" in d else 0.95
+    z = np.linspace(0.05, z_hi, 60)
     x = np.log((1 + z) / 1.3)
     mu = d["fid"][i0] + d["fid"][i1] * x
     var = cov[i0, i0] + x ** 2 * cov[i1, i1] + 2 * x * cov[i0, i1]
@@ -284,7 +292,8 @@ def fig_degeneracies(d, out_dir):
     ax.axvline(0, color="0.3", lw=0.8)
     ax.set_xlabel("posterior correlation")
     ax.invert_yaxis()
-    ax.set_title("Strongest surviving degeneracies (61 params free)", fontsize=10)
+    ax.set_title(f"Strongest surviving degeneracies ({len(names)} params free)",
+                 fontsize=10)
     fig.tight_layout()
     _save(fig, out_dir, "degeneracies")
 
@@ -314,7 +323,7 @@ def fig_agn_sector(d, out_dir):
     axes[0].legend(fontsize=8)
     axes[0].set_title(f"AGN clustering ({b0}) + physical errors", fontsize=10)
 
-    agn_names = params.SECTORS["agn"]
+    agn_names = [n for n in params.SECTORS["agn"] if n in names]
     y = np.arange(len(agn_names))
     axes[1].barh(y, [sig[names.index(n)] / d["prior"][names.index(n)]
                      for n in agn_names], color="C4", height=0.6)
@@ -339,21 +348,22 @@ def fig_band_spectroscopy(d, out_dir, d_cmp=None):
     no_x = keep & ~np.isin(meta["obs"], ("cl_gX", "cl_XX"))
     sig_all = d[f"sigma_rmin{rm}"]
     _, sig_nox, _ = _sigma_of(d, no_x)
-    y = np.arange(len(SPECTRAL_PARAMS))
+    spec = [n for n in SPECTRAL_PARAMS if n in names]
+    y = np.arange(len(spec))
     fig, ax = plt.subplots(figsize=(7.0, 4.2))
     nb = int(d["n_bands"]) if "n_bands" in d else 0
-    ax.barh(y - 0.18, [sig_all[names.index(n)] for n in SPECTRAL_PARAMS],
+    ax.barh(y - 0.18, [sig_all[names.index(n)] for n in spec],
             color="C2", height=0.34, label=f"with {nb} band spectra")
-    ax.barh(y + 0.18, [sig_nox[names.index(n)] for n in SPECTRAL_PARAMS],
+    ax.barh(y + 0.18, [sig_nox[names.index(n)] for n in spec],
             color="0.65", height=0.34, label="X-ray spectra removed")
     if d_cmp is not None:
         cn = d_cmp["names"]
         rmc = d_cmp["rmin"][0]
         sc = d_cmp[f"sigma_rmin{rmc}"]
-        ax.plot([sc[cn.index(n)] for n in SPECTRAL_PARAMS], y, "k.",
+        ax.plot([sc[cn.index(n)] for n in spec], y, "k.",
                 ms=6, label="broad band only (nb1 run)")
     ax.set_yticks(y)
-    ax.set_yticklabels([params.PARAM_LATEX.get(n, n) for n in SPECTRAL_PARAMS],
+    ax.set_yticklabels([params.PARAM_LATEX.get(n, n) for n in spec],
                        fontsize=9)
     ax.set_xscale("log")
     ax.set_xlabel(r"marginalized $1\sigma$")
@@ -365,6 +375,15 @@ def fig_band_spectroscopy(d, out_dir, d_cmp=None):
 
 
 def make_all(npz_path, out_dir, compare=None):
+    # figure prefix follows the run family (tier2_forecast__ / tier3_forecast__)
+    # so a tier-3 run cannot overwrite the tier-2 docs images
+    global _PFX, _COPY_TO_DOCS
+    base = os.path.basename(npz_path)
+    for fam in ("tier3", "tier4"):
+        if base.startswith(fam):
+            _PFX = f"{fam}_forecast__"
+    if "smoke" in base:
+        _COPY_TO_DOCS = False
     d = _load(npz_path)
     d_cmp = _load(compare) if compare else None
     fig_cell_grid(d, out_dir)

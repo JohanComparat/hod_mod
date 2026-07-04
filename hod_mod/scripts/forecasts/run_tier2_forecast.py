@@ -46,11 +46,14 @@ from hod_mod.forecast.tier2 import Tier2Forecast  # noqa: E402
 # probe groups for the cumulative attribution (galaxy grid → lensing →
 # X-ray/tSZ crosses → AGN abundance → AGN clustering)
 PROBE_GROUPS = [
-    ("galaxy grid", ("wp", "ds", "n_gal")),
+    ("galaxy grid", ("wp", "ds", "n_gal", "ssfr", "sfrd", "oiilf")),
     ("+lensing", ("cl_kk", "cl_kCMB", "cl_shear_kCMB", "cl_gkCMB")),
     ("+X-ray/tSZ", ("cl_gX", "cl_XX", "cl_gy")),
     ("+XLF(z)", ("xlf",)),
     ("+wp_agn", ("wp_agn",)),
+    ("+radio LF", ("rlf",)),
+    ("+IR AGN", ("ilf",)),
+    ("+HI", ("himf", "cl_gHI")),
 ]
 EVOL_PARAMS = list(TIER2_ZSLOPES) + ["z_gas_zs", "agn_mu_bh_zs"]
 
@@ -110,6 +113,19 @@ def main():
                     help="2x2 cells, tiny grids: fast end-to-end check")
     ap.add_argument("--free-log10dc", action="store_true",
                     help="do not pin the retired duty-cycle parameter")
+    ap.add_argument("--split-sfq", action="store_true",
+                    help="split every (z, M*) cell into SF and quiescent samples")
+    ap.add_argument("--include-radio", action="store_true",
+                    help="add the fundamental-plane radio LF per shell")
+    ap.add_argument("--include-hi", action="store_true",
+                    help="add the HIMF (low-z shells) and 21cm×galaxy crosses")
+    ap.add_argument("--include-ssfr", action="store_true",
+                    help="add the MS sSFR + SFR-density data per cell and the "
+                         "z-resolved [OII] LF per shell")
+    ap.add_argument("--include-ir", action="store_true",
+                    help="add the AGN infrared LF per shell")
+    ap.add_argument("--include-morph", action="store_true",
+                    help="add the per-cell early-type fraction (wave 4)")
     ap.add_argument("--no-plots", action="store_true")
     args = ap.parse_args()
 
@@ -127,7 +143,12 @@ def main():
             ell=np.logspace(1.0, 3.3, 6), rp_wp_agn=np.logspace(0.1, 1.4, 4))
     else:
         t2 = Tier2Forecast(n_bands=args.n_bands, n_k=args.n_k, n_m=args.n_m,
-                           n_gl=args.n_gl)
+                           n_gl=args.n_gl, split_sfq=args.split_sfq,
+                           include_radio=args.include_radio,
+                           include_hi=args.include_hi,
+                           include_ssfr=args.include_ssfr,
+                           include_ir=args.include_ir,
+                           include_morph=args.include_morph)
 
     fid = t2.fiducial()
     names = PARAM_NAMES
@@ -149,7 +170,9 @@ def main():
     print(f"[noise] median rel err = {np.median(rel[finite]):.3g}; "
           f"{np.sum(~finite)} rows at sigma=inf (completeness)")
 
-    fix = () if args.free_log10dc else ("log10DC",)
+    # pin the tier-3 additions so this study keeps its documented 90-parameter
+    # meaning (the 102-vector study is run_tier3_forecast)
+    fix = (() if args.free_log10dc else ("log10DC",)) + tuple(params.TIER3_EXTENSION)
     prior = params.regularizing_prior(fix=fix)
     scale = params.regularizing_prior()          # conditioning scale (finite)
 
@@ -199,7 +222,8 @@ def main():
     rm0 = args.rmin[0]
     r0 = results[rm0]
     lines = [f"TIER-2 FORECAST SUMMARY ({tag})",
-             f"params={len(names)}  rows={d0.size}  cells={n_cells}  "
+             f"params={len(names) - len(fix)} free ({len(fix)} pinned)  "
+             f"rows={d0.size}  cells={n_cells}  "
              f"bands={len(t2.bands)}  shear_bins={t2.n_shear_bins}", ""]
     lines.append(f"--- marginalized 1-sigma at rmin={rm0} Mpc/h "
                  f"(vs cosmo-pinned for astro; vs astro-pinned for cosmo) ---")
