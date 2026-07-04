@@ -113,6 +113,25 @@ Tier-3 forecast (vector 90 → 102; `docs/tier3_forecast.rst`; gates in
   `+band LFs`, `+tSZ/HI autos`, `+clusters`, `+AGN lensing`); tier-3 figure
   prefix in `make_tier2_figures`; docs page + 6 arXiv-verified references.
 
+Wave 4 (vector 102 → 106) — galaxy morphology, the last roadmap topic:
+
+- **Conditional early-type fraction** `connection/morphology.py` (ZM16
+  Weibull pattern): `f_early_cen(M_h; log10_M_morph, beta_morph)` + the
+  satellite boost `f_morph_sat`; `ForwardModel(morph="early"|"late")`
+  splits any sample with EARLY + LATE ≡ unsplit exact, composable with the
+  SF/Q split (4-way partition sums exactly — tested to 1e-12).
+- **`f_early` observable**: one Euclid-VIS-like early-type-fraction datum
+  per (z, M*) cell (`include_morph` / `--include-morph`, default ON in
+  `Tier3Forecast`); binomial + `SpectroSurvey.fmorph_err = 0.02`
+  calibration-floor noise.
+- **BH–bulge coupling** `mbh_bt_slope` (Yang+2019-like): the mean
+  early-type fraction proxies B/T inside the Powell chain's M_BH — exactly
+  the pure chain at the 0 fiducial (zero XLF morphology response, tested),
+  and off-fiducial it routes the morphology parameters into the
+  XLF/radio/IR LFs.
+- Slice freeze `TIER3_EXTENSION = PARAM_NAMES[90:102]`; new `morphology`
+  sector; wave-4 gates in `tests/test_missing_physics.py`.
+
 ## [0.2.0] — 2026-07-03
 
 The **tier-2 sensitivity study**: all 61 parameters free (nothing fixed), a
