@@ -53,6 +53,10 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    stage4_forecast
    tier2_forecast
    missing_physics
+   missing_physics_implementation
+   tier3_forecast
+   tier4_forecast
+   sensitivity_benchmark
 
 .. toctree::
    :maxdepth: 2

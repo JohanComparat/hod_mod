@@ -62,8 +62,8 @@ def test_vector_layout():
     assert PARAM_NAMES[0] == "Omega_m" and PARAM_NAMES[30] == "agn_log10_ferdf"
     assert len(TIER2_PROMOTED) == 16 and TIER2_PROMOTED[0] == "beta_sat"
     assert len(TIER2_ZSLOPES) == 7
-    assert N_PARAM == 31 + len(TIER2_EXTENSION)
-    assert list(TIER2_EXTENSION) == list(PARAM_NAMES[31:])
+    assert len(TIER2_EXTENSION) == 59
+    assert list(TIER2_EXTENSION) == list(PARAM_NAMES[31:90])
 
 
 def test_promoted_fiducials_equal_constants():

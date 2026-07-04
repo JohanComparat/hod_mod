@@ -7,13 +7,17 @@ Data Formats
    :local:
    :depth: 2
 
-``hod_mod`` consumes two types of input data:
+``hod_mod`` consumes three types of input data:
 
 * **HDF5** — primary format for galaxy surveys (BGS/LS10, mocks) produced by the
   companion `sum_stat <https://github.com/JohanComparat/sum_stat>`_ package; stores
   the full covariance matrix and cosmological metadata.
 * **CSV + JSON** — paper benchmark datasets bundled in ``data/{paper_name}/``; plain
   CSV files with a ``metadata.json`` sidecar describing cosmology and column meanings.
+* **Benchmark-observables JSON tree** — the multi-wavelength compilation of
+  :doc:`sensitivity_benchmark` in ``$HOD_MOD_DATA_DIR/benchmark_observables/``;
+  one self-describing JSON per (reference, observable, sample) with provenance
+  and uncertainties (see the section below).
 
 All spatial quantities in ``sum_stat`` are stored in **Mpc** (h-free).
 ``SumStatReader`` converts to **Mpc/h** automatically using the ``H0`` attribute
@@ -223,6 +227,37 @@ One JSON sidecar per dataset. Fields:
 
 ---
 
+Benchmark-Observables JSON Tree
+-------------------------------
+
+The multi-wavelength benchmark compilation of :doc:`sensitivity_benchmark`
+is materialised as a third format: a self-describing JSON tree in the data
+repository, ``$HOD_MOD_DATA_DIR/benchmark_observables/``, with one file per
+(bibliographic reference, observable, sample):
+
+.. code-block:: text
+
+    benchmark_observables/
+      README.md            — schema + operator workflow
+      index.json           — every file with provenance + extraction flag
+      <wavelength>/<tracer>/<RefKey>__<observable>[__<sample>].json
+
+Each file carries the reference (citation + arXiv/DOI links), the sample
+definition and measurement cosmology, per-column units, a provenance block
+(``observed`` | ``observed_derived_fit`` | ``simulated`` | ``placeholder``,
+with a ``needs_operator_extraction`` flag naming the published table still
+to digitise), and the data arrays with uncertainties.  The ``observed``
+entries are ingested from the ``data/{paper_name}/`` CSVs above (their
+``metadata.json`` is the authoritative source for arXiv/DOI) and from the
+in-package X-ray band measurements; the ``simulated`` entries are
+forward-model fiducials with the forecast noise, standing in until the
+operator extracts the published table.  Full layout, schema table and
+workflow: :ref:`bench-data-tree`.  Regenerate with::
+
+    python -m hod_mod.scripts.data.make_benchmark_observables
+
+---
+
 Reading Data in Python
 ----------------------
 
@@ -254,6 +289,19 @@ Reading Data in Python
     meta = json.load(open("data/guo2018_sdss/metadata.json"))
     df   = pd.read_csv("data/guo2018_sdss/wp_mstar10_lowz.csv", comment="#")
     # df.columns: rp_hMpc, wp_hMpc, wp_err_hMpc
+
+    # ── Benchmark-observables JSON tree ───────────────────────────────────────
+    import os
+
+    root = os.path.join(os.environ["HOD_MOD_DATA_DIR"], "benchmark_observables")
+    d = json.load(open(os.path.join(
+        root, "optical/galaxies/ZuMandelbaum2015__wp__10p2_10p6.json")))
+    # d["reference"]["citation"], d["reference"]["arxiv"]
+    # d["provenance"]["type"]  ("observed" here)
+    # d["data"]["rp_hMpc"], d["data"]["wp_hMpc"], d["data"]["wp_err_hMpc"]
+
+    idx = json.load(open(os.path.join(root, "index.json")))
+    todo = [k for k, v in idx.items() if v["needs_operator_extraction"]]
     h = meta["cosmology"]["h"]
 
 .. automodule:: hod_mod.data_io.sum_stat_reader

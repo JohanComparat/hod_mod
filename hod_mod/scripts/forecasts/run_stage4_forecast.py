@@ -178,7 +178,8 @@ def main():
     # keeps its fixed-nuisance meaning (free them via run_tier2_forecast).
     fix_agn = ("agn_mu_bh", "agn_al_bh", "agn_sig_bh", "agn_log10_lstar",
                "agn_delta1", "agn_delta2", "agn_log10_ferdf") if args.agn_pinned else ()
-    fix_t2 = () if args.free_tier2 else tuple(params.TIER2_EXTENSION)
+    fix_t2 = () if args.free_tier2 else (tuple(params.TIER2_EXTENSION)
+                                         + tuple(params.TIER3_EXTENSION))
     fix = tuple(fix_agn) + fix_t2
     prior_lss = params.regularizing_prior(add_planck=False, fix=fix)
     prior_cmb = params.regularizing_prior(add_planck=True, fix=fix)

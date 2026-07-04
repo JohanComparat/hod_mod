@@ -63,6 +63,32 @@ class _Block:
         self.z_lo, self.z_hi, self.m_lo, self.m_hi = z_lo, z_hi, m_lo, m_hi
 
 
+# ---- --jobs worker machinery (module level for spawn picklability) --------
+_WORKER_FORECAST = None
+
+
+def _precompute_init(cls, ctor_kwargs, x64):
+    """Worker initializer: match the parent's x64 mode, rebuild the forecast."""
+    global _WORKER_FORECAST
+    jax.config.update("jax_enable_x64", bool(x64))
+    _WORKER_FORECAST = cls(**ctor_kwargs)
+
+
+def _precompute_block(label, fid, cache_dir):
+    """Compute one block into the shared cache (atomic tempfile + replace)."""
+    t = _WORKER_FORECAST
+    b = next(bb for bb in t.blocks if bb.label == label)
+    fp = t._cache_path(cache_dir, b, fid)
+    if not os.path.exists(fp):
+        d0, J, row_obs, row_x, extras = t._compute_block(b, fid)
+        tmp = f"{fp}.{os.getpid()}.tmp"
+        with open(tmp, "wb") as fh:
+            np.savez_compressed(fh, d0=d0, J=J, row_obs=row_obs, row_x=row_x,
+                                **{f"ex_{k}": v for k, v in extras.items()})
+        os.replace(tmp, fp)
+    return label
+
+
 class Tier2Forecast:
     """Shared-vector multi-block tier-2 forecast (see module docstring).
 
@@ -83,6 +109,10 @@ class Tier2Forecast:
     shear, cmbl, athena, spectro : noise.py survey dataclasses
     tsz : (rN, aN, f_sky)
         The calibrated stage-4 effective tSZ noise recipe (kept in v1).
+    split_sfq : bool
+        Split every (z, M*) cell into star-forming and quiescent samples
+        (ZM16 Weibull quenching; missing-physics extension).  Doubles the
+        cell blocks; the shell X-ray observables stay unsplit (total gas).
     model_kw : forwarded to every ForwardModel (grids etc.).
     """
 
@@ -90,7 +120,10 @@ class Tier2Forecast:
                  n_shear_bins=5, agn_lx_bins=None,
                  agn_z_centers=(0.1, 0.3, 0.5, 0.7, 0.9),
                  shear=None, cmbl=None, athena=None, spectro=None,
-                 tsz=(0.25, 0.9, 0.30), **model_kw):
+                 tsz=(0.25, 0.9, 0.30), split_sfq=False,
+                 include_radio=False, include_hi=False, include_ssfr=False,
+                 include_ir=False, include_morph=False,
+                 radio=None, hi=None, ir=None, **model_kw):
         self.z_edges = np.asarray(z_edges if z_edges is not None
                                   else np.arange(0.0, 1.01, 0.1))
         self.mstar_edges = np.asarray(mstar_edges if mstar_edges is not None
@@ -107,6 +140,16 @@ class Tier2Forecast:
         self.athena = athena if athena is not None else noise.AthenaAllSky()
         self.spectro = spectro if spectro is not None else noise.SpectroSurvey()
         self.tsz = tuple(tsz)
+        # missing-physics wave 2: radio LF, HI (HIMF + 21 cm IM cross), MS sSFR
+        self.include_radio = bool(include_radio)
+        self.include_hi = bool(include_hi)
+        self.include_ssfr = bool(include_ssfr)
+        self.include_ir = bool(include_ir)
+        # wave 4: the per-cell early-type-fraction observable (Euclid-VIS-like)
+        self.include_morph = bool(include_morph)
+        self.radio = radio if radio is not None else noise.RadioSurvey()
+        self.hi = hi if hi is not None else noise.HISurvey()
+        self.ir = ir if ir is not None else noise.IRSurvey()
 
         kw = dict(DEFAULT_MODEL_KW)
         kw.update(model_kw)
@@ -115,27 +158,85 @@ class Tier2Forecast:
         kw.setdefault("ell", _ELL)
         kw.setdefault("n_z_shear", max(16, 3 * self.n_shear_bins + 1))
         self.model_kw = kw
+        self.split_sfq = bool(split_sfq)
         self._spec_repr = repr((sorted(PARAM_NAMES), list(self.z_edges),
                                 list(self.mstar_edges), self.bands,
                                 self.n_shear_bins, self.agn_lx_bins,
-                                self.agn_z_centers,
+                                self.agn_z_centers, self.split_sfq,
+                                self.include_radio, self.include_hi,
+                                self.include_ssfr, self.include_ir,
+                                self.include_morph,
                                 {k: np.asarray(v).tolist() if hasattr(v, "__len__") else v
                                  for k, v in kw.items()}))
 
         cell_kw = dict(kw, xray_bands=self.bands, agn_emission="powell",
                        xlf_band="soft", agn_lx_bins=self.agn_lx_bins)
+        self._base_cell_kw = cell_kw
+        # SF/quiescent split (missing-physics): two samples per (z, M*) cell
+        # sharing the one global vector — SF + Q sum exactly to the unsplit
+        # occupations, so the split only ADDs information (and the dlx_quenched
+        # hot-gas offset becomes observable through the per-population cl_gX).
+        sfq_variants = ("sf", "q") if self.split_sfq else (None,)
         self.blocks = []
+        self.skipped_cells = []
         for i, (z1, z2) in enumerate(zip(self.z_edges[:-1], self.z_edges[1:])):
             zc = 0.5 * (z1 + z2)
-            first = None
+            shell_model = None
             for (m1, m2) in zip(self.mstar_edges[:-1], self.mstar_edges[1:]):
-                m = ForwardModel(z_eff=zc, log10m_star_bin=(m1, m2), **cell_kw)
-                first = first if first is not None else m
-                self.blocks.append(_Block(f"z{zc:.2f}_m{m1:.1f}", "cell", m,
-                                          GAL_OBS, z1, z2, m1, m2))
-            # shell observables (M*-independent): soft XLF + per-band cl_XX
-            self.blocks.append(_Block(f"z{zc:.2f}_shell", "shell", first,
-                                      SHELL_OBS, z1, z2))
+                keep, cell_extra = self._keep_cell(z1, z2, m1, m2)
+                if not keep:
+                    self.skipped_cells.append((z1, z2, m1, m2))
+                    continue
+                for sv in sfq_variants:
+                    m = ForwardModel(z_eff=zc, log10m_star_bin=(m1, m2),
+                                     sfq=sv, **dict(cell_kw, **cell_extra))
+                    lab = f"z{zc:.2f}_m{m1:.1f}" + ("" if sv is None else f"_{sv}")
+                    # wave-2 per-cell observables: 21 cm × galaxies cross for
+                    # every cell; the MS mean sSFR only for non-quenched samples
+                    obs = tuple(GAL_OBS)
+                    if self.include_hi:
+                        obs += ("cl_gHI",)
+                    if self.include_ssfr and sv != "q":
+                        obs += ("ssfr", "sfrd")
+                    if self.include_morph:
+                        obs += ("f_early",)
+                    obs += self._cell_extra_obs(sv)
+                    blk = _Block(lab, "cell", m, obs, z1, z2, m1, m2)
+                    self._decorate_cell(blk)
+                    self.blocks.append(blk)
+                    if shell_model is None and sv is None:
+                        shell_model = m
+            if shell_model is None or self._shell_extra_kw(zc, z1, z2):
+                # split mode (or tier-3 shell extensions): the shell
+                # observables (xlf, TOTAL-gas cl_XX) need an UNSPLIT model —
+                # the quenched L_X offset must not leak into the X-ray auto
+                shell_model = ForwardModel(
+                    z_eff=zc, **dict(
+                        cell_kw,
+                        log10m_star_bin=self._shell_mstar_bin(),
+                        **self._shell_extra_kw(zc, z1, z2)))
+            # shell observables (M*-independent): soft XLF + per-band cl_XX,
+            # + the radio LF (fundamental plane, wave 2)
+            shell_obs = tuple(SHELL_OBS)
+            if self.include_radio:
+                shell_obs += ("rlf",)
+            if self.include_ssfr:
+                shell_obs += ("oiilf",)
+            if self.include_ir:
+                shell_obs += ("ilf",)
+            shell_obs += self._shell_extra_obs()
+            self.blocks.append(_Block(f"z{zc:.2f}_shell", "shell", shell_model,
+                                      shell_obs, z1, z2))
+        if self.include_hi:
+            # the blind HIMF is a LOCAL measurement (ALFALFA-like z ≲ 0.06):
+            # at Δz = 0.1 shell depths the 21 cm flux limit flags everything
+            # below ~10^11 Msun — one dedicated low-z block instead
+            m_hi = ForwardModel(z_eff=0.5 * self.hi.z_himf,
+                                log10m_star_bin=(self.mstar_edges[0],
+                                                 self.mstar_edges[1]),
+                                **cell_kw)
+            self.blocks.append(_Block("hi_local", "shell", m_hi, ("himf",),
+                                      0.0, self.hi.z_himf))
         gm = ForwardModel(z_eff=0.3, n_shear_bins=self.n_shear_bins,
                           z_src_mean=0.9, **kw)
         self.global_model = gm
@@ -144,7 +245,53 @@ class Tier2Forecast:
         for zc in self.agn_z_centers:
             m = ForwardModel(z_eff=zc, **cell_kw)
             self.blocks.append(_Block(f"agn_z{zc:.2f}", "wp_agn", m,
-                                      ("wp_agn",), zc - 0.1, zc + 0.1))
+                                      ("wp_agn",) + self._agn_extra_obs(),
+                                      zc - 0.1, zc + 0.1))
+        self.blocks += self._extra_blocks()
+        # resolved ctor spec: --jobs workers rebuild this exact forecast
+        self._ctor_kwargs = dict(
+            z_edges=self.z_edges, mstar_edges=self.mstar_edges,
+            n_bands=self.bands, n_shear_bins=self.n_shear_bins,
+            agn_lx_bins=self.agn_lx_bins, agn_z_centers=self.agn_z_centers,
+            shear=self.shear, cmbl=self.cmbl, athena=self.athena,
+            spectro=self.spectro, tsz=self.tsz, split_sfq=self.split_sfq,
+            include_radio=self.include_radio, include_hi=self.include_hi,
+            include_ssfr=self.include_ssfr, include_ir=self.include_ir,
+            include_morph=self.include_morph,
+            radio=self.radio, hi=self.hi, ir=self.ir, **self.model_kw)
+
+    # ---- tier-3 extension hooks (identity defaults: tier-2 unchanged) --
+    def _keep_cell(self, z1, z2, m1, m2):
+        """(keep, extra ForwardModel kwargs) for one (z, M*) cell."""
+        return True, {}
+
+    def _decorate_cell(self, block):
+        """Attach per-cell attributes (e.g. the spectroscopic tier)."""
+
+    def _cell_extra_obs(self, sv):
+        return ()
+
+    def _cell_spectro(self, block):
+        """The spectroscopic survey whose footprint covers this cell."""
+        return self.spectro
+
+    def _shell_mstar_bin(self):
+        return (self.mstar_edges[0], self.mstar_edges[1])
+
+    def _shell_extra_kw(self, zc, z1, z2):
+        return {}
+
+    def _shell_extra_obs(self):
+        return ()
+
+    def _agn_extra_obs(self):
+        return ()
+
+    def _extra_blocks(self):
+        return []
+
+    def _block_extras(self, block, fid, extras):
+        """Add fiducial-only per-block quantities for the noise model."""
 
     # ---- parameters ---------------------------------------------------
     def fiducial(self):
@@ -176,8 +323,70 @@ class Tier2Forecast:
                       * block.model._agn_occupation_obs(th, l1, l2),
                       block.model.m))
                 for (l1, l2) in self.agn_lx_bins])
+        self._block_extras(block, fid, extras)
         return (np.asarray(d0), np.asarray(J), np.asarray(row_obs),
                 np.asarray(row_x, dtype=float), extras)
+
+    def precompute_blocks(self, fid, cache_dir, jobs=1, verbose=True,
+                          max_tasks_per_child=4):
+        """Fill the per-block npz cache with ``jobs`` worker processes.
+
+        Spawned workers rebuild this exact forecast from ``self._ctor_kwargs``
+        (matching the parent's x64 mode) and write each block atomically
+        (tempfile + ``os.replace``), so a subsequent serial
+        :meth:`data_and_jacobian` assembles bit-identical results from the
+        cache — the parallel == serial invariant.  Returns the labels that
+        were missing on entry.
+
+        ``max_tasks_per_child`` bounds worker memory: a worker's JAX
+        compilation cache grows with every distinct block shape it touches
+        (several GB after a handful of blocks), and unbounded workers OOM the
+        host on a full tier-3 run.  Implemented as BATCHED POOLS — a fresh
+        executor per chunk of ``jobs × max_tasks_per_child`` blocks — rather
+        than the executor's own ``max_tasks_per_child``, whose worker-respawn
+        path deadlocks on CPython 3.11 (observed: pool alive, all workers
+        exited, no respawn).  Pool teardown between batches frees the caches
+        identically, at one forecast rebuild (~seconds) per worker per batch.
+        """
+        labels = [b.label for b in self.blocks
+                  if not os.path.exists(self._cache_path(cache_dir, b, fid))]
+        if not labels or jobs <= 1:
+            return labels
+        os.makedirs(cache_dir, exist_ok=True)
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        import multiprocessing as mp
+        x64 = bool(jax.config.jax_enable_x64)
+        ctx = mp.get_context("spawn")
+        fid = np.asarray(fid)
+        chunk = max(int(jobs), int(jobs) * int(max_tasks_per_child or 4))
+        # children must see the parent's x64 mode from their FIRST jax import
+        # (module-level jnp constants, e.g. pk_eisenstein_hu._K_INT, are built
+        # at import time — a late config.update would leave them float32 and
+        # break the parallel == serial bit-identity)
+        env_old = os.environ.get("JAX_ENABLE_X64")
+        os.environ["JAX_ENABLE_X64"] = "1" if x64 else "0"
+        try:
+            done = 0
+            for i0 in range(0, len(labels), chunk):
+                batch = labels[i0:i0 + chunk]
+                with ProcessPoolExecutor(
+                        max_workers=min(int(jobs), len(batch)),
+                        mp_context=ctx, initializer=_precompute_init,
+                        initargs=(type(self), self._ctor_kwargs, x64)) as exe:
+                    futs = {exe.submit(_precompute_block, lab, fid,
+                                       cache_dir): lab for lab in batch}
+                    for f in as_completed(futs):
+                        lab = f.result()  # re-raises worker exceptions
+                        done += 1
+                        if verbose:
+                            print(f"[precompute] {done:3d}/{len(labels)} "
+                                  f"{lab}", flush=True)
+        finally:
+            if env_old is None:
+                os.environ.pop("JAX_ENABLE_X64", None)
+            else:
+                os.environ["JAX_ENABLE_X64"] = env_old
+        return labels
 
     def data_and_jacobian(self, fid, cache_dir=None, verbose=True):
         """Assemble (d0, J, meta) block by block; per-block npz caching.
@@ -225,11 +434,15 @@ class Tier2Forecast:
     def _sub_index(model, row_obs):
         """Sub-index within stacked observables: X-ray band, L_X bin, shear pair."""
         sub = np.full(len(row_obs), -1, dtype=int)
-        for name, base in (("cl_gX", len(np.asarray(model.ell))),
-                           ("cl_XX", len(np.asarray(model.ell))),
-                           ("cl_kk", len(np.asarray(model.ell))),
-                           ("cl_shear_kCMB", len(np.asarray(model.ell))),
-                           ("wp_agn", len(np.asarray(model.rp_wp_agn)))):
+        n_ell = len(np.asarray(model.ell))
+        for name, base in (("cl_gX", n_ell), ("cl_XX", n_ell),
+                           ("cl_kk", n_ell), ("cl_shear_kCMB", n_ell),
+                           ("cl_gR", n_ell), ("cl_gI", n_ell),
+                           ("cl_RR", n_ell), ("cl_II", n_ell),
+                           ("cl_aR", n_ell), ("cl_aI", n_ell),
+                           ("cl_ag", n_ell),
+                           ("wp_agn", len(np.asarray(model.rp_wp_agn))),
+                           ("ds_agn", len(np.asarray(model.rp_ds)))):
             sel = np.where(row_obs == name)[0]
             if sel.size:
                 sub[sel] = np.arange(sel.size) // base
@@ -292,7 +505,9 @@ class Tier2Forecast:
             beam2 = ath.beam(ell) ** 2
 
             if b.kind == "cell":
-                v = noise.shell_volume(b.z_lo, b.z_hi, h, Om, sp.f_sky)
+                sp_b = self._cell_spectro(b)
+                f_gx = min(sp_b.f_sky, ath.f_sky)
+                v = noise.shell_volume(b.z_lo, b.z_hi, h, Om, sp_b.f_sky)
                 ngal = float(d_b[obs_b == "n_gal"][0])
                 n2d = noise.n2d_of(ngal, c1, c2)
                 cl_gg = self._extras[b.label]["cl_gg"]
@@ -302,22 +517,38 @@ class Tier2Forecast:
                     s = obs_b == name
                     if name == "wp":
                         sig_b[s] = noise.wp_pair_sigma(
-                            np.asarray(b.model.rp_wp), d_b[s], ngal, v, sp)
+                            np.asarray(b.model.rp_wp), d_b[s], ngal, v, sp_b)
                     elif name == "ds":
                         sig_b[s] = noise.delta_sigma_noise(
                             np.asarray(b.model.rp_ds), d_b[s], b.model.z_eff,
-                            ngal, v, h, Om, zs_src, nz_src, sh, sp)
+                            ngal, v, h, Om, zs_src, nz_src, sh, sp_b)
                     elif name == "n_gal":
                         sig_b[s] = ngal * np.sqrt(1.0 / (ngal * v)
-                                                  + sp.cv_rel(v) ** 2)
+                                                  + sp_b.cv_rel(v) ** 2)
                     elif name == "cl_gy":
                         n_y = rn_y * (ell / 100.0) ** an_y * d_b[s]
                         sig_b[s] = np.sqrt(2.0 / noise.n_modes(ell, fsky_y)) \
                             * (d_b[s] + n_y)
+                    elif name == "cl_gHI":
+                        # 21 cm IM × galaxies: calibrated effective recipe
+                        n_hi = self.hi.rn_im * (ell / 100.0) ** self.hi.an_im \
+                            * d_b[s]
+                        sig_b[s] = np.sqrt(
+                            2.0 / noise.n_modes(ell, self.hi.f_sky_im)) \
+                            * (d_b[s] + n_hi)
+                    elif name == "ssfr":
+                        sig_b[s] = sp_b.ssfr_err
+                    elif name == "f_early":
+                        # binomial counting + morphological-calibration floor
+                        f = np.clip(d_b[s], 1e-4, 1.0 - 1e-4)
+                        sig_b[s] = np.sqrt(f * (1.0 - f) / (ngal * v)
+                                           + sp_b.fmorph_err ** 2)
+                    elif name == "sfrd":
+                        sig_b[s] = sp_b.sfrd_rel * np.abs(d_b[s])
                     elif name == "cl_gkCMB":
                         sig_b[s] = noise.knox_cross(
                             ell, d_b[s], cl_gg, 1.0 / n2d, cl_kcmb, cm.n0,
-                            min(sp.f_sky, cm.f_sky))
+                            min(sp_b.f_sky, cm.f_sky))
                     elif name == "cl_gX":
                         cgx = d_b[s].reshape(len(self.bands), -1)
                         sig_b[s] = np.concatenate([
@@ -344,6 +575,61 @@ class Tier2Forecast:
                         sig_b[s] = np.concatenate([
                             noise.knox_auto(ell, cxx[k], nx[k] / beam2, ath.f_sky)
                             for k in range(len(self.bands))])
+                    elif name == "rlf":
+                        # radio LF: Poisson counts over the radio×z-counterpart
+                        # footprint, with the νLν(5 GHz) completeness limit
+                        grid = np.asarray(meta["x"][bsel][s])
+                        dlog = float(grid[1] - grid[0]) if grid.size > 1 else 1.0
+                        v_r = noise.shell_volume(b.z_lo, b.z_hi, h, Om,
+                                                 self.radio.f_sky)
+                        rel = noise.xlf_relerr(d_b[s], v_r, dloglx=dlog)
+                        lr_lo = 10.0 ** (grid - 0.5 * dlog)
+                        bad = lr_lo < self.radio.l_lim(b.z_hi, h, Om)
+                        rel = np.where(bad, np.inf, rel)
+                        for xv in grid[bad]:
+                            flagged.append((b.label, "rlf", float(xv)))
+                        sig_b[s] = rel * d_b[s]
+                    elif name == "himf":
+                        # blind HIMF: Poisson with the 21 cm M_HI flux limit
+                        grid = np.asarray(meta["x"][bsel][s])
+                        dlog = float(grid[1] - grid[0]) if grid.size > 1 else 1.0
+                        v_hi = noise.shell_volume(b.z_lo, b.z_hi, h, Om,
+                                                  self.hi.f_sky)
+                        rel = noise.xlf_relerr(d_b[s], v_hi, dloglx=dlog)
+                        mhi_lo = 10.0 ** (grid - 0.5 * dlog)
+                        bad = mhi_lo < self.hi.mhi_lim(b.z_hi, h, Om)
+                        rel = np.where(bad, np.inf, rel)
+                        for xv in grid[bad]:
+                            flagged.append((b.label, "himf", float(xv)))
+                        sig_b[s] = rel * d_b[s]
+                    elif name == "oiilf":
+                        # [OII] LF: Poisson over the spectroscopic volume with
+                        # the line-flux completeness limit (wave 3)
+                        grid = np.asarray(meta["x"][bsel][s])
+                        dlog = float(grid[1] - grid[0]) if grid.size > 1 else 1.0
+                        v_sp = noise.shell_volume(b.z_lo, b.z_hi, h, Om,
+                                                  sp.f_sky)
+                        rel = noise.xlf_relerr(d_b[s], v_sp, dloglx=dlog)
+                        l_lo = 10.0 ** (grid - 0.5 * dlog)
+                        bad = l_lo < sp.loii_lim(b.z_hi, h, Om)
+                        rel = np.where(bad, np.inf, rel)
+                        for xv in grid[bad]:
+                            flagged.append((b.label, "oiilf", float(xv)))
+                        sig_b[s] = rel * d_b[s]
+                    elif name == "ilf":
+                        # AGN IR LF: Poisson over the IR footprint with the
+                        # νLν(6 μm) completeness limit (wave 3)
+                        grid = np.asarray(meta["x"][bsel][s])
+                        dlog = float(grid[1] - grid[0]) if grid.size > 1 else 1.0
+                        v_ir = noise.shell_volume(b.z_lo, b.z_hi, h, Om,
+                                                  self.ir.f_sky)
+                        rel = noise.xlf_relerr(d_b[s], v_ir, dloglx=dlog)
+                        l_lo = 10.0 ** (grid - 0.5 * dlog)
+                        bad = l_lo < self.ir.l_lim(b.z_hi, h, Om)
+                        rel = np.where(bad, np.inf, rel)
+                        for xv in grid[bad]:
+                            flagged.append((b.label, "ilf", float(xv)))
+                        sig_b[s] = rel * d_b[s]
 
             elif b.kind == "global":
                 for name in b.which:
@@ -375,7 +661,8 @@ class Tier2Forecast:
                 l_lim = ath.l_lim(b.z_hi, h, Om)
                 n_agn = self._extras[b.label]["n_agn"]
                 rp = np.asarray(b.model.rp_wp_agn)
-                w = d_b.reshape(len(self.agn_lx_bins), -1)
+                s = obs_b == "wp_agn"
+                w = d_b[s].reshape(len(self.agn_lx_bins), -1)
                 parts = []
                 for k, (l1, l2) in enumerate(self.agn_lx_bins):
                     if 10.0 ** l1 < l_lim:
@@ -384,7 +671,7 @@ class Tier2Forecast:
                     else:
                         parts.append(noise.wp_pair_sigma(
                             rp, w[k], float(n_agn[k]), v, sp))
-                sig_b[:] = np.concatenate(parts)
+                sig_b[s] = np.concatenate(parts)
 
             sigma[bsel] = sig_b
 

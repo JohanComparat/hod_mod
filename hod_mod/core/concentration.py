@@ -325,15 +325,20 @@ def c_bhattacharya13(
 # Diemer & Kravtsov 2015 — universal c–ν–n model (any cosmology)
 # ---------------------------------------------------------------------------
 
-def _neff_eisenstein_hu(m_h: jnp.ndarray, theta: dict) -> jnp.ndarray:
+def _neff_eisenstein_hu(m_h: jnp.ndarray, theta: dict,
+                        kappa: float = 0.42) -> jnp.ndarray:
     r"""Effective power-spectrum slope n = d ln P_lin / d ln k at scale k_R(M).
 
-    Following Diemer & Kravtsov 2015 (Eq. A1): the relevant scale is
+    Following Diemer & Kravtsov 2015 (Eq. 7): the relevant scale is
 
     .. math::
 
-        k_R = \frac{2\pi}{R(M)}, \quad
+        k_R = \kappa\,\frac{2\pi}{R(M)}, \quad
         R(M) = \left(\frac{3M}{4\pi\bar{\rho}_m}\right)^{1/3}
+
+    with κ = 0.42 — the Diemer & Joyce 2019 calibration the *median*
+    ``c_diemer15`` parameters belong to (κ was previously hard-coded to 1,
+    which biases n_eff and hence c high; fixed 2026-07).
 
     The slope is computed by tabulating P_EH on a dense log-spaced grid and
     differentiating numerically.  Calling ``eisenstein_hu_pk`` with a
@@ -344,6 +349,7 @@ def _neff_eisenstein_hu(m_h: jnp.ndarray, theta: dict) -> jnp.ndarray:
     ----------
     m_h : jnp.ndarray, shape (NM,)
     theta : dict  Cosmological parameters.
+    kappa : float  Scale calibration k_R = κ·2π/R (0.42 = DJ19 median).
 
     Returns
     -------
@@ -352,7 +358,7 @@ def _neff_eisenstein_hu(m_h: jnp.ndarray, theta: dict) -> jnp.ndarray:
     rho_m = _RHO_CRIT0 * float(theta["Omega_m"])
     m_np = np.asarray(m_h, dtype=float)
     R = (3.0 * m_np / (4.0 * np.pi * rho_m)) ** (1.0 / 3.0)   # Mpc/h
-    k_R = 2.0 * np.pi / R                                        # h/Mpc
+    k_R = kappa * 2.0 * np.pi / R                                # h/Mpc
 
     k_grid = np.logspace(-3, 2, 500)
     pk_grid = np.asarray(eisenstein_hu_pk(jnp.asarray(k_grid), theta), dtype=float)
@@ -426,10 +432,14 @@ def c_diemer15(
     else:
         raise ValueError(f"statistic must be 'median' or 'mean', got {statistic!r}")
 
+    # DK15 Eq. 9 / DJ19 Eq. 30: c = (c_min/2)[x^{-α} + x^{β}], x = ν/ν_min.
+    # (Previously implemented as c_min·x^{-α}(1 + x^{β}) — missing the ½ and
+    # with a β−α second exponent — which biases c high by ~2×; fixed 2026-07,
+    # anchored against COLOSSUS in tests/test_missing_physics.py.)
     nu = 1.686 / sigma
-    nu0 = eta0 + n_eff * eta1
-    floor = phi0 + n_eff * phi1
-    return floor * (nu / nu0) ** (-alpha) * (1.0 + (nu / nu0) ** beta)
+    x = nu / (eta0 + n_eff * eta1)
+    c_min = phi0 + n_eff * phi1
+    return 0.5 * c_min * (x ** (-alpha) + x ** beta)
 
 
 # ---------------------------------------------------------------------------

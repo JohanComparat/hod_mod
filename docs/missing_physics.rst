@@ -21,6 +21,20 @@ link below was resolved and checked against title and first author.
    :local:
    :depth: 1
 
+.. admonition:: Implementation status (2026-07, branch ``feature/missing-physics``)
+
+   Three implementation waves grew the parameter vector 61 → **90** and
+   delivered sectors 1–3, 5, 7 and 8 of this page (beyond-ΛCDM growth and
+   neutrinos, the cosmology-dependent c(ν, n_eff), the AGN fundamental
+   plane with jets and the infrared band, the SF/quiescent split with a
+   continuous sSFR distribution and the [OII] LF, wind mass loading, and
+   the HI sector), plus the linearized CAMB/EH98 ratio for sector 2 —
+   each with exact tested invariants and survey-noise wiring into the
+   tier-2 forecast.  **The full account lives in**
+   :doc:`missing_physics_implementation`.  Still open: ν/HMF emulator
+   distillation beyond first order, multi-band SEDs/CLF (route 1/2), and
+   morphology.
+
 Summary and suggested order
 ---------------------------
 
@@ -403,9 +417,16 @@ Galaxy morphology
 Where the model stands
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Nothing.  No morphological variable — bulge-to-total ratio, Sérsic index,
-early/late-type fraction — appears anywhere in the package; the ZM15
-connection describes all galaxies of a given stellar mass identically.
+**Implemented (wave 4 + tier 4)** — :mod:`hod_mod.connection.morphology`
+provides the conditional early-type fraction below;
+``ForwardModel(morph="early"|"late")`` splits any sample, the per-cell
+``f_early`` observable enters the tier forecasts (``--include-morph``), and
+``mbh_bt_slope`` couples the bulge proxy into the Powell chain.  The tier-4
+extension (:doc:`tier4_forecast`) adds the joint E/Q census
+(``rho_morph_q``), Kravtsov sizes, the morphology-carried NLA intrinsic
+alignments, the AGN-host early fraction and the Mandelbaum-style
+morphology-split w_p/ΔΣ blocks.  The assembly-bias hook (item 3 below)
+remains open.
 
 Proposed implementation
 ~~~~~~~~~~~~~~~~~~~~~~~
