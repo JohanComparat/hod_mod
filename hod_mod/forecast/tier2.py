@@ -331,12 +331,15 @@ class Tier2Forecast:
         cache — the parallel == serial invariant.  Returns the labels that
         were missing on entry.
 
-        ``max_tasks_per_child`` recycles each worker after that many blocks:
-        a worker's JAX compilation cache grows with every distinct block
-        shape it touches (several GB after a handful of blocks), and without
-        recycling a full tier-3 run OOMs the host.  Recycling bounds the
-        per-worker RSS near the single-block peak at the cost of one forecast
-        rebuild (~seconds) per cycle.
+        ``max_tasks_per_child`` bounds worker memory: a worker's JAX
+        compilation cache grows with every distinct block shape it touches
+        (several GB after a handful of blocks), and unbounded workers OOM the
+        host on a full tier-3 run.  Implemented as BATCHED POOLS — a fresh
+        executor per chunk of ``jobs × max_tasks_per_child`` blocks — rather
+        than the executor's own ``max_tasks_per_child``, whose worker-respawn
+        path deadlocks on CPython 3.11 (observed: pool alive, all workers
+        exited, no respawn).  Pool teardown between batches frees the caches
+        identically, at one forecast rebuild (~seconds) per worker per batch.
         """
         labels = [b.label for b in self.blocks
                   if not os.path.exists(self._cache_path(cache_dir, b, fid))]
@@ -348,6 +351,7 @@ class Tier2Forecast:
         x64 = bool(jax.config.jax_enable_x64)
         ctx = mp.get_context("spawn")
         fid = np.asarray(fid)
+        chunk = max(int(jobs), int(jobs) * int(max_tasks_per_child or 4))
         # children must see the parent's x64 mode from their FIRST jax import
         # (module-level jnp constants, e.g. pk_eisenstein_hu._K_INT, are built
         # at import time — a late config.update would leave them float32 and
@@ -355,19 +359,21 @@ class Tier2Forecast:
         env_old = os.environ.get("JAX_ENABLE_X64")
         os.environ["JAX_ENABLE_X64"] = "1" if x64 else "0"
         try:
-            with ProcessPoolExecutor(
-                    max_workers=int(jobs), mp_context=ctx,
-                    initializer=_precompute_init,
-                    initargs=(type(self), self._ctor_kwargs, x64),
-                    max_tasks_per_child=(int(max_tasks_per_child)
-                                         if max_tasks_per_child else None)) as exe:
-                futs = {exe.submit(_precompute_block, lab, fid, cache_dir): lab
-                        for lab in labels}
-                for i, f in enumerate(as_completed(futs)):
-                    lab = f.result()      # re-raises worker exceptions
-                    if verbose:
-                        print(f"[precompute] {i + 1:3d}/{len(labels)} {lab}",
-                              flush=True)
+            done = 0
+            for i0 in range(0, len(labels), chunk):
+                batch = labels[i0:i0 + chunk]
+                with ProcessPoolExecutor(
+                        max_workers=min(int(jobs), len(batch)),
+                        mp_context=ctx, initializer=_precompute_init,
+                        initargs=(type(self), self._ctor_kwargs, x64)) as exe:
+                    futs = {exe.submit(_precompute_block, lab, fid,
+                                       cache_dir): lab for lab in batch}
+                    for f in as_completed(futs):
+                        lab = f.result()  # re-raises worker exceptions
+                        done += 1
+                        if verbose:
+                            print(f"[precompute] {done:3d}/{len(labels)} "
+                                  f"{lab}", flush=True)
         finally:
             if env_old is None:
                 os.environ.pop("JAX_ENABLE_X64", None)
