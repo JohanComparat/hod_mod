@@ -110,41 +110,41 @@ class ClusterGalaxyCrossCorrelation:
         cosmo_key = self._full._cosmo_cache_key(z, theta_cosmo)
         sc = self._full._static_cache[cosmo_key]
 
-        m_np    = sc["m_np"]
-        dndm_np = sc["dndm_np"]
-        bias_np = sc["bias_np"]
-        uk      = sc["uk"]          # (Nk, NM) — NFW/Einasto Fourier transform table
-        pk_lin  = sc["pk_lin"]      # (Nk,)
-        k_np    = sc["k_np"]        # (Nk,)
+        m       = jnp.asarray(sc["m_np"])
+        dndm    = jnp.asarray(sc["dndm_np"])
+        bias    = jnp.asarray(sc["bias_np"])
+        uk      = jnp.asarray(sc["uk"])      # (Nk, NM) — NFW/Einasto FT table
+        pk_lin  = jnp.asarray(sc["pk_lin"])  # (Nk,)
+        k_np    = sc["k_np"]                 # (Nk,)
 
         # HOD occupation
         with jax.disable_jit():
             nc_arr, ns_arr = self._full._hod.nc_ns(
                 self._full._hod._log10m_grid, hod_params
             )
-        nc_np = np.asarray(nc_arr, dtype=float)
-        ns_np = np.asarray(ns_arr, dtype=float)
+        nc = jnp.asarray(nc_arr)
+        ns = jnp.asarray(ns_arr)
 
         # Galaxy number density and effective bias
-        nt_np = nc_np + ns_np
-        n_gal = float(np.trapezoid(dndm_np * nt_np, m_np))
-        b_gal = float(np.trapezoid(dndm_np * nt_np * bias_np, m_np) / n_gal)
+        nt = nc + ns
+        n_gal = jnp.trapezoid(dndm * nt, m)
+        b_gal = jnp.trapezoid(dndm * nt * bias, m) / n_gal
 
         # Cluster step-function occupation: N_C(M) = Θ(M - M_min_C)
         m_min_cluster = 10.0 ** float(log10_m_min_cluster)
-        N_C = (m_np >= m_min_cluster).astype(float)
+        N_C = (m >= m_min_cluster).astype(float)
 
-        n_cluster = float(np.trapezoid(dndm_np * N_C, m_np))
+        n_cluster = float(jnp.trapezoid(dndm * N_C, m))
         if n_cluster <= 0.0:
             raise ValueError(
                 f"log10_m_min_cluster={log10_m_min_cluster} yields zero cluster count."
             )
 
         # 1-halo cross-power: clusters at halo centres (u_C = 1)
-        integrand_cg_1h = dndm_np[None, :] * N_C[None, :] * (
-            nc_np[None, :] + ns_np[None, :] * uk
+        integrand_cg_1h = dndm[None, :] * N_C[None, :] * (
+            nc[None, :] + ns[None, :] * uk
         )
-        P_cg_1h = np.trapezoid(integrand_cg_1h, m_np, axis=1) / (n_cluster * n_gal)
+        P_cg_1h = jnp.trapezoid(integrand_cg_1h, m, axis=1) / (n_cluster * n_gal)
 
         # 2-halo: b_C × b_G_eff × P_lin
         P_cg_2h = float(b_cluster) * b_gal * pk_lin
@@ -152,7 +152,7 @@ class ClusterGalaxyCrossCorrelation:
         P_cg = P_cg_1h + P_cg_2h
 
         log_k = jnp.log(jnp.asarray(k_np))
-        log_pcg = jnp.log(jnp.maximum(jnp.asarray(P_cg), 1e-20))
+        log_pcg = jnp.log(jnp.maximum(P_cg, 1e-20))
         return log_k, log_pcg
 
     # ------------------------------------------------------------------
