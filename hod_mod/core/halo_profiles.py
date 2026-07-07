@@ -388,46 +388,44 @@ def satellite_nfw_uk(
     uk : jnp.ndarray, shape (Nk, NM)
     """
     k     = np.asarray(k_arr,     dtype=float).ravel()   # (Nk,)
-    r_s   = np.asarray(r_s_arr,   dtype=float).ravel()   # (NM,)
-    c     = np.asarray(c_arr,     dtype=float).ravel()   # (NM,)
-    r_vir = np.asarray(r_vir_arr, dtype=float).ravel()   # (NM,)
+    r_vir = jnp.asarray(np.asarray(r_vir_arr, dtype=float).ravel())   # (NM,)
+    c     = jnp.asarray(np.asarray(c_arr,     dtype=float).ravel())   # (NM,)
 
     c_sat   = float(b_sat_conc) * c          # (NM,)
     r_s_sat = r_vir / c_sat                  # (NM,)
 
-    x_gl, w_gl = np.polynomial.legendre.leggauss(n_r)
-    r_h     = r_vir                                         # = c * r_s = c_sat * r_s_sat
-    r_nodes = np.outer(r_h / 2.0, x_gl + 1.0)            # (NM, n_r)
-    w_eff   = np.outer(r_h / 2.0, w_gl)                   # (NM, n_r)
+    x_gl, w_gl = np.polynomial.legendre.leggauss(n_r)     # static GL nodes
+    r_h     = r_vir                                        # = c * r_s = c_sat * r_s_sat
+    r_nodes = (r_h / 2.0)[:, None] * (jnp.asarray(x_gl) + 1.0)[None, :]  # (NM, n_r)
+    w_eff   = (r_h / 2.0)[:, None] * jnp.asarray(w_gl)[None, :]          # (NM, n_r)
 
     x       = r_nodes / r_s_sat[:, None]                  # (NM, n_r)
     rho_nfw = 1.0 / (x * (1.0 + x)**2)                   # (NM, n_r), ρ_s cancels
 
-    weight = np.ones_like(r_nodes)
+    weight = jnp.ones_like(r_nodes)
     if float(f_cut) > 0.0:
-        weight *= 1.0 - np.exp(-r_nodes / (float(f_cut) * r_vir[:, None]))
+        weight = weight * (1.0 - jnp.exp(-r_nodes / (float(f_cut) * r_vir[:, None])))
     if float(gamma) > 0.0:
-        weight *= (r_nodes / r_vir[:, None]) ** float(gamma)
+        weight = weight * (r_nodes / r_vir[:, None]) ** float(gamma)
 
     integrand = rho_nfw * weight * r_nodes**2             # (NM, n_r)
-    norm      = np.sum(w_eff * integrand, axis=1)         # (NM,)
-    norm      = np.where(norm > 0.0, norm, 1.0)
+    norm      = jnp.sum(w_eff * integrand, axis=1)        # (NM,)
+    norm      = jnp.where(norm > 0.0, norm, 1.0)
 
     # GL on coarse k grid to keep array sizes manageable
     k_coarse = np.logspace(np.log10(k.min()), np.log10(k.max()), n_k_coarse)
-    K   = k_coarse[:, None, None] * r_nodes[None, :, :]  # (n_k_coarse, NM, n_r)
-    j0  = np.where(K < 1e-6, 1.0 - K**2 / 6.0, np.sin(K) / K)
-    uk_c = (np.sum(w_eff[None, :, :] * integrand[None, :, :] * j0, axis=2)
+    K   = jnp.asarray(k_coarse)[:, None, None] * r_nodes[None, :, :]  # (n_k_coarse, NM, n_r)
+    j0  = jnp.where(K < 1e-6, 1.0 - K**2 / 6.0, jnp.sin(K) / K)
+    uk_c = (jnp.sum(w_eff[None, :, :] * integrand[None, :, :] * j0, axis=2)
             / norm[None, :])                               # (n_k_coarse, NM)
 
-    # Log-linear interpolation to the full k grid
-    log_k_c = np.log(k_coarse)
-    log_k_f = np.log(k)
-    uk_fine = np.empty((len(k), len(r_s)), dtype=float)
-    for j in range(len(r_s)):
-        uk_fine[:, j] = np.interp(log_k_f, log_k_c, uk_c[:, j])
+    # Log-linear interpolation to the full k grid, vectorised over mass
+    log_k_c = jnp.log(jnp.asarray(k_coarse))
+    log_k_f = jnp.log(jnp.asarray(k))
+    uk_fine = jax.vmap(lambda col: jnp.interp(log_k_f, log_k_c, col),
+                       in_axes=1, out_axes=1)(uk_c)        # (Nk, NM)
 
-    return jnp.asarray(uk_fine)
+    return uk_fine
 
 
 @jax.jit
