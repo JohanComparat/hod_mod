@@ -55,6 +55,7 @@ include = ["hod_mod*"]
 testpaths = ["tests"]
 markers = [
     "slow: marks tests as slow (build the CAMB static cache / JAX JIT); deselect with -m 'not slow'",
+    "x64: needs JAX_ENABLE_X64=1 (gradient-vs-finite-difference checks); run as a separate pytest process",
 ]
 
 [tool.coverage.run]
