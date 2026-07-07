@@ -66,9 +66,10 @@ def _gnfw_f_params(
     ----------
     x : dimensionless radius r / R_s
     alpha_in, alpha_tr, alpha_out : gNFW shape exponents
+        (scalars or arrays broadcastable against ``x``)
     """
-    x = np.asarray(x, dtype=float)
-    x_safe = np.where(x > 1e-8, x, 1e-8)
+    x = jnp.asarray(x, dtype=float)
+    x_safe = jnp.where(x > 1e-8, x, 1e-8)
     return (
         x_safe ** (-alpha_in)
         * (1.0 + x_safe ** alpha_tr)
@@ -197,22 +198,25 @@ def _profile_uk_gl(
 
     x_gl, w_gl = _leggauss_cached(n_gl)
 
-    # Map GL nodes from [-1,1] to [0, r_max[i]]
+    # Map GL nodes from [-1,1] to [0, r_max[i]].  r_nodes stays numpy so
+    # numpy-based integrand callbacks (e.g. GasDensityDPM) keep working.
     half    = r_max / 2.0
     r_nodes = np.outer(half, x_gl + 1.0)            # (NM, n_gl) [same units as r_max]
 
     # Profile values at quadrature nodes, pre-folded with the GL weight r²·w:
     #   A[m,g] = (r_max/2)·w_g · f(r_mg) · r_mg²
-    A = (half[:, None] * w_gl[None, :]) * integrand_fn(r_nodes) * r_nodes**2   # (NM, n_gl)
+    A = (jnp.asarray(half[:, None] * w_gl[None, :])
+         * jnp.asarray(integrand_fn(r_nodes))
+         * jnp.asarray(r_nodes**2))                  # (NM, n_gl)
 
-    # j₀(K) = sin(K)/K = sinc(K/π) (branchless; np.sinc handles K→0 → 1).
+    # j₀(K) = sin(K)/K = sinc(K/π) (branchless; sinc handles K→0 → 1).
     # einsum contracts the GL axis WITHOUT materialising the (Nk, NM, n_gl)
     # weighted-product cube — only the j₀ cube is built (the giant product
-    # temporary is what made the dense np.sum memory-bound at NM=n_k=512).
-    K  = k[:, None, None] * r_nodes[None, :, :]     # (Nk, NM, n_gl)
-    j0 = np.sinc(K / np.pi)                          # (Nk, NM, n_gl)
-    result = np.einsum('kmg,mg->km', j0, A, optimize=True)   # (Nk, NM)
-    return 4.0 * np.pi * result   # (Nk, NM)
+    # temporary is what made the dense sum memory-bound at NM=n_k=512).
+    K  = jnp.asarray(k)[:, None, None] * jnp.asarray(r_nodes)[None, :, :]  # (Nk, NM, n_gl)
+    j0 = jnp.sinc(K / jnp.pi)                        # (Nk, NM, n_gl)
+    result = jnp.einsum('kmg,mg->km', j0, A)         # (Nk, NM)
+    return 4.0 * jnp.pi * result   # (Nk, NM)
 
 
 def _profile_uk_gl_bands(
