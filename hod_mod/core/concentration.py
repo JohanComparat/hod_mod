@@ -242,10 +242,10 @@ def c_klypin16(
     else:
         raise ValueError(f"mdef must be '200c' or 'vir', got {mdef!r}")
 
-    z_tab = tab[:, 0]
-    C0    = float(np.interp(z, z_tab, tab[:, 1]))
-    gamma = float(np.interp(z, z_tab, tab[:, 2]))
-    M0    = float(np.interp(z, z_tab, tab[:, 3])) * 1.0e12
+    z_tab = jnp.asarray(tab[:, 0])
+    C0    = jnp.interp(z, z_tab, jnp.asarray(tab[:, 1]))
+    gamma = jnp.interp(z, z_tab, jnp.asarray(tab[:, 2]))
+    M0    = jnp.interp(z, z_tab, jnp.asarray(tab[:, 3])) * 1.0e12
 
     return C0 * (m_h / 1.0e12) ** (-gamma) * (1.0 + (m_h / M0) ** 0.4)
 
@@ -355,18 +355,17 @@ def _neff_eisenstein_hu(m_h: jnp.ndarray, theta: dict,
     -------
     n_eff : jnp.ndarray, shape (NM,), effective slope (typically −3 to 0)
     """
-    rho_m = _RHO_CRIT0 * float(theta["Omega_m"])
-    m_np = np.asarray(m_h, dtype=float)
-    R = (3.0 * m_np / (4.0 * np.pi * rho_m)) ** (1.0 / 3.0)   # Mpc/h
-    k_R = kappa * 2.0 * np.pi / R                                # h/Mpc
+    rho_m = _RHO_CRIT0 * theta["Omega_m"]
+    m = jnp.asarray(m_h)
+    R = (3.0 * m / (4.0 * jnp.pi * rho_m)) ** (1.0 / 3.0)     # Mpc/h
+    k_R = kappa * 2.0 * jnp.pi / R                             # h/Mpc
 
-    k_grid = np.logspace(-3, 2, 500)
-    pk_grid = np.asarray(eisenstein_hu_pk(jnp.asarray(k_grid), theta), dtype=float)
-    log_k = np.log(k_grid)
-    log_pk = np.log(np.maximum(pk_grid, 1e-30))
-    d_log_pk = np.gradient(log_pk, log_k)
-    n_arr = np.interp(np.log(k_R), log_k, d_log_pk)
-    return jnp.asarray(n_arr)
+    k_grid = np.logspace(-3, 2, 500)                           # static grid
+    pk_grid = eisenstein_hu_pk(jnp.asarray(k_grid), theta)
+    log_k = jnp.log(jnp.asarray(k_grid))                       # uniform spacing
+    log_pk = jnp.log(jnp.maximum(pk_grid, 1e-30))
+    d_log_pk = jnp.gradient(log_pk, float(log_k[1] - log_k[0]))
+    return jnp.interp(jnp.log(k_R), log_k, d_log_pk)
 
 
 @partial(jax.jit, static_argnums=(3, 4, 5))
