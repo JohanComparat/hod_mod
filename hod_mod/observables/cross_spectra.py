@@ -351,12 +351,12 @@ class HaloModelCrossSpectra:
             )
         nc_np  = np.asarray(nc_arr, dtype=float)
         ns_np  = np.asarray(ns_arr, dtype=float)
-        nt_np  = nc_np + ns_np
-        dndm   = sc["dndm_np"]
-        bias   = sc["bias_np"]
-        m_np   = sc["m_np"]
-        n_gal  = float(np.trapezoid(dndm * nt_np, m_np))
-        b_eff  = float(np.trapezoid(dndm * nt_np * bias, m_np) / n_gal)
+        nt     = jnp.asarray(nc_np + ns_np)
+        dndm   = jnp.asarray(sc["dndm_np"])
+        bias   = jnp.asarray(sc["bias_np"])
+        m      = jnp.asarray(sc["m_np"])
+        n_gal  = float(jnp.trapezoid(dndm * nt, m))
+        b_eff  = float(jnp.trapezoid(dndm * nt * bias, m) / n_gal)
         return nc_np, ns_np, n_gal, b_eff
 
     def _pressure_uk_cached(
