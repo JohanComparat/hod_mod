@@ -29,6 +29,7 @@ import jax.numpy as jnp
 from functools import partial
 
 from hod_mod.core.power_spectrum import rho_critical_0
+from hod_mod.core.numerics import safe_log
 
 
 # ---------------------------------------------------------------------------
@@ -248,8 +249,8 @@ class HODClusteringPrediction:
         k = self._k
         pk_lin = self._pk_lin.pk_linear(np.asarray(k), float(z), theta_cosmo)
         log_k = jnp.log(k)
-        log_pgg = jnp.log(jnp.maximum(b_eff**2 * jnp.asarray(pk_lin), 1e-20))
-        log_pgm = jnp.log(jnp.maximum(b_eff * jnp.asarray(pk_lin), 1e-20))
+        log_pgg = safe_log(b_eff**2 * jnp.asarray(pk_lin), 1e-20)
+        log_pgm = safe_log(b_eff * jnp.asarray(pk_lin), 1e-20)
         return log_k, log_pgg, log_pgm
 
     # ------------------------------------------------------------------
@@ -972,19 +973,19 @@ class FullHaloModelPrediction:
                 P_gm_cdm = P_gm_cdm + pk_2h * delta_gm
 
         if P_gm_cdm is not None:
-            log_pgm_cdm = jnp.log(jnp.maximum(P_gm_cdm, 1e-20))
-            log_pgm_b   = jnp.log(jnp.maximum(P_gm_b,   1e-20))
+            log_pgm_cdm = safe_log(P_gm_cdm, 1e-20)
+            log_pgm_b   = safe_log(P_gm_b,   1e-20)
 
         P_gg = P_gg_1h + P_gg_2h
         P_gm = P_gm_1h + P_gm_2h
 
         log_k       = jnp.log(self._k)
-        log_pgg     = jnp.log(jnp.maximum(P_gg,     1e-20))
-        log_pgg_1h  = jnp.log(jnp.maximum(P_gg_1h,  1e-20))
-        log_pgg_2h  = jnp.log(jnp.maximum(P_gg_2h,  1e-20))
-        log_pgm     = jnp.log(jnp.maximum(P_gm,     1e-20))
-        log_pgm_1h  = jnp.log(jnp.maximum(P_gm_1h,  1e-20))
-        log_pgm_2h  = jnp.log(jnp.maximum(P_gm_2h,  1e-20))
+        log_pgg     = safe_log(P_gg,     1e-20)
+        log_pgg_1h  = safe_log(P_gg_1h,  1e-20)
+        log_pgg_2h  = safe_log(P_gg_2h,  1e-20)
+        log_pgm     = safe_log(P_gm,     1e-20)
+        log_pgm_1h  = safe_log(P_gm_1h,  1e-20)
+        log_pgm_2h  = safe_log(P_gm_2h,  1e-20)
         return {
             "log_k":       log_k,
             "log_pgg":     log_pgg,
