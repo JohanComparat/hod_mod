@@ -140,3 +140,48 @@ class TestClusterGalaxyCrossCorrelation:
                 theta_cosmo=_THETA, hod_params=_HOD_PARAMS,
                 b_cluster=_B_CLUSTER, log10_m_min_cluster=17.0,
             )
+
+
+# ---------------------------------------------------------------------------
+# Float64 numpy oracle for the P_cg assembly (Wave-1 jnp-port regression)
+# ---------------------------------------------------------------------------
+
+class TestPcgNumpyOracle:
+    def test_pcg_matches_float64_reference(self, cross_pred):
+        import jax
+
+        z = 0.16
+        log_k, log_pcg = cross_pred._pk_table_cg(
+            z, _THETA, _HOD_PARAMS, _B_CLUSTER, _LOG10_MMIN_CLUSTER)
+
+        full = cross_pred._full
+        sc = full._static_cache[full._cosmo_cache_key(z, _THETA)]
+        with jax.disable_jit():
+            nc, ns = full._hod.nc_ns(full._hod._log10m_grid, _HOD_PARAMS)
+        nc = np.asarray(nc, dtype=float)
+        ns = np.asarray(ns, dtype=float)
+        m, dndm, bias = sc["m_np"], sc["dndm_np"], sc["bias_np"]
+        uk = np.asarray(sc["uk"], dtype=float)
+
+        nt = nc + ns
+        n_gal = np.trapezoid(dndm * nt, m)
+        b_gal = np.trapezoid(dndm * nt * bias, m) / n_gal
+        N_C = (m >= 10.0 ** _LOG10_MMIN_CLUSTER).astype(float)
+        n_cluster = np.trapezoid(dndm * N_C, m)
+        p1h = np.trapezoid(
+            dndm[None, :] * N_C[None, :] * (nc[None, :] + ns[None, :] * uk),
+            m, axis=1) / (n_cluster * n_gal)
+        p2h = _B_CLUSTER * b_gal * np.asarray(sc["pk_lin"], dtype=float)
+        p_ref = np.maximum(p1h + p2h, 1e-20)
+
+        # the returned table is float32, so 2e-5 is the meaningful floor;
+        # an axis/transpose bug in the mass integrals would be O(1)
+        np.testing.assert_allclose(
+            np.exp(np.asarray(log_pcg, dtype=float)), p_ref, rtol=2e-5)
+        np.testing.assert_allclose(
+            np.asarray(log_k, dtype=float), np.log(sc["k_np"]), rtol=1e-6)
+
+    def test_empty_cluster_sample_raises(self, cross_pred):
+        with pytest.raises(ValueError, match="zero cluster count"):
+            cross_pred._pk_table_cg(0.16, _THETA, _HOD_PARAMS,
+                                    _B_CLUSTER, log10_m_min_cluster=17.0)
