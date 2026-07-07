@@ -1572,6 +1572,7 @@ _HOD_MODEL_MAP = {
     "zacharegkas25": "Zacharegkas25HODModel",
     "leauthaud12":  "Leauthaud12HODModel",
     "clf_cacciato09": "CLFModel",
+    "clf_cacciato13": "CLFModel13",
 }
 
 
