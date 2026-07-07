@@ -17,6 +17,7 @@ from .clustering import (
     NonLinearHaloModelPrediction,
     HODProjectedCorrelation,
     projected_correlation_function,
+    make_differentiable_prediction,
 )
 from .cross_spectra import (
     HaloModelCrossSpectra,
@@ -25,6 +26,13 @@ from .cross_spectra import (
     psf_king_window_ell,
 )
 from .cross_clustering import ClusterGalaxyCrossCorrelation
+from .lensing import (
+    ClusterLensingPrediction,
+    sigma_crit,
+    inv_sigma_crit,
+    solve_einstein_radius,
+    radial_critical_radius,
+)
 from .intrinsic_alignment import NLAModel, TATTModel
 from .baryon_fraction import (
     make_baryon_fraction,
@@ -39,11 +47,17 @@ __all__ = [
     "NonLinearHaloModelPrediction",
     "HODProjectedCorrelation",
     "projected_correlation_function",
+    "make_differentiable_prediction",
     "HaloModelCrossSpectra",
     "psf_window_ell",
     "psf_king_profile",
     "psf_king_window_ell",
     "ClusterGalaxyCrossCorrelation",
+    "ClusterLensingPrediction",
+    "sigma_crit",
+    "inv_sigma_crit",
+    "solve_einstein_radius",
+    "radial_critical_radius",
     "NLAModel",
     "TATTModel",
     "make_baryon_fraction",
