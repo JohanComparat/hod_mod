@@ -79,3 +79,44 @@ def test_jit_path_and_consistency(halos):
     looped = np.array([np.asarray(m200_to_m500c(m200[i], c200[i], r200[i], _RHO)[0])
                        for i in range(len(m200))])
     assert np.allclose(m5a, looped, rtol=1e-6)
+
+
+@pytest.mark.x64
+def test_m500c_gradient_vs_fd(halos):
+    """AD gradients through the bisection match central finite differences.
+
+    Regression for a real defect: the fori_loop bisection midpoint is built
+    only from constant seeds and comparisons, so before the Newton polish the
+    AD gradient was exactly 0 w.r.t. m200/c200 and wrong for r200.
+    Needs x64: float32 finite differences on M500c ~ 1e13 are pure noise.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    if not jax.config.jax_enable_x64:
+        pytest.skip("requires JAX_ENABLE_X64=1")
+
+    from hod_mod.gas.conversions import _m200_to_m500c_jax
+
+    m200, c200, r200 = halos
+
+    def m5(m, c, r):
+        out, _ = _m200_to_m500c_jax(
+            jnp.atleast_1d(m), jnp.atleast_1d(c), jnp.atleast_1d(r), _RHO)
+        return out[0]
+
+    for i in (0, 2, 4):          # 1e12, 5e13, 5e14 Msun/h
+        args = (float(m200[i]), float(c200[i]), float(r200[i]))
+        for arg in range(3):
+            g_ad = float(jax.grad(m5, argnums=arg)(*args))
+            eps = 1e-5 * args[arg]
+            up = list(args); dn = list(args)
+            up[arg] += eps; dn[arg] -= eps
+            g_fd = (float(m5(*up)) - float(m5(*dn))) / (2.0 * eps)
+            assert g_ad == pytest.approx(g_fd, rel=1e-6), (i, arg)
+    # physical signs: more mass -> more mass; higher c -> more mass inside
+    # r500; larger r200 at fixed (m, c) -> puffier halo -> less inside r500
+    a = (float(m200[2]), float(c200[2]), float(r200[2]))
+    assert float(jax.grad(m5, argnums=0)(*a)) > 0
+    assert float(jax.grad(m5, argnums=1)(*a)) > 0
+    assert float(jax.grad(m5, argnums=2)(*a)) < 0
