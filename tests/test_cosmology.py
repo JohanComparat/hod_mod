@@ -1297,3 +1297,74 @@ class TestEinastoAndSatelliteUk:
         )
         uk_ref = np.asarray(nfw_uk(_K_ARR, _RS_ARR, _C_ARR))
         np.testing.assert_allclose(uk_sat, uk_ref, rtol=1e-2)
+
+
+class TestSatelliteNfwUkNumpyOracle:
+    """Float64 numpy reference for the jnp-ported satellite_nfw_uk.
+
+    The reference is the original numpy implementation verbatim.  The jnp
+    port runs in float32, whose sin(K) error at K = k*r ~ few*100 is ~2e-5
+    absolute, so the comparison is absolute-dominated (uk is bounded by 1).
+    """
+
+    @staticmethod
+    def _reference(k_arr, r_s_arr, c_arr, r_vir_arr, b_sat_conc=1.0,
+                   f_cut=0.0, gamma=0.0, n_r=100, n_k_coarse=128):
+        k     = np.asarray(k_arr, dtype=float).ravel()
+        r_s   = np.asarray(r_s_arr, dtype=float).ravel()
+        c     = np.asarray(c_arr, dtype=float).ravel()
+        r_vir = np.asarray(r_vir_arr, dtype=float).ravel()
+        c_sat   = float(b_sat_conc) * c
+        r_s_sat = r_vir / c_sat
+        x_gl, w_gl = np.polynomial.legendre.leggauss(n_r)
+        r_nodes = np.outer(r_vir / 2.0, x_gl + 1.0)
+        w_eff   = np.outer(r_vir / 2.0, w_gl)
+        x       = r_nodes / r_s_sat[:, None]
+        rho_nfw = 1.0 / (x * (1.0 + x) ** 2)
+        weight = np.ones_like(r_nodes)
+        if float(f_cut) > 0.0:
+            weight *= 1.0 - np.exp(-r_nodes / (float(f_cut) * r_vir[:, None]))
+        if float(gamma) > 0.0:
+            weight *= (r_nodes / r_vir[:, None]) ** float(gamma)
+        integrand = rho_nfw * weight * r_nodes ** 2
+        norm = np.sum(w_eff * integrand, axis=1)
+        norm = np.where(norm > 0.0, norm, 1.0)
+        k_coarse = np.logspace(np.log10(k.min()), np.log10(k.max()), n_k_coarse)
+        K  = k_coarse[:, None, None] * r_nodes[None, :, :]
+        j0 = np.where(K < 1e-6, 1.0 - K ** 2 / 6.0, np.sin(K) / K)
+        uk_c = (np.sum(w_eff[None, :, :] * integrand[None, :, :] * j0, axis=2)
+                / norm[None, :])
+        uk_fine = np.empty((len(k), len(r_s)), dtype=float)
+        for j in range(len(r_s)):
+            uk_fine[:, j] = np.interp(np.log(k), np.log(k_coarse), uk_c[:, j])
+        return uk_fine
+
+    @pytest.mark.parametrize("b_sat_conc,f_cut,gamma", [
+        (1.0, 0.0, 0.0),      # degenerate with nfw_uk
+        (1.5, 0.0, 0.0),      # Extension A only
+        (1.0, 0.1, 0.0),      # Extension B only
+        (1.0, 0.0, 0.5),      # Extension C only
+        (0.8, 0.15, 0.3),     # all three together
+    ])
+    def test_matches_float64_reference(self, b_sat_conc, f_cut, gamma):
+        got = np.asarray(satellite_nfw_uk(
+            _K_ARR, _RS_ARR, _C_ARR, _RVIR_ARR,
+            b_sat_conc=b_sat_conc, f_cut=f_cut, gamma=gamma))
+        ref = self._reference(
+            _K_ARR, _RS_ARR, _C_ARR, _RVIR_ARR,
+            b_sat_conc=b_sat_conc, f_cut=f_cut, gamma=gamma)
+        np.testing.assert_allclose(got, ref, rtol=1e-3, atol=1e-4)
+
+    def test_k0_limit_is_unity(self):
+        uk = np.asarray(satellite_nfw_uk(
+            np.array([1e-4, 1e-3]), _RS_ARR, _C_ARR, _RVIR_ARR,
+            b_sat_conc=1.2, f_cut=0.1, gamma=0.4))
+        np.testing.assert_allclose(uk, 1.0, atol=5e-4)
+
+    def test_inner_cutoff_raises_high_k_deficit(self):
+        # removing satellites from the core (f_cut) suppresses power at
+        # high k relative to the untruncated profile
+        uk0 = np.asarray(satellite_nfw_uk(_K_ARR, _RS_ARR, _C_ARR, _RVIR_ARR))
+        ukB = np.asarray(satellite_nfw_uk(_K_ARR, _RS_ARR, _C_ARR, _RVIR_ARR,
+                                          f_cut=0.2))
+        assert np.all(ukB[-1, :] < uk0[-1, :])
