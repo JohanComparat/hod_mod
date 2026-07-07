@@ -530,3 +530,15 @@ class ConcentrationModel:
         # diemer15
         n_eff = _neff_eisenstein_hu(m_h, theta)
         return c_diemer15(m_h, sigma, n_eff, omega_m, float(z), self.statistic)
+
+    def _mdef_delta_rho(self, z: float, theta_cosmo: dict) -> tuple:
+        """(delta, rho_ref) for this model's SO mass definition [comoving h-units].
+
+        Delegates to :func:`hod_mod.core.halo_profiles.mdef_delta_rho` so a
+        ``ConcentrationModel`` is drop-in for ``HaloProfile`` in the halo-model
+        radius calculation of :class:`~hod_mod.observables.clustering.
+        FullHaloModelPrediction` (both the CAMB and ``eh98_jax`` backends).
+        ``theta_cosmo['Omega_m']`` may be a traced JAX value.
+        """
+        from hod_mod.core.halo_profiles import mdef_delta_rho
+        return mdef_delta_rho(self.mdef, z, theta_cosmo)
