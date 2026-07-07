@@ -50,21 +50,9 @@ _MPC_CM = 3.0857e24
 _ARCSEC_TO_RAD = float(jnp.pi) / (180.0 * 3600.0)
 
 
-def _safe_log(P, floor: float = 1e-30):
-    """``log(max(P, floor))`` with non-finite ``P`` floored instead of propagated.
-
-    The full-APEC gas emissivity has a tiny high-k tail (k ≳ 150 h/Mpc) that can
-    underflow float32 to NaN/inf inside the halo-model integrals.  Those k are far
-    beyond any fitted angular scale, so we floor them to ``floor`` (≈ zero power)
-    rather than let a single NaN poison the whole Limber/Hankel transform.
-
-    ``floor`` must stay representable in float32 (JAX's default dtype): a smaller
-    value (e.g. 1e-60) underflows to 0, so ``log`` returns ``-inf`` for an all-zero
-    field (e.g. the AGN leg when no AGN model is set), and a constant ``-inf`` table
-    makes ``jnp.interp`` produce ``(-inf) - (-inf) = NaN`` in the Limber integral.
-    """
-    P = jnp.nan_to_num(P, nan=0.0, posinf=0.0, neginf=0.0)
-    return jnp.log(jnp.maximum(P, floor))
+# Shared float32-safe log floor (see hod_mod.core.numerics.safe_log for the
+# full rationale: NaN high-k tails and the -inf/-inf jnp.interp hazard).
+from hod_mod.core.numerics import safe_log as _safe_log
 
 
 def psf_window_ell(ell_arr: np.ndarray, fwhm_arcsec: float = 30.0) -> np.ndarray:
