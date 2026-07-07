@@ -267,3 +267,36 @@ class TestAngularPowerSpectrumXX:
         cl_XX = cross_gX.angular_cl_XX(ell, z, nz_X, _THETA)
         assert cl_XX.shape == (6,)
         assert np.all(np.isfinite(cl_XX)) and np.all(cl_XX > 0)
+
+
+# ---------------------------------------------------------------------------
+# Float64 numpy oracle for _get_hod_weights (Wave-1 jnp-port regression)
+# ---------------------------------------------------------------------------
+
+class TestHodWeightsNumpyOracle:
+    def test_ngal_beff_match_float64_reference(self, cross_gy, hod_params):
+        import jax
+
+        sc = cross_gy._get_static_cache(_Z, _THETA, hod_params)
+        nc_np, ns_np, n_gal, b_eff = cross_gy._get_hod_weights(
+            _Z, _THETA, hod_params, sc)
+
+        with jax.disable_jit():
+            nc_ref, ns_ref = cross_gy._fhmp._hod.nc_ns(
+                cross_gy._fhmp._hod._log10m_grid, hod_params)
+        nc_ref = np.asarray(nc_ref, dtype=float)
+        ns_ref = np.asarray(ns_ref, dtype=float)
+        nt = nc_ref + ns_ref
+        n_ref = float(np.trapezoid(sc["dndm_np"] * nt, sc["m_np"]))
+        b_ref = float(np.trapezoid(sc["dndm_np"] * nt * sc["bias_np"],
+                                   sc["m_np"]) / n_ref)
+
+        # float32-safe tolerance so the pin survives the jnp.trapezoid port;
+        # an axis/weighting bug would miss by orders of magnitude
+        assert n_gal == pytest.approx(n_ref, rel=2e-5)
+        assert b_eff == pytest.approx(b_ref, rel=2e-5)
+        np.testing.assert_allclose(nc_np, nc_ref, rtol=2e-5)
+        np.testing.assert_allclose(ns_np, ns_ref, rtol=2e-5)
+        # physical sanity for the More15 defaults at z=0.3
+        assert 1e-6 < n_ref < 1e-1
+        assert 1.0 < b_ref < 3.0
