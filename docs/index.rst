@@ -49,6 +49,7 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    :maxdepth: 2
    :caption: Sensitivity & Forecasts
 
+   differentiable_inference
    sensitivity_fisher
    stage4_forecast
    tier2_forecast
@@ -71,6 +72,7 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
 
    bgs_ls10_wp_survey
    bgs_comparat2025_mstar10_joint_fit
+   bgs_zm15_joint_mcmc
    timing_joint_model
 
 .. toctree::
@@ -79,6 +81,7 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
 
    cosmology
    halos
+   lensing
    galaxies
    fitting
    data_io
