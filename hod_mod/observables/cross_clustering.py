@@ -104,11 +104,10 @@ class ClusterGalaxyCrossCorrelation:
         log10_m_min_cluster : float
             log10 of the minimum cluster halo mass [M_sun/h].
         """
-        # Fill cache via the galaxy auto predictor
-        self._full._pk_tables_full(z, theta_cosmo, hod_params)
-
-        cosmo_key = self._full._cosmo_cache_key(z, theta_cosmo)
-        sc = self._full._static_cache[cosmo_key]
+        # Halo tables — numpy (CAMB) or traced jnp (eh98 backend), so P_cg is
+        # differentiable w.r.t. cosmology on the eh98 predictor.
+        sc = self._full._get_halo_tables(z, theta_cosmo, hod_params)
+        _eh98 = getattr(self._full, "_pk_backend", "camb") == "eh98_jax"
 
         m       = jnp.asarray(sc["m_np"])
         dndm    = jnp.asarray(sc["dndm_np"])
@@ -117,11 +116,14 @@ class ClusterGalaxyCrossCorrelation:
         pk_lin  = jnp.asarray(sc["pk_lin"])  # (Nk,)
         k_np    = sc["k_np"]                 # (Nk,)
 
-        # HOD occupation
-        with jax.disable_jit():
+        # HOD occupation — traced on eh98 (no disable_jit), numpy on CAMB
+        if _eh98:
             nc_arr, ns_arr = self._full._hod.nc_ns(
-                self._full._hod._log10m_grid, hod_params
-            )
+                self._full._hod._log10m_grid, hod_params)
+        else:
+            with jax.disable_jit():
+                nc_arr, ns_arr = self._full._hod.nc_ns(
+                    self._full._hod._log10m_grid, hod_params)
         nc = jnp.asarray(nc_arr)
         ns = jnp.asarray(ns_arr)
 
@@ -134,11 +136,14 @@ class ClusterGalaxyCrossCorrelation:
         m_min_cluster = 10.0 ** float(log10_m_min_cluster)
         N_C = (m >= m_min_cluster).astype(float)
 
-        n_cluster = float(jnp.trapezoid(dndm * N_C, m))
-        if n_cluster <= 0.0:
-            raise ValueError(
-                f"log10_m_min_cluster={log10_m_min_cluster} yields zero cluster count."
-            )
+        if _eh98:
+            n_cluster = jnp.trapezoid(dndm * N_C, m)   # traced; caller ensures m_min valid
+        else:
+            n_cluster = float(jnp.trapezoid(dndm * N_C, m))
+            if n_cluster <= 0.0:
+                raise ValueError(
+                    f"log10_m_min_cluster={log10_m_min_cluster} yields zero cluster count."
+                )
 
         # 1-halo cross-power: clusters at halo centres (u_C = 1)
         integrand_cg_1h = dndm[None, :] * N_C[None, :] * (
