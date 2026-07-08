@@ -475,3 +475,32 @@ class TestApecCoolingJax:
         ct = ApecCoolingTable()
         g = jax.jacfwd(lambda t: ct(t, jnp.array([0.3])))(jnp.array([2.0]))
         assert jnp.all(jnp.isfinite(g)) and jnp.any(jnp.abs(g) > 0)
+
+
+class TestEh98AgnCrossSpectra:
+    @pytest.mark.x64
+    def test_galaxy_agn_xray_cross_differentiable(self):
+        if not jax.config.jax_enable_x64:
+            pytest.skip("requires JAX_ENABLE_X64=1")
+        import warnings
+        from hod_mod.observables import make_differentiable_prediction
+        from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+        from hod_mod.gas import GasDensityDPM
+        from hod_mod.agn.xray import XrayAGNModel
+
+        cx = HaloModelCrossSpectra(
+            make_differentiable_prediction("more15"),
+            density_profile=GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=40),
+            agn_model=XrayAGNModel())
+        eps = 1e-4
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            t = cx._pk_tables_gX(0.2, _THETA_EH, _hod())
+            assert jnp.all(jnp.isfinite(t["log_pgX_agn"]))
+
+            def agn(s8):
+                return cx._pk_tables_gX(0.2, dict(_THETA_EH, sigma8=s8), _hod())["log_pgX_agn"]
+            g = jax.jacfwd(agn)(0.8111)
+            fd = (agn(0.8111 + eps) - agn(0.8111 - eps)) / (2 * eps)
+        assert jnp.all(jnp.isfinite(g)) and jnp.any(jnp.abs(g) > 0)
+        np.testing.assert_allclose(np.asarray(g), np.asarray(fd), rtol=2e-3)
