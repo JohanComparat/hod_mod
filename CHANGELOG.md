@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.3] — 2026-07-08
+
+Maintenance release — first PyPI upload carrying the 0.2.2 differentiable
+multi-probe inference + JAX lensing work (0.2.2 was tagged but never published to
+PyPI).
+
+- **CI**: fix a duty-cycle-AGN `FileNotFoundError` in the test suite and stop the
+  test matrix's `fail-fast` from masking failures on other Python versions.
+- **Docs**: remove the stale `REPORT_strategy.md` and `TODO_WAVE2.md` planning
+  notes.
+
 ## [0.2.2] — 2026-07-08
 
 The **differentiable multi-probe inference** track and **pure-JAX weak + strong
