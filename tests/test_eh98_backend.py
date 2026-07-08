@@ -199,14 +199,13 @@ class TestEh98Guards:
             FullHaloModelPrediction(eh, MoreHODModel(hmf, hmf.bias), cm,
                                     pk_backend="eh98_jax")
 
-    def test_rejects_einasto_and_bnl(self):
+    def test_rejects_bnl_and_nl2halo(self):
+        # einasto and baryon split are supported (Wave 3); BNL and the
+        # CAMB non-linear 2-halo term remain rejected
         from hod_mod.observables import FullHaloModelPrediction
         from hod_mod.connection.hod import MoreHODModel
         eh, hmf, cm = self._eh_hmf_cm()
-        with pytest.raises(ValueError, match="profile='nfw'"):
-            FullHaloModelPrediction(eh, MoreHODModel(hmf, hmf.bias), cm,
-                                    profile="einasto", pk_backend="eh98_jax")
-        with pytest.raises(ValueError, match="baryon split, BNL"):
+        with pytest.raises(ValueError, match="BNL"):
             FullHaloModelPrediction(eh, MoreHODModel(hmf, hmf.bias), cm,
                                     bnl_model=object(), pk_backend="eh98_jax")
 
@@ -218,18 +217,69 @@ class TestEh98Guards:
             FullHaloModelPrediction(eh, MoreHODModel(hmf, hmf.bias), cm,
                                     pk_backend="nonsense")
 
-    def test_rejects_unsupported_hod_keys_on_call(self):
-        from hod_mod.observables import make_differentiable_prediction
-        pred = make_differentiable_prediction("more15")
-        with pytest.raises(ValueError, match="f_cut"):
-            pred.wp(_RP, 100.0, 0.2, _THETA_EH, dict(_hod(), f_cut=0.1))
 
-    def test_rejects_baryon_params_on_call(self):
-        from hod_mod.observables import make_differentiable_prediction
-        pred = make_differentiable_prediction("more15")
-        with pytest.raises(ValueError, match="baryon_params"):
-            pred._pk_tables_full(0.2, _THETA_EH, _hod(),
-                                 baryon_params={"log10_M_eta": 13.0})
+# ---------------------------------------------------------------------------
+# Wave-3 lifted restrictions: einasto, satellite cutoffs, baryon split
+# ---------------------------------------------------------------------------
+
+class TestEh98LiftedFeatures:
+    def _build(self, profile="nfw", baryon=False):
+        from hod_mod.forecast.pk_eisenstein_hu import EisensteinHu98PkLinear
+        from hod_mod.core.halo_mass_function import make_hmf
+        from hod_mod.core.concentration import ConcentrationModel
+        from hod_mod.observables import FullHaloModelPrediction
+        from hod_mod.observables.baryon_fraction import make_baryon_fraction
+        from hod_mod.connection.hod import MoreHODModel
+        eh = EisensteinHu98PkLinear()
+        hmf = make_hmf("tinker08", pk_func=eh.as_hmf_pk_func())
+        cm = ConcentrationModel("dutton14", mdef="200c")
+        bf = make_baryon_fraction("sigmoid") if baryon else None
+        return FullHaloModelPrediction(eh, MoreHODModel(hmf, hmf.bias), cm,
+                                       profile=profile, baryon_fraction=bf,
+                                       pk_backend="eh98_jax")
+
+    def test_einasto_profile_wp_physical(self):
+        pred = self._build("einasto")
+        wp = pred.wp(_RP, 100.0, 0.2, _THETA_EH, _hod())
+        assert jnp.all(jnp.isfinite(wp)) and jnp.all(wp > 0)
+
+    def test_satellite_cutoffs_change_wp(self):
+        pred = self._build("nfw")
+        wp0 = pred.wp(_RP, 100.0, 0.2, _THETA_EH, _hod())
+        wpc = pred.wp(_RP, 100.0, 0.2, _THETA_EH,
+                      dict(_hod(), f_cut=0.1, gamma_inner=0.3))
+        assert jnp.all(jnp.isfinite(wpc)) and jnp.all(wpc > 0)
+        assert not np.allclose(np.asarray(wp0), np.asarray(wpc), rtol=1e-3)
+
+    def test_baryon_split_populates_cdm_and_gas(self):
+        pred = self._build("nfw", baryon=True)
+        bp = {"log10_eta_min": float(np.log10(0.6)), "log10_M_eta": 13.0,
+              "beta_eta": 1.5, "log10_M_pivot": 13.0, "log10_f_hi": -0.9,
+              "beta_b": 2.0}
+        t = pred._pk_tables_full(0.2, _THETA_EH, _hod(), baryon_params=bp)
+        assert t["log_pgm_cdm"] is not None and t["log_pgm_b"] is not None
+        assert jnp.all(jnp.isfinite(t["log_pgm"]))
+
+    @pytest.mark.x64
+    def test_lifted_features_are_differentiable(self):
+        if not jax.config.jax_enable_x64:
+            pytest.skip("requires JAX_ENABLE_X64=1")
+        eps = 1e-4
+        # einasto: d wp/d sigma8 vs FD
+        pe = self._build("einasto")
+        g = jax.jacfwd(lambda s8: pe.wp(_RP, 100., 0.2,
+                                        dict(_THETA_EH, sigma8=s8), _hod()))(0.8111)
+        fd = (pe.wp(_RP, 100., 0.2, dict(_THETA_EH, sigma8=0.8111 + eps), _hod())
+              - pe.wp(_RP, 100., 0.2, dict(_THETA_EH, sigma8=0.8111 - eps), _hod())) / (2 * eps)
+        np.testing.assert_allclose(np.asarray(g), np.asarray(fd), rtol=1e-3)
+        # satellite cutoff: d wp/d f_cut nonzero and vs FD
+        pn = self._build("nfw")
+        gc = jax.jacfwd(lambda fc: pn.wp(_RP, 100., 0.2, _THETA_EH,
+                                         dict(_hod(), f_cut=fc, gamma_inner=0.3)))(0.1)
+        fdc = (pn.wp(_RP, 100., 0.2, _THETA_EH, dict(_hod(), f_cut=0.1 + eps, gamma_inner=0.3))
+               - pn.wp(_RP, 100., 0.2, _THETA_EH, dict(_hod(), f_cut=0.1 - eps, gamma_inner=0.3))) / (2 * eps)
+        assert jnp.any(jnp.abs(gc) > 0)
+        np.testing.assert_allclose(np.asarray(gc), np.asarray(fdc), rtol=2e-3)
 
 
 # ---------------------------------------------------------------------------
