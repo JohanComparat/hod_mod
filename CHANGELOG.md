@@ -2,6 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.2] — 2026-07-08
+
+The **differentiable multi-probe inference** track and **pure-JAX weak + strong
+lensing**: the production forward model is now differentiable end-to-end, and the
+whole numerical core has been ported off per-call numpy islands onto JAX.
+
+- **Differentiable multi-probe inference** (`hod_mod.fitting.jax_inference`):
+  gradient-based MAP (`run_map_jax`, scipy L-BFGS-B driven by the JAX gradient)
+  and blackjax NUTS (`run_nuts`) over a `MultiProbeGaussianLikelihood`, with
+  `ProductionMultiProbeModel` assembling the real observables. Two backends —
+  the σ8-native forecast surrogate `forecast.forward_jax.ForwardModel` (every
+  probe in one `jacfwd` call) and the full-fidelity production path
+  `FullHaloModelPrediction(pk_backend="eh98_jax")` built via
+  `observables.make_differentiable_prediction`; CAMB remains the default and the
+  `eh98_jax` clustering reproduces it to ~2%.
+- **Differentiable observables** on the `eh98_jax` backend, each validated
+  against central finite differences (`jacfwd` vs FD ≲ 1e-6): tSZ `cl_gy(ℓ)`,
+  X-ray `cl_gX` (density-only **and** full-APEC temperature-dependent
+  emissivity), galaxy × AGN X-ray cross, and cluster × galaxy `w_p^{cg}`. Lifted
+  the eh98_jax v1 restrictions (Einasto, baryon split, off-centering, traceable
+  satellite cutoffs). Real galaxy `n(z)` injection hook
+  (`ForwardModel(galaxy_nz=...)`) for fitting measured angular spectra.
+- **Pure-JAX weak + strong lensing** (`hod_mod.observables.lensing`,
+  `hod_mod.core.lensing_profiles`): sharply truncated NFW (Takada & Jain 2003),
+  BMO and Hernquist profiles with no colossus/astropy/fftlog dependency, and
+  `ClusterLensingPrediction` (`kappa`, `gamma_t`/ΔΣ with mis-centering + a
+  Tinker10 2-halo term, `einstein_radius`, magnification, critical curves). The
+  Einstein-radius solver's `jax.grad` is the exact implicit-function-theorem
+  derivative. Ports the `halo_lensing` reference (Oguri et al. 2026); reproduces
+  its fftlog ΔΣ to ~1% max / 0.04% median.
+- **JAX-coverage waves 1–5**: all per-call numpy islands in the core, gas and
+  cross-spectra assembly moved to `jnp` with pinned float64 numpy oracles;
+  AD-gradient fixes through the `m200_to_m500c` / m500c bisections (Newton
+  polish); shared float32-safe `core.numerics.safe_log`. Sensitivity study
+  parameter-freedom robustness (31 vs 111 params). Coverage floor raised
+  84 → 85 (full suite 87.6%).
+- **New docs pages**: `differentiable_inference.rst`, `lensing.rst`,
+  `bgs_zm15_joint_mcmc.rst`.
+
 ## [0.2.1] — 2026-07-04
 
 The **missing-physics extension** (waves 1-4) and the **tier-3/tier-4
