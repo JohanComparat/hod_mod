@@ -112,7 +112,9 @@ def m200_to_m500c(
     m200 = jnp.asarray(m200_arr, dtype=float)
     c200 = jnp.asarray(c200_arr, dtype=float)
     r200 = jnp.asarray(r200_arr, dtype=float)
-    return _m200_to_m500c_jax(m200, c200, r200, float(rho_crit_z))
+    # jnp.asarray (not float()) so rho_crit_z may be a traced value — the tSZ/
+    # X-ray gas FTs on the eh98 backend pass a cosmology-dependent ρ_crit(z).
+    return _m200_to_m500c_jax(m200, c200, r200, jnp.asarray(rho_crit_z, dtype=float))
 
 
 @jax.jit
@@ -193,27 +195,28 @@ def _profile_uk_gl(
     -------
     uk : (Nk, NM) = 4π ∫ f(r) j₀(kr) r² dr
     """
-    k      = np.asarray(k_arr,     dtype=float)
-    r_max  = np.asarray(r_max_arr, dtype=float)
+    k      = jnp.asarray(k_arr,     dtype=float)
+    r_max  = jnp.asarray(r_max_arr, dtype=float)
 
-    x_gl, w_gl = _leggauss_cached(n_gl)
+    x_gl, w_gl = _leggauss_cached(n_gl)              # static numpy GL nodes
 
-    # Map GL nodes from [-1,1] to [0, r_max[i]].  r_nodes stays numpy so
-    # numpy-based integrand callbacks (e.g. GasDensityDPM) keep working.
+    # Map GL nodes from [-1,1] to [0, r_max[i]] in jnp so r_max may be a traced
+    # value (eh98 gas cross-power); concrete inputs give a concrete jnp grid,
+    # which numpy-based integrand callbacks (GasDensityDPM) still accept.
     half    = r_max / 2.0
-    r_nodes = np.outer(half, x_gl + 1.0)            # (NM, n_gl) [same units as r_max]
+    r_nodes = half[:, None] * (jnp.asarray(x_gl) + 1.0)[None, :]   # (NM, n_gl)
 
     # Profile values at quadrature nodes, pre-folded with the GL weight r²·w:
     #   A[m,g] = (r_max/2)·w_g · f(r_mg) · r_mg²
-    A = (jnp.asarray(half[:, None] * w_gl[None, :])
+    A = (half[:, None] * jnp.asarray(w_gl)[None, :]
          * jnp.asarray(integrand_fn(r_nodes))
-         * jnp.asarray(r_nodes**2))                  # (NM, n_gl)
+         * r_nodes**2)                               # (NM, n_gl)
 
     # j₀(K) = sin(K)/K = sinc(K/π) (branchless; sinc handles K→0 → 1).
     # einsum contracts the GL axis WITHOUT materialising the (Nk, NM, n_gl)
     # weighted-product cube — only the j₀ cube is built (the giant product
     # temporary is what made the dense sum memory-bound at NM=n_k=512).
-    K  = jnp.asarray(k)[:, None, None] * jnp.asarray(r_nodes)[None, :, :]  # (Nk, NM, n_gl)
+    K  = k[:, None, None] * r_nodes[None, :, :]      # (Nk, NM, n_gl)
     j0 = jnp.sinc(K / jnp.pi)                        # (Nk, NM, n_gl)
     result = jnp.einsum('kmg,mg->km', j0, A)         # (Nk, NM)
     return 4.0 * jnp.pi * result   # (Nk, NM)

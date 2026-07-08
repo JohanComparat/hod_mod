@@ -307,3 +307,46 @@ class TestConcentrationModelMdef:
         camb = FullHaloModelPrediction(pk_lin, MoreHODModel(hmf, hmf.bias), cm)
         wp = camb.wp(_RP, 100.0, 0.2, theta, MoreHODModel.default_params())
         assert jnp.all(jnp.isfinite(wp)) and jnp.all(wp > 0)
+
+
+# ---------------------------------------------------------------------------
+# Wave-3: differentiable production cross-power (tSZ P_gy) on the eh98 backend
+# ---------------------------------------------------------------------------
+
+class TestEh98CrossSpectra:
+    def _cross(self):
+        from hod_mod.observables import make_differentiable_prediction
+        from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+        from hod_mod.gas import PressureProfileA10
+        fhmp = make_differentiable_prediction("more15")
+        pp = PressureProfileA10(r_max_over_r500c=3.0, n_gl=48)
+        return HaloModelCrossSpectra(fhmp, pressure_profile=pp)
+
+    def test_pk_gy_finite(self):
+        cx = self._cross()
+        t = cx._pk_tables_gy(0.2, _THETA_EH, _hod())
+        assert jnp.all(jnp.isfinite(t["log_pgy"]))
+        assert float(t["n_gal"]) > 0
+
+    def test_get_halo_tables_traced_keys(self):
+        # the enabling change: eh98 predictor exposes the numpy-cache-keyed dict
+        from hod_mod.observables import make_differentiable_prediction
+        fhmp = make_differentiable_prediction("more15")
+        sc = fhmp._get_halo_tables(0.2, _THETA_EH, _hod())
+        for key in ("m_np", "dndm_np", "bias_np", "uk", "pk_lin",
+                    "c_np", "r_delta", "rho_m", "k_np"):
+            assert key in sc
+
+    @pytest.mark.x64
+    def test_pk_gy_differentiable(self):
+        if not jax.config.jax_enable_x64:
+            pytest.skip("requires JAX_ENABLE_X64=1")
+        cx = self._cross()
+        eps = 1e-4
+
+        def pgy(s8):
+            return cx._pk_tables_gy(0.2, dict(_THETA_EH, sigma8=s8), _hod())["log_pgy"]
+        g = jax.jacfwd(pgy)(0.8111)
+        fd = (pgy(0.8111 + eps) - pgy(0.8111 - eps)) / (2 * eps)
+        assert jnp.all(jnp.isfinite(g)) and jnp.any(jnp.abs(g) > 0)
+        np.testing.assert_allclose(np.asarray(g), np.asarray(fd), rtol=2e-3)

@@ -321,31 +321,46 @@ class HaloModelCrossSpectra:
         """Stable hashable key for a cosmology dict."""
         return tuple(sorted((k, float(v)) for k, v in theta_cosmo.items()))
 
+    def _eh98(self) -> bool:
+        """True when the underlying predictor is the differentiable EH98 backend."""
+        return getattr(self._fhmp, "_pk_backend", "camb") == "eh98_jax"
+
     def _get_static_cache(self, z: float, theta_cosmo: dict, hod_params: dict) -> dict:
-        """Trigger FullHaloModelPrediction static cache population and return it."""
-        from hod_mod.observables.clustering import FullHaloModelPrediction
-        _ = self._fhmp._pk_tables_full(z, theta_cosmo, hod_params)
-        cosmo_key = FullHaloModelPrediction._cosmo_cache_key(z, theta_cosmo)
-        return self._fhmp._static_cache[cosmo_key]
+        """Halo tables from the predictor — numpy (CAMB) or traced jnp (eh98).
+
+        Backend-agnostic via :meth:`FullHaloModelPrediction._get_halo_tables`;
+        on the EH98 backend the returned arrays are traced, so the cross-power
+        built from them is differentiable w.r.t. cosmology.
+        """
+        return self._fhmp._get_halo_tables(z, theta_cosmo, hod_params)
 
     def _get_hod_weights(
         self, z: float, theta_cosmo: dict, hod_params: dict, sc: dict
-    ) -> tuple[np.ndarray, np.ndarray, float, float]:
-        """Return (nc_np, ns_np, n_gal, b_eff) using the static-cache mass grid."""
-        import jax
-        with jax.disable_jit():
-            nc_arr, ns_arr = self._fhmp._hod.nc_ns(
-                self._fhmp._hod._log10m_grid, hod_params
-            )
-        nc_np  = np.asarray(nc_arr, dtype=float)
-        ns_np  = np.asarray(ns_arr, dtype=float)
-        nt     = jnp.asarray(nc_np + ns_np)
-        dndm   = jnp.asarray(sc["dndm_np"])
-        bias   = jnp.asarray(sc["bias_np"])
-        m      = jnp.asarray(sc["m_np"])
-        n_gal  = float(jnp.trapezoid(dndm * nt, m))
-        b_eff  = float(jnp.trapezoid(dndm * nt * bias, m) / n_gal)
-        return nc_np, ns_np, n_gal, b_eff
+    ) -> tuple:
+        """Return (nc, ns, n_gal, b_eff) on the static-cache mass grid.
+
+        On the EH98 backend everything stays traced (no ``disable_jit``, no
+        ``float``); on CAMB it keeps the former numpy/float behaviour.
+        """
+        if self._eh98():
+            nc = self._fhmp._hod.nc_ns(self._fhmp._hod._log10m_grid, hod_params)
+            nc, ns = nc
+        else:
+            import jax
+            with jax.disable_jit():
+                nc_arr, ns_arr = self._fhmp._hod.nc_ns(
+                    self._fhmp._hod._log10m_grid, hod_params)
+            nc = jnp.asarray(np.asarray(nc_arr, dtype=float))
+            ns = jnp.asarray(np.asarray(ns_arr, dtype=float))
+        nt    = nc + ns
+        dndm  = jnp.asarray(sc["dndm_np"])
+        bias  = jnp.asarray(sc["bias_np"])
+        m     = jnp.asarray(sc["m_np"])
+        n_gal = jnp.trapezoid(dndm * nt, m)
+        b_eff = jnp.trapezoid(dndm * nt * bias, m) / n_gal
+        if not self._eh98():
+            n_gal, b_eff = float(n_gal), float(b_eff)
+        return nc, ns, n_gal, b_eff
 
     def _pressure_uk_cached(
         self, z: float, theta_cosmo: dict, sc: dict
@@ -353,16 +368,14 @@ class HaloModelCrossSpectra:
         """ỹ(k|M,z) from PressureProfileA10, with caching. (Nk, NM) [(Mpc/h)²]."""
         if self._pp is None:
             raise RuntimeError("No pressure_profile provided to HaloModelCrossSpectra")
+        y_uk = lambda: self._pp.pressure_uk(
+            k_arr=sc["k_np"], m200_arr=sc["m_np"], r200_arr=sc["r_delta"],
+            c200_arr=sc["c_np"], z=z, theta_cosmo=theta_cosmo)
+        if self._eh98():
+            return y_uk()                 # traced — a concrete cache would leak
         gas_key = ("pressure", id(self._pp), z, self._cosmo_key(theta_cosmo))
         if gas_key not in self._gas_cache:
-            self._gas_cache[gas_key] = self._pp.pressure_uk(
-                k_arr     = sc["k_np"],
-                m200_arr  = sc["m_np"],
-                r200_arr  = sc["r_delta"],
-                c200_arr  = sc["c_np"],
-                z         = z,
-                theta_cosmo = theta_cosmo,
-            )
+            self._gas_cache[gas_key] = y_uk()
         return self._gas_cache[gas_key]
 
     def _density_uk_cached(
