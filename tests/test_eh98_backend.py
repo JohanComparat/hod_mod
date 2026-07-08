@@ -350,3 +350,29 @@ class TestEh98CrossSpectra:
         fd = (pgy(0.8111 + eps) - pgy(0.8111 - eps)) / (2 * eps)
         assert jnp.all(jnp.isfinite(g)) and jnp.any(jnp.abs(g) > 0)
         np.testing.assert_allclose(np.asarray(g), np.asarray(fd), rtol=2e-3)
+
+    def test_angular_cl_gy_finite(self):
+        cx = self._cross()
+        ell = np.logspace(2, 3.3, 6)
+        zg = np.linspace(0.1, 0.4, 5)
+        nz = np.exp(-0.5 * ((zg - 0.2) / 0.05) ** 2)
+        cl = cx.angular_cl_gy(ell, zg, nz, _THETA_EH, _hod())
+        assert cl.shape == (6,)
+        assert jnp.all(jnp.isfinite(cl)) and jnp.all(cl > 0)
+
+    @pytest.mark.x64
+    def test_angular_cl_gy_differentiable(self):
+        if not jax.config.jax_enable_x64:
+            pytest.skip("requires JAX_ENABLE_X64=1")
+        cx = self._cross()
+        ell = np.logspace(2, 3.3, 6)
+        zg = np.linspace(0.1, 0.4, 5)
+        nz = np.exp(-0.5 * ((zg - 0.2) / 0.05) ** 2)
+        eps = 1e-4
+
+        def clf(s8):
+            return cx.angular_cl_gy(ell, zg, nz, dict(_THETA_EH, sigma8=s8), _hod())
+        g = jax.jacfwd(clf)(0.8111)
+        fd = (clf(0.8111 + eps) - clf(0.8111 - eps)) / (2 * eps)
+        assert jnp.all(jnp.isfinite(g)) and jnp.any(jnp.abs(g) > 0)
+        np.testing.assert_allclose(np.asarray(g), np.asarray(fd), rtol=2e-3)
