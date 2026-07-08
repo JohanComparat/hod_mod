@@ -9,7 +9,16 @@ ingredients shared by every observable pipeline.  Hot-gas/ICM fields live in
 from .power_spectrum import LinearPowerSpectrum
 from .nonlinear import NonLinearPowerSpectrum, WHMSpectrum
 from .halo_mass_function import HaloMassFunction, make_hmf
-from .halo_profiles import HaloProfile, nfw_uk, einasto_rho
+from .halo_profiles import HaloProfile, nfw_uk, einasto_rho, mdef_delta_rho
+from .lensing_profiles import (
+    tnfw_rho, tnfw_mass, tnfw_sigma, tnfw_mean_sigma, tnfw_delta_sigma,
+    tnfw_uk,
+    bmo_rho, bmo_mass, bmo_mass_total, bmo_sigma, bmo_mean_sigma,
+    bmo_delta_sigma, bmo_uk_jax,
+    hernquist_rho, hernquist_mass, hernquist_sigma, hernquist_mean_sigma,
+    hernquist_delta_sigma, HERNQUIST_RB_RE,
+    nfw_params_from_mass,
+)
 from .halo_model import HaloModelPowerSpectrum
 from .beyond_linear_bias import BeyondLinearBiasMead21
 from .distances import (
@@ -35,6 +44,14 @@ __all__ = [
     "HaloProfile",
     "nfw_uk",
     "einasto_rho",
+    "mdef_delta_rho",
+    "tnfw_rho", "tnfw_mass", "tnfw_sigma", "tnfw_mean_sigma",
+    "tnfw_delta_sigma", "tnfw_uk",
+    "bmo_rho", "bmo_mass", "bmo_mass_total", "bmo_sigma", "bmo_mean_sigma",
+    "bmo_delta_sigma", "bmo_uk_jax",
+    "hernquist_rho", "hernquist_mass", "hernquist_sigma",
+    "hernquist_mean_sigma", "hernquist_delta_sigma", "HERNQUIST_RB_RE",
+    "nfw_params_from_mass",
     "HaloModelPowerSpectrum",
     "BeyondLinearBiasMead21",
     "hubble_e",
