@@ -414,3 +414,64 @@ class TestEh98XrayCrossSpectra:
             fd = (clf(0.8111 + eps) - clf(0.8111 - eps)) / (2 * eps)
         assert jnp.all(jnp.isfinite(g)) and jnp.any(jnp.abs(g) > 0)
         np.testing.assert_allclose(np.asarray(g), np.asarray(fd), rtol=2e-3)
+
+    @pytest.mark.slow
+    @pytest.mark.x64
+    def test_full_apec_cl_gX_differentiable(self):
+        if not jax.config.jax_enable_x64:
+            pytest.skip("requires JAX_ENABLE_X64=1")
+        pytest.importorskip("soxs")
+        import warnings
+        from hod_mod.observables import make_differentiable_prediction
+        from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+        from hod_mod.gas import (GasDensityDPM, PressureProfileDPM,
+                                 MetallicityProfileDPM)
+        from hod_mod.gas.cooling import ApecCoolingTable
+
+        ct = ApecCoolingTable()
+        cx = HaloModelCrossSpectra(
+            make_differentiable_prediction("more15"),
+            density_profile=GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=40),
+            pressure_profile=PressureProfileDPM(model=2, r_max_over_r200=3.0, n_gl=40),
+            metallicity_profile=MetallicityProfileDPM(),
+            cooling_function=ct)
+        eps = 1e-4
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            def pgx(s8):
+                return cx._pk_tables_gX(0.2, dict(_THETA_EH, sigma8=s8), _hod())["log_pgX"]
+            g = jax.jacfwd(pgx)(0.8111)
+            fd = (pgx(0.8111 + eps) - pgx(0.8111 - eps)) / (2 * eps)
+        # full temperature/metallicity-dependent APEC emissivity is differentiable
+        assert jnp.all(jnp.isfinite(g)) and jnp.any(jnp.abs(g) > 0)
+        np.testing.assert_allclose(np.asarray(g), np.asarray(fd), rtol=5e-3)
+
+
+class TestApecCoolingJax:
+    @pytest.mark.slow
+    def test_jnp_call_matches_scipy_interior(self):
+        pytest.importorskip("soxs")
+        from scipy.interpolate import RegularGridInterpolator
+        from hod_mod.gas.cooling import ApecCoolingTable
+        ct = ApecCoolingTable()
+        sci = RegularGridInterpolator(
+            (np.log10(ct._T_grid), np.log10(ct._Z_grid)),
+            np.log10(np.maximum(ct._table, 1e-60)),
+            method="linear", bounds_error=False, fill_value=None)
+        T = np.array([0.5, 1.0, 2.0, 5.0, 8.0])
+        Z = np.array([0.2, 0.3, 0.3, 0.4, 0.5])
+        mine = np.asarray(ct(T, Z))
+        ref = 10.0 ** sci(np.column_stack([np.log10(T), np.log10(Z)]))
+        np.testing.assert_allclose(mine, ref, rtol=1e-10)
+
+    @pytest.mark.slow
+    @pytest.mark.x64
+    def test_cooling_differentiable(self):
+        if not jax.config.jax_enable_x64:
+            pytest.skip("requires JAX_ENABLE_X64=1")
+        pytest.importorskip("soxs")
+        from hod_mod.gas.cooling import ApecCoolingTable
+        ct = ApecCoolingTable()
+        g = jax.jacfwd(lambda t: ct(t, jnp.array([0.3])))(jnp.array([2.0]))
+        assert jnp.all(jnp.isfinite(g)) and jnp.any(jnp.abs(g) > 0)

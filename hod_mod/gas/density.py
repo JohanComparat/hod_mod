@@ -316,17 +316,16 @@ class GasDensityDPM:
         -------
         uk : (Nk, NM) [erg cm³ s⁻¹ × (Mpc/h)³ cm⁻⁶]
         """
-        omega_m = float(theta_cosmo["Omega_m"])
-        m200    = np.asarray(m200_arr, dtype=float)
-        r200    = np.asarray(r200_arr, dtype=float)
-        k       = np.asarray(k_arr,    dtype=float)
-        NM      = len(m200)
-        c_arr   = np.asarray(self._concentration(m200, z, theta_cosmo), dtype=float)
+        omega_m = theta_cosmo["Omega_m"]
+        m200    = jnp.asarray(m200_arr, dtype=float)
+        r200    = jnp.asarray(r200_arr, dtype=float)
+        k       = jnp.asarray(k_arr,    dtype=float)
+        c_arr   = jnp.asarray(self._concentration(m200, z, theta_cosmo))
 
         m_c = m200[:, None]; r_c = r200[:, None]; c_c = c_arr[:, None]   # (NM, 1)
-        ez  = np.sqrt(omega_m * (1.0 + z)**3 + (1.0 - omega_m))
+        ez  = jnp.sqrt(omega_m * (1.0 + z)**3 + (1.0 - omega_m))
 
-        def _integrand(r_nodes: np.ndarray) -> np.ndarray:
+        def _integrand(r_nodes):
             # Vectorised over mass — pressure/metallicity already broadcast
             # (they use the fixed C_DPM concentration), density via _ne_grid.
             ne  = self._ne_grid(r_nodes, m_c, r_c, c_c, ez)               # (NM, n_gl)
