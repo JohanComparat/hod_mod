@@ -1,67 +1,69 @@
-# Wave 2 — status and remaining work
+# JAX differentiability — Wave 2 (done) + Wave 3 (in progress)
 
-Wave 2's headline deliverable is **done** (branch `feature/tests-and-jax-coverage`,
-2026-07): an opt-in `pk_backend="eh98_jax"` on
-`observables/clustering.py::FullHaloModelPrediction` makes production
-`wp`/`ΔΣ`/`ξ` `jax.jit`- and `jacfwd`/`grad`-able end-to-end w.r.t. HOD **and**
-cosmology parameters, CAMB staying the default.
+Branch `feature/tests-and-jax-coverage`.
 
-## Done
+## Wave 2 — DONE
 
-- `_pk_tables_full_jax` — traceable twin of `_pk_tables_full`, built entirely
-  in jnp (EH98 linear P(k), analytic JAX HMF, `nfw_uk_jax`, traced
-  `hod_params`; no static cache, no `disable_jit`). Dispatched at the
-  table-builder boundary; every public observable works unmodified.
-- `make_differentiable_prediction(...)` factory wiring
-  `EisensteinHu98PkLinear` + `make_hmf("tinker08", pk_func=...)` +
-  `ConcentrationModel`. Cosmology dict uses **sigma8** (not `ln10^{10}A_s`).
-- `ConcentrationModel._mdef_delta_rho` — makes a ConcentrationModel drop-in for
-  HaloProfile in the halo-model radius, on **both** backends (it previously
-  crashed the CAMB path).
-- Validated: `tests/test_eh98_backend.py` — observables physical + jit-stable;
-  eh98-vs-CAMB agree to **1.7% wp / 2.3% ΔΣ** with matched c(M) (test asserts
-  <5%/<6%); `jacfwd` vs central finite differences to ~1e-7 for
-  (sigma8, Omega_m, log10mmin, alpha) under the `x64` marker; guard rails.
-- v1 scope: standard 1h+2h assembly plus smooth `A_cen/A_sat`, off-centering
-  (`p_off` + `R_off`|`sigma_off`), `b_sat_conc`; c(M) in
-  duffy08/dutton14/klypin16; profile nfw. Rejects baryon split, BNL,
-  non-linear 2-halo, einasto, and `f_cut`/`gamma_inner` satellite cutoffs.
+Opt-in `pk_backend="eh98_jax"` on `FullHaloModelPrediction` makes production
+`wp`/`ΔΣ`/`ξ` jit/jacfwd/grad-able end-to-end (CAMB stays default).
+`make_differentiable_prediction(...)` factory; `ConcentrationModel._mdef_delta_rho`.
+Validated `tests/test_eh98_backend.py` (jacfwd==FD ~1e-7; eh98-vs-CAMB ~2%).
 
-## Remaining (follow-on, smaller)
+## Wave 3 — differentiable multi-probe inference + production cross-spectra port
 
-- **Gradient-based fitter** — the enabling deliverable now exists, so add a
-  `jax.grad` MAP path (scipy L-BFGS-B with the analytic gradient, or optax)
-  beside Powell/Nelder-Mead in `fitting/fitters.py::run_map`. Smallest useful
-  unit: a smoke test + docs snippet fitting `wp`/`ΔΣ` through `jax.jacfwd`.
-  Run under `JAX_ENABLE_X64=1`.
-- **Lift v1 restrictions** (as needed): traceable satellite cutoffs (make
-  `satellite_nfw_uk`'s `f_cut`/`gamma_inner` branches `jnp.where`-based so they
-  can join the eh98 path); baryon split (`baryon_fraction` is already jnp) and
-  BNL under the traced backend; einasto FT (`einasto_uk` is GL-quadrature, jnp).
-- **`w_theta` under jit** — its geometry setup uses concrete maxima for grid
-  construction; revisit with static grid bounds if the angular observable
-  needs to be differentiable (v1 targets wp/ΔΣ/ξ only).
-- **`HODClusteringPrediction`** (2-halo-only) — same backend treatment is nearly
-  free now that the pattern exists.
-- **`gas/density.py` integrands → jnp** — `_profile_uk_gl` contracts in jnp but
-  `GasDensityDPM`'s integrand callbacks still compute n_e(r) in numpy (kept
-  compatible on purpose — the callback receives numpy `r_nodes`). Porting them +
-  `_profile_uk_gl_bands` makes the X-ray emissivity FT jnp; the APEC Λ(T,Z)
-  lookup is a scipy `RegularGridInterpolator` (init-time table) — swap for
-  `jax.scipy.interpolate.RegularGridInterpolator` only if that path must be
-  differentiated (the tier-2 forecast already has JAX band tables in
-  `forecast/apec_bands.py`).
-- **`forward_jax` safe_log adoption** — `core/numerics.safe_log` is adopted in
-  cross_spectra + clustering; forward_jax still has ~10 inline
-  `jnp.log(jnp.maximum(·, 1e-30))` sites (behavior-identical) — adopt on the
-  next forward_jax touch, not as standalone churn.
+### Done
+
+- **Phase 1 — differentiable multi-probe inference** (`fitting/jax_inference.py`).
+  `MultiProbeGaussianLikelihood` wraps the forecast `ForwardModel.data_vector_fn`
+  as a `jax.value_and_grad`-able Gaussian log-posterior over a chosen subset of
+  the 111 forecast params, spanning galaxy clustering + g-g lensing + tSZ + X-ray
+  + cosmic shear + AGN in one call. `run_map_jax` (scipy L-BFGS-B + JAX gradient)
+  and `run_nuts` (blackjax NUTS). Validated: AD grad == FD ~1e-6; MAP recovers
+  injected 6-probe params at χ²/dof~0.9; NUTS recovers the posterior.
+  NUTS caveat: the Limber angular spectra inflate the trajectory compile ~10×, so
+  NUTS is practical on projected+abundance probes (wp/ds/xlf/smf) — MAP handles the
+  full angular vector fine. `blackjax` added as optional `inference` extra.
+- **Phase 2 — lifted eh98_jax restrictions.** einasto profile, baryon split
+  (CDM+gas), and traceable satellite cutoffs (`satellite_nfw_uk` f_cut/gamma_inner
+  now `jnp.where`, Wave-1 oracle still green). Only BNL + CAMB nl-2halo remain
+  rejected. jacfwd==FD for each.
+- **Phase 3 — differentiable production tSZ cross-power.** Enabling change:
+  `FullHaloModelPrediction._get_halo_tables` exposes the halo tables (m, dndm,
+  bias, uk, pk_lin, c, r_delta, rho_m, k) as numpy on CAMB / **traced** jnp on
+  eh98. `HaloModelCrossSpectra._get_static_cache`/`_get_hod_weights` backend-aware;
+  `_pressure_uk_cached` bypasses the concrete cache when traced. Ported
+  `PressureProfileA10.pressure_uk`, `gas/conversions._profile_uk_gl`,
+  `m200_to_m500c`, and the `angular_cl_gy/gX` Limber χ(z) to accept traced inputs.
+  Result: **`cl_gy(ℓ)` (tSZ) is jacfwd-able w.r.t. cosmology** (rel 3e-8 vs FD);
+  CAMB cross-spectra regressions green.
+
+### Remaining
+
+- **Phase 4 — X-ray (cl_gX/cl_XX) + AGN, production fidelity.** The tSZ path is
+  done; the X-ray path needs: (a) `GasDensityDPM.emissivity_uk`/`density_uk`
+  integrand callbacks (`_ne_grid` etc., `gas/density.py`) to accept **traced**
+  `r_nodes` (they currently `np.asarray` them — fine for CAMB-concrete, breaks
+  under trace); (b) the APEC cooling `ApecCoolingTable.__call__` scipy
+  `RegularGridInterpolator` → `jax.scipy.interpolate.RegularGridInterpolator` (or
+  reuse the JAX band tables in `forecast/apec_bands.py`) + `temperature_from_profiles`
+  → jnp, to carry gradients through T(r),Z(r); (c) `XrayAGNModel.agn_emissivity_uk`
+  and `HODAgnModel.nc_ns_agn`/`agn_emissivity_uk` to return jnp (drop the
+  `np.asarray`/`np.power`/`np.ones` boundary casts; the Lx/occupation kernels are
+  already jnp); (d) `_density_uk_cached` cache bypass under trace (like the pressure
+  one). The `_pk_tables_gX/XX` assembly + Limber are already jnp, so they trace once
+  fed traced inputs. Then wire the production cross-probes into
+  `MultiProbeGaussianLikelihood` as a production-fidelity backend option and demo a
+  joint galaxies+ΔΣ+cl_gy+cl_gX+shear+AGN MAP + NUTS. `cross_clustering._pk_table_cg`
+  gets the same `_get_halo_tables` swap (nearly free — assembly already jnp).
+- **Phase 5 — n(z) hook, docs, validation, close.** Real galaxy n(z) injection into
+  `ForwardModel` (currently a synthetic narrow Gaussian, forward_jax.py:509-514);
+  surrogate-vs-production amplitude validation on cl_gy/cl_gX;
+  `docs/differentiable_inference.rst`; full `--cov` re-baseline + raise floor.
 
 ## Guardrails / oracles to keep green
 
-Wave-1 float64 regression oracles: `tests/test_wave1_regression.py`,
-`TestSatelliteNfwUkNumpyOracle` (test_cosmology.py), `TestPcgNumpyOracle`
-(test_cross_clustering.py), `TestHodWeightsNumpyOracle` (test_cross_spectra.py),
-`test_m500c_gradient_vs_fd` (test_jax_conversions.py). Wave-2:
-`tests/test_eh98_backend.py`. Float32 tolerance floor for np-vs-jnp: rtol≈2e-5
-smooth integrals, atol≈1e-4 oscillatory FTs. Gradient work runs under
-`JAX_ENABLE_X64=1` (env var only; never toggle mid-session).
+`tests/test_eh98_backend.py` (incl. `TestEh98LiftedFeatures`, `TestEh98CrossSpectra`),
+`tests/test_jax_inference.py`, `tests/test_wave1_regression.py`,
+`TestSatelliteNfwUkNumpyOracle`, `TestHodWeightsNumpyOracle`,
+`test_m500c_gradient_vs_fd`. Float32 np-vs-jnp floor: rtol≈2e-5 smooth, atol≈1e-4
+oscillatory FTs. Gradient work under `JAX_ENABLE_X64=1` (`x64` marker; env var only).
