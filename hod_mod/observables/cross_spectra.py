@@ -954,9 +954,10 @@ class HaloModelCrossSpectra:
         dndchi_j = jnp.asarray(nz_g) / jnp.trapezoid(jnp.asarray(nz_g), chi_z_j)
 
         raw_gy = [self._pk_tables_gy(zi, theta_cosmo, hod_params) for zi in z_arr]
-        log_k_ref_gy = np.asarray(raw_gy[0]["log_k"])
+        # keep jnp (the k grid is a constant but abstract under jit — np.asarray
+        # would raise a TracerArrayConversionError inside a jitted likelihood)
         log_pgy_stack = jnp.stack([jnp.asarray(t["log_pgy"]) for t in raw_gy])  # (Nz, Nk)
-        log_k_j_gy   = jnp.asarray(log_k_ref_gy)
+        log_k_j_gy   = jnp.asarray(raw_gy[0]["log_k"])
 
         ell_j    = jnp.asarray(ell_arr, dtype=float)
         k_lim_gy = jnp.log(jnp.maximum((ell_j[:, None] + 0.5) / chi_z_j[None, :], 1e-4))
@@ -1152,8 +1153,8 @@ class HaloModelCrossSpectra:
 
         # Stack per-component log-P tables into (Nz, Nk) arrays for fast
         # vectorized Limber integration below.
-        log_k_ref = np.asarray(raw_tables[0]["log_k"])   # (Nk,) — same grid for all z
-        Nk = len(log_k_ref)
+        log_k_ref = raw_tables[0]["log_k"]   # (Nk,) jnp — abstract under jit
+        Nk = log_k_ref.shape[0]
         log_pgX_stack = {
             comp: jnp.stack([jnp.asarray(raw_tables[i][key]) for i in range(nz)])
             for comp, key in (
@@ -1308,7 +1309,7 @@ class HaloModelCrossSpectra:
             with ThreadPoolExecutor(max_workers=min(_nw, nz)) as pool:
                 raw_tables = list(pool.map(_tables_at_z, z_arr))
 
-        log_k_ref = np.asarray(raw_tables[0]["log_k"])
+        log_k_ref = raw_tables[0]["log_k"]   # jnp — abstract under jit
         log_pXX_stack = {
             comp: jnp.stack([jnp.asarray(raw_tables[i][key]) for i in range(nz)])
             for comp, key in (
