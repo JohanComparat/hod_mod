@@ -67,6 +67,7 @@ omit = ["*/hod_mod/scripts/*"]
 [tool.coverage.report]
 omit = ["*/hod_mod/scripts/*"]
 # Floor enforced when coverage is reported (CI: `pytest -m "" --cov=hod_mod`).
-# Full suite measures 86.4% (2026-07); the ~2-point margin covers environments
-# where the soxs/CEmulator-gated `slow` tests skip. Not applied to plain `pytest`.
-fail_under = 84
+# Full suite measures 87.6% (2026-07, after the differentiable-inference waves);
+# the ~2-point margin covers environments where the soxs/CEmulator-gated `slow`
+# tests skip. Not applied to plain `pytest`.
+fail_under = 85
