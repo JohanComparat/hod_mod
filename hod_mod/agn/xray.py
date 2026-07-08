@@ -249,8 +249,11 @@ class XrayAGNModel:
 
         # Stay in log-space to avoid float32 overflow (L_X ~ 10^{42-44} erg/s).
         # Normalize by 1e43 so values are O(0.01–100); A_AGN absorbs the scale.
-        log10_lx = self.mean_agn_log10lx(m, z, shmr_params)   # (NM,) float64
-        lx_norm  = np.power(10.0, log10_lx - 43.0)             # (NM,) O(0.01–100)
+        # jnp (not np) so the AGN leg composes with the traced halo tables and the
+        # galaxy×AGN X-ray cross is differentiable w.r.t. cosmology (the gradient
+        # flows through dndm/bias/uk; L_X(M) here is a cosmology-independent map).
+        log10_lx = jnp.asarray(self.mean_agn_log10lx(m, z, shmr_params))   # (NM,)
+        lx_norm  = jnp.power(10.0, log10_lx - 43.0)            # (NM,) O(0.01–100)
 
         # Point-source: FT is flat in k.  Broadcast to (Nk, NM).
-        return np.ones((Nk, 1), dtype=np.float64) * lx_norm[None, :]  # (Nk, NM)
+        return jnp.ones((Nk, 1)) * lx_norm[None, :]           # (Nk, NM)

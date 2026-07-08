@@ -66,9 +66,10 @@ def _gnfw_f_params(
     ----------
     x : dimensionless radius r / R_s
     alpha_in, alpha_tr, alpha_out : gNFW shape exponents
+        (scalars or arrays broadcastable against ``x``)
     """
-    x = np.asarray(x, dtype=float)
-    x_safe = np.where(x > 1e-8, x, 1e-8)
+    x = jnp.asarray(x, dtype=float)
+    x_safe = jnp.where(x > 1e-8, x, 1e-8)
     return (
         x_safe ** (-alpha_in)
         * (1.0 + x_safe ** alpha_tr)
@@ -111,7 +112,9 @@ def m200_to_m500c(
     m200 = jnp.asarray(m200_arr, dtype=float)
     c200 = jnp.asarray(c200_arr, dtype=float)
     r200 = jnp.asarray(r200_arr, dtype=float)
-    return _m200_to_m500c_jax(m200, c200, r200, float(rho_crit_z))
+    # jnp.asarray (not float()) so rho_crit_z may be a traced value — the tSZ/
+    # X-ray gas FTs on the eh98 backend pass a cosmology-dependent ρ_crit(z).
+    return _m200_to_m500c_jax(m200, c200, r200, jnp.asarray(rho_crit_z, dtype=float))
 
 
 @jax.jit
@@ -141,7 +144,20 @@ def _m200_to_m500c_jax(m200, c200, r200, rho_crit_z):
     lo = jnp.full_like(m200, 0.10)
     hi = jnp.full_like(m200, 0.99)
     lo, hi = jax.lax.fori_loop(0, 60, body, (lo, hi))
-    r500c = 0.5 * (lo + hi) * r200
+
+    # The bisection midpoint is built only from comparisons and the constant
+    # seeds, so it carries no derivative w.r.t. (m200, c200, r200).  Two
+    # Newton steps leave the converged value unchanged (interval < 0.9/2^60)
+    # but restore the implicit-function gradient dx/d(inputs).
+    x = jax.lax.stop_gradient(0.5 * (lo + hi))
+    g200_prime = lambda y: y / (1.0 + y) ** 2   # noqa: E731 — g'(y)
+    for _ in range(2):
+        f_x = m200 * g_nfw(c200 * x) / g200 - coef * (x * r200) ** 3
+        fp_x = (m200 * c200 * g200_prime(c200 * x) / g200
+                - 3.0 * coef * r200 ** 3 * x ** 2)
+        x = x - f_x / fp_x
+
+    r500c = x * r200
     m500c = coef * r500c ** 3
     return m500c, r500c
 
@@ -179,27 +195,31 @@ def _profile_uk_gl(
     -------
     uk : (Nk, NM) = 4π ∫ f(r) j₀(kr) r² dr
     """
-    k      = np.asarray(k_arr,     dtype=float)
-    r_max  = np.asarray(r_max_arr, dtype=float)
+    k      = jnp.asarray(k_arr,     dtype=float)
+    r_max  = jnp.asarray(r_max_arr, dtype=float)
 
-    x_gl, w_gl = _leggauss_cached(n_gl)
+    x_gl, w_gl = _leggauss_cached(n_gl)              # static numpy GL nodes
 
-    # Map GL nodes from [-1,1] to [0, r_max[i]]
+    # Map GL nodes from [-1,1] to [0, r_max[i]] in jnp so r_max may be a traced
+    # value (eh98 gas cross-power); concrete inputs give a concrete jnp grid,
+    # which numpy-based integrand callbacks (GasDensityDPM) still accept.
     half    = r_max / 2.0
-    r_nodes = np.outer(half, x_gl + 1.0)            # (NM, n_gl) [same units as r_max]
+    r_nodes = half[:, None] * (jnp.asarray(x_gl) + 1.0)[None, :]   # (NM, n_gl)
 
     # Profile values at quadrature nodes, pre-folded with the GL weight r²·w:
     #   A[m,g] = (r_max/2)·w_g · f(r_mg) · r_mg²
-    A = (half[:, None] * w_gl[None, :]) * integrand_fn(r_nodes) * r_nodes**2   # (NM, n_gl)
+    A = (half[:, None] * jnp.asarray(w_gl)[None, :]
+         * jnp.asarray(integrand_fn(r_nodes))
+         * r_nodes**2)                               # (NM, n_gl)
 
-    # j₀(K) = sin(K)/K = sinc(K/π) (branchless; np.sinc handles K→0 → 1).
+    # j₀(K) = sin(K)/K = sinc(K/π) (branchless; sinc handles K→0 → 1).
     # einsum contracts the GL axis WITHOUT materialising the (Nk, NM, n_gl)
     # weighted-product cube — only the j₀ cube is built (the giant product
-    # temporary is what made the dense np.sum memory-bound at NM=n_k=512).
-    K  = k[:, None, None] * r_nodes[None, :, :]     # (Nk, NM, n_gl)
-    j0 = np.sinc(K / np.pi)                          # (Nk, NM, n_gl)
-    result = np.einsum('kmg,mg->km', j0, A, optimize=True)   # (Nk, NM)
-    return 4.0 * np.pi * result   # (Nk, NM)
+    # temporary is what made the dense sum memory-bound at NM=n_k=512).
+    K  = k[:, None, None] * r_nodes[None, :, :]      # (Nk, NM, n_gl)
+    j0 = jnp.sinc(K / jnp.pi)                        # (Nk, NM, n_gl)
+    result = jnp.einsum('kmg,mg->km', j0, A)         # (Nk, NM)
+    return 4.0 * jnp.pi * result   # (Nk, NM)
 
 
 def _profile_uk_gl_bands(

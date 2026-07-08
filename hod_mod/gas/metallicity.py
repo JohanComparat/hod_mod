@@ -1,5 +1,5 @@
 """ICM metallicity profile (DPM)."""
-import numpy as np
+import jax.numpy as jnp
 from .conversions import _gnfw_f_params
 
 
@@ -38,7 +38,7 @@ class MetallicityProfileDPM:
         f_ref = _gnfw_f_params(x_ref, self._ALPHA_IN, self._ALPHA_TR, self._ALPHA_OUT)
         self._Z0 = self._Z_03 / float(f_ref)   # [Z_sun]
 
-    def metallicity_3d(self, r: np.ndarray, r200: float) -> np.ndarray:
+    def metallicity_3d(self, r: jnp.ndarray, r200: float) -> jnp.ndarray:
         """Gas metallicity Z(r) [Z_sun].
 
         No mass or redshift dependence (β^Z = γ^Z = 0).
@@ -49,5 +49,5 @@ class MetallicityProfileDPM:
         r200 : R₂₀₀ [Mpc/h]
         """
         r_s = r200 / self._C_DPM
-        x   = np.asarray(r, dtype=float) / r_s
+        x   = jnp.asarray(r, dtype=float) / r_s
         return self._Z0 * _gnfw_f_params(x, self._ALPHA_IN, self._ALPHA_TR, self._ALPHA_OUT)

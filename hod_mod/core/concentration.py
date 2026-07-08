@@ -242,10 +242,10 @@ def c_klypin16(
     else:
         raise ValueError(f"mdef must be '200c' or 'vir', got {mdef!r}")
 
-    z_tab = tab[:, 0]
-    C0    = float(np.interp(z, z_tab, tab[:, 1]))
-    gamma = float(np.interp(z, z_tab, tab[:, 2]))
-    M0    = float(np.interp(z, z_tab, tab[:, 3])) * 1.0e12
+    z_tab = jnp.asarray(tab[:, 0])
+    C0    = jnp.interp(z, z_tab, jnp.asarray(tab[:, 1]))
+    gamma = jnp.interp(z, z_tab, jnp.asarray(tab[:, 2]))
+    M0    = jnp.interp(z, z_tab, jnp.asarray(tab[:, 3])) * 1.0e12
 
     return C0 * (m_h / 1.0e12) ** (-gamma) * (1.0 + (m_h / M0) ** 0.4)
 
@@ -355,21 +355,25 @@ def _neff_eisenstein_hu(m_h: jnp.ndarray, theta: dict,
     -------
     n_eff : jnp.ndarray, shape (NM,), effective slope (typically −3 to 0)
     """
-    rho_m = _RHO_CRIT0 * float(theta["Omega_m"])
-    m_np = np.asarray(m_h, dtype=float)
-    R = (3.0 * m_np / (4.0 * np.pi * rho_m)) ** (1.0 / 3.0)   # Mpc/h
-    k_R = kappa * 2.0 * np.pi / R                                # h/Mpc
+    rho_m = _RHO_CRIT0 * theta["Omega_m"]
+    m = jnp.asarray(m_h)
+    R = (3.0 * m / (4.0 * jnp.pi * rho_m)) ** (1.0 / 3.0)     # Mpc/h
+    k_R = kappa * 2.0 * jnp.pi / R                             # h/Mpc
 
-    k_grid = np.logspace(-3, 2, 500)
-    pk_grid = np.asarray(eisenstein_hu_pk(jnp.asarray(k_grid), theta), dtype=float)
-    log_k = np.log(k_grid)
-    log_pk = np.log(np.maximum(pk_grid, 1e-30))
-    d_log_pk = np.gradient(log_pk, log_k)
-    n_arr = np.interp(np.log(k_R), log_k, d_log_pk)
-    return jnp.asarray(n_arr)
+    k_grid = np.logspace(-3, 2, 500)                           # static grid
+    log_k_np = np.log(k_grid)                                  # uniform log spacing
+    dlk = float(log_k_np[1] - log_k_np[0])   # concrete spacing (static grid → jit-safe)
+    pk_grid = eisenstein_hu_pk(jnp.asarray(k_grid), theta)
+    log_k = jnp.asarray(log_k_np)
+    log_pk = jnp.log(jnp.maximum(pk_grid, 1e-30))
+    d_log_pk = jnp.gradient(log_pk, dlk)
+    return jnp.interp(jnp.log(k_R), log_k, d_log_pk)
 
 
-@partial(jax.jit, static_argnums=(3, 4, 5))
+# omega_m (arg 3) is dynamic — it is unused in the body (cosmology enters via
+# sigma/n_eff), so keeping it non-static lets a traced Ω_m pass through
+# harmlessly (needed for the differentiable gas-density concentration).
+@partial(jax.jit, static_argnums=(4, 5))
 def c_diemer15(
     m_h: jnp.ndarray,
     sigma: jnp.ndarray,
@@ -531,3 +535,15 @@ class ConcentrationModel:
         # diemer15
         n_eff = _neff_eisenstein_hu(m_h, theta)
         return c_diemer15(m_h, sigma, n_eff, omega_m, float(z), self.statistic)
+
+    def _mdef_delta_rho(self, z: float, theta_cosmo: dict) -> tuple:
+        """(delta, rho_ref) for this model's SO mass definition [comoving h-units].
+
+        Delegates to :func:`hod_mod.core.halo_profiles.mdef_delta_rho` so a
+        ``ConcentrationModel`` is drop-in for ``HaloProfile`` in the halo-model
+        radius calculation of :class:`~hod_mod.observables.clustering.
+        FullHaloModelPrediction` (both the CAMB and ``eh98_jax`` backends).
+        ``theta_cosmo['Omega_m']`` may be a traced JAX value.
+        """
+        from hod_mod.core.halo_profiles import mdef_delta_rho
+        return mdef_delta_rho(self.mdef, z, theta_cosmo)

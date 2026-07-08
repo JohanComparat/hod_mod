@@ -39,7 +39,25 @@ jobs:
         run: |
           python -m pytest tests/ -q --tb=short \
             -k "not TestNonLinearPowerSpectrum" \
+            -m "not x64" \
             --cov=hod_mod --cov-report=xml
+
+      # x64-marked tests (gradient vs finite differences) need
+      # JAX_ENABLE_X64=1, which is read once at jax import — hence a
+      # separate pytest process, never a mid-session toggle.
+      - name: Run x64 gradient tests
+        env:
+          JAX_PLATFORMS: cpu
+          JAX_ENABLE_X64: "1"
+        run: python -m pytest tests/ -q --tb=short -m x64
+
+      # In-package forecast production-parity tests. Not added to
+      # testpaths: these modules flip jax_enable_x64 at import time, which
+      # would poison the float32 assumptions of the main suite in-process.
+      - name: Run forecast production-parity tests (x64 in-package)
+        env:
+          JAX_PLATFORMS: cpu
+        run: python -m pytest hod_mod/forecast/tests -q --tb=short
 
       - name: Upload coverage
         if: matrix.python-version == '3.11'
