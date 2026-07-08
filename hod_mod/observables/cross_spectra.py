@@ -955,15 +955,13 @@ class HaloModelCrossSpectra:
         nz_g   = np.asarray(nz_g,   dtype=float)
         ell    = jnp.asarray(ell_arr)
 
-        h       = float(theta_cosmo["h"])
-        omega_m = float(theta_cosmo["Omega_m"])
-        chi_z = np.array([
-            float(np.asarray(comoving_distance(float(zi), h, omega_m)).ravel()[0]) * h
-            for zi in z_arr
-        ])
+        # χ(z) in jnp (no float()) so the projection is differentiable w.r.t.
+        # cosmology on the eh98 backend; concrete h/Ω_m (CAMB) pass through.
+        h       = theta_cosmo["h"]
+        omega_m = theta_cosmo["Omega_m"]
+        chi_z_j = comoving_distance(jnp.asarray(z_arr), h, omega_m) * h   # (Nz,) [Mpc/h]
 
-        dndchi_j = jnp.asarray(nz_g) / jnp.trapezoid(jnp.asarray(nz_g), jnp.asarray(chi_z))
-        chi_z_j  = jnp.asarray(chi_z)
+        dndchi_j = jnp.asarray(nz_g) / jnp.trapezoid(jnp.asarray(nz_g), chi_z_j)
 
         raw_gy = [self._pk_tables_gy(zi, theta_cosmo, hod_params) for zi in z_arr]
         log_k_ref_gy = np.asarray(raw_gy[0]["log_k"])
@@ -1125,15 +1123,13 @@ class HaloModelCrossSpectra:
         nz_g   = np.asarray(nz_g,   dtype=float)
         ell    = jnp.asarray(ell_arr)
 
-        h       = float(theta_cosmo["h"])
-        omega_m = float(theta_cosmo["Omega_m"])
-        chi_z = np.array([
-            float(np.asarray(comoving_distance(float(zi), h, omega_m)).ravel()[0]) * h
-            for zi in z_arr
-        ])
+        # χ(z) in jnp (no float()) so the projection is differentiable w.r.t.
+        # cosmology on the eh98 backend; concrete h/Ω_m (CAMB) pass through.
+        h       = theta_cosmo["h"]
+        omega_m = theta_cosmo["Omega_m"]
+        chi_z_j = comoving_distance(jnp.asarray(z_arr), h, omega_m) * h   # (Nz,) [Mpc/h]
 
-        dndchi_j = jnp.asarray(nz_g) / jnp.trapezoid(jnp.asarray(nz_g), jnp.asarray(chi_z))
-        chi_z_j  = jnp.asarray(chi_z)
+        dndchi_j = jnp.asarray(nz_g) / jnp.trapezoid(jnp.asarray(nz_g), chi_z_j)
 
         # ------------------------------------------------------------------ #
         # Step 1: build P_{g,X}(k) tables at each redshift.                  #
