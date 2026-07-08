@@ -384,26 +384,16 @@ class HaloModelCrossSpectra:
         """ñ_e(k|M) or X̃(k|M) from GasDensityDPM, with caching. (Nk, NM)."""
         if self._dp is None:
             raise RuntimeError("No density_profile provided to HaloModelCrossSpectra")
+        def _compute():
+            fn = self._dp.emissivity_uk if emissivity else self._dp.density_uk
+            return fn(k_arr=sc["k_np"], m200_arr=sc["m_np"],
+                      r200_arr=sc["r_delta"], z=z, theta_cosmo=theta_cosmo)
+        if self._eh98():
+            return _compute()                 # traced — a concrete cache would leak
         kind    = "emissivity" if emissivity else "density"
         gas_key = (kind, id(self._dp), z, self._cosmo_key(theta_cosmo))
         if gas_key not in self._gas_cache:
-            if emissivity:
-                result = self._dp.emissivity_uk(
-                    k_arr     = sc["k_np"],
-                    m200_arr  = sc["m_np"],
-                    r200_arr  = sc["r_delta"],
-                    z         = z,
-                    theta_cosmo = theta_cosmo,
-                )
-            else:
-                result = self._dp.density_uk(
-                    k_arr     = sc["k_np"],
-                    m200_arr  = sc["m_np"],
-                    r200_arr  = sc["r_delta"],
-                    z         = z,
-                    theta_cosmo = theta_cosmo,
-                )
-            self._gas_cache[gas_key] = result
+            self._gas_cache[gas_key] = _compute()
         return self._gas_cache[gas_key]
 
     # ------------------------------------------------------------------
