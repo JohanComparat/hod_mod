@@ -417,6 +417,7 @@ class ForwardModel:
         ell=None,
         nz_sig: float = 0.05,
         n_z: int = 11,
+        galaxy_nz: tuple = None,
         z_src_mean: float = 0.8,
         z_src_sig: float = 0.30,
         n_z_shear: int = 12,
@@ -506,10 +507,16 @@ class ForwardModel:
         self.rp_ds = jnp.asarray(rp_ds if rp_ds is not None else np.logspace(-1.3, 1.3, 20))
         self.ell = jnp.asarray(ell if ell is not None else np.logspace(1.0, 3.5, 24))
 
-        # narrow n(z) window for the Limber projection
-        zc = self.z_eff
-        zg = np.linspace(max(1e-3, zc - 4 * nz_sig), zc + 4 * nz_sig, n_z)
-        nz = np.exp(-0.5 * ((zg - zc) / nz_sig) ** 2)
+        # n(z) window for the Limber projection: a real survey dN/dz via
+        # ``galaxy_nz=(z_grid, nz)`` (for fitting measured angular spectra), else
+        # a synthetic narrow Gaussian at (z_eff, nz_sig) for forecasting.
+        if galaxy_nz is not None:
+            zg = np.asarray(galaxy_nz[0], dtype=float)
+            nz = np.asarray(galaxy_nz[1], dtype=float)
+        else:
+            zc = self.z_eff
+            zg = np.linspace(max(1e-3, zc - 4 * nz_sig), zc + 4 * nz_sig, n_z)
+            nz = np.exp(-0.5 * ((zg - zc) / nz_sig) ** 2)
         self.z_grid = jnp.asarray(zg)
         self.nz = jnp.asarray(nz / np.trapezoid(nz, zg))
         self.pi_max = 100.0
