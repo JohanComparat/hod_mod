@@ -14,7 +14,9 @@ The chain was produced by ``oarsub/fit_bgs_zm15_joint_mcmc.sh`` running
 :mod:`hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint` (``--mode mcmc --surveys``,
 i.e. ``wp`` + ``n_gal`` only) with **hod_mod 0.2.1**.  The figures on this page are
 regenerated from ``flatchain.npz`` + ``map_result.json`` by
-:mod:`hod_mod.scripts.fitting.bgs_ls10.plot_bgs_zm15_joint_posterior`.
+:mod:`hod_mod.scripts.fitting.bgs_ls10.plot_bgs_zm15_joint_posterior`.  They show the
+**posterior** — median and 68 / 95 % credible bands — throughout; the MAP point estimate is
+used only as a reference in the constraint table.
 
 **Sample** — BGS LS10 VLIM, any spectral type,
 :math:`10.0 \leq \log_{10}(M_*/M_\odot) < 12.0`, :math:`0.05 < z < 0.18`,
@@ -48,13 +50,20 @@ Data vector: :math:`n_{\rm data} = 8\times(13+1) = 112`; :math:`n_{\rm free} = 1
 :class:`~hod_mod.data_io.sum_stat_reader.SumStatReader` from the ``sum_stat``
 ``BGS_Mstar10_massbins`` joint HDF5 files.
 
-Sampler configuration
-~~~~~~~~~~~~~~~~~~~~~~~
+Sampler configuration and convergence
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``emcee`` ``EnsembleSampler``, 32 walkers, 500 burn-in + 2000 production steps
 (one continuous, resumable HDF5-backed chain).  Walkers are seeded in a tight ball around
 the MAP best fit (Powell).  Discarding burn-in leaves
 :math:`32 \times 2000 = 64\,000` posterior samples.
+
+**Convergence.**  Reshaping the flat chain into its 32 walkers, the integrated
+autocorrelation time is :math:`\tau \approx 145` steps (maximum 170 across the 13
+parameters).  The 2000 production steps per walker therefore contain
+:math:`\approx 14` independent samples each, for
+:math:`N_{\rm eff} \approx 441` effectively independent samples across the ensemble
+— ample for the credible intervals and 2D contours below.
 
 ----
 
@@ -114,6 +123,13 @@ contributes negligibly.
 the 5 % :math:`n_{\rm gal}` floor and the 1 % covariance ridge both inflate the effective
 uncertainties.  The parameter **credible intervals below should therefore be read as
 upper bounds on the true statistical precision**.
+
+**Posterior** :math:`\chi^2` **distribution.**  Propagating 200 chain samples through the
+full halo model, the total :math:`\chi^2` has a posterior median of
+:math:`\chi^2 = 44.1^{+6.2}_{-3.8}` (68 %), i.e.
+:math:`\chi^2/\mathrm{dof} = 0.445\,[0.41,\,0.51]` over :math:`n_{\rm dof}=99`.  The
+posterior median coincides with the MAP value (0.44); the whole distribution stays well
+below unity, so *no* region of the sampled parameter space over- or mis-fits the data.
 
 ----
 
@@ -214,21 +230,52 @@ fit *with* lensing — a different selection, so exact agreement is not expected
   Main sample, and this run uses no lensing.  Notably the satellite normalisation
   :math:`B_{\rm sat}\approx 20` is roughly twice the SDSS value.
 
+**Posterior degeneracies.**  The strongest linear correlations in the chain are
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Parameter pair
+     - :math:`r`
+     - Interpretation
+   * - :math:`B_{\rm sat}` – :math:`\alpha_{\rm sat}`
+     - **+0.95**
+     - satellite amplitude vs power-law slope — the dominant degeneracy
+   * - :math:`\sigma_{\ln M_*}` – :math:`\eta`
+     - −0.84
+     - scatter normalisation vs its mass slope
+   * - :math:`\log_{10}M_{*,0}` – :math:`\beta`
+     - +0.81
+     - SHMR pivot vs low-mass slope
+   * - :math:`\log_{10}M_1` – :math:`\log_{10}M_{*,0}`
+     - +0.75
+     - the two SHMR mass scales
+   * - :math:`\beta_{\rm sat}` – :math:`\alpha_{\rm sat}`
+     - −0.70
+     - satellite halo-mass slope vs occupation slope
+
+The :math:`B_{\rm sat}`–:math:`\alpha_{\rm sat}` ridge (:math:`r=+0.95`) is why neither is
+constrained as tightly as its 1D interval suggests: the data fix the *satellite abundance*
+in the probed halo-mass range, leaving an amplitude–slope direction nearly free.
+
 .. figure:: _images/bgs_zm15_joint__corner.png
    :width: 100%
 
-   Full 13-parameter posterior.  Orange lines mark the MAP best fit — it lies inside every
-   contour.  Clear degeneracies are visible, most strikingly the tight
-   :math:`B_{\rm sat}`–:math:`\alpha_{\rm sat}` anticorrelation (satellite amplitude vs
-   slope) and the :math:`\log_{10}M_1`–:math:`\log_{10}M_{*,0}` correlation.  The
+   Full 13-parameter posterior (median and 16/84 % quantiles in the panel titles).  The
+   :math:`B_{\rm sat}`–:math:`\alpha_{\rm sat}` correlation and the
+   :math:`\log_{10}M_1`–:math:`\log_{10}M_{*,0}` correlation are the tightest ridges; the
    :math:`B_{\rm cut}` and :math:`f_c` posteriors pile up against their prior edges.
 
 .. figure:: _images/bgs_zm15_joint__constraints.png
    :width: 90%
 
    Forest plot: this-work posterior (blue, median :math:`\pm 68\%`) vs published ZM15
-   Table 2 (green), each parameter normalised to its uniform prior range.  Values printed at
-   right are the this-work medians.
+   Table 2 (green), each parameter normalised to its uniform prior range.  A marker near the
+   left/right edge with a wide bar (e.g. :math:`B_{\rm cut}`) flags a prior-dominated
+   parameter; a tight marker well inside the range (e.g. :math:`\delta`,
+   :math:`\alpha_{\rm sat}`) flags a data-dominated one.  Values printed at right are the
+   this-work medians.
 
 ----
 
@@ -241,17 +288,20 @@ model, giving 68 %/95 % credible bands on each **fitted** observable.
 .. figure:: _images/bgs_zm15_joint__wp_bins.png
    :width: 100%
 
-   Projected clustering :math:`w_p(r_p)` for all eight bins.  Black points are the data,
-   the orange line is the MAP, and the blue band is the posterior-predictive 68 %/95 %
-   interval.  Lower strips show ``data/model − 1``: residuals are within :math:`\pm10\%`
-   across the fitted range, consistent with :math:`\chi^2/\mathrm{dof}<1`.
+   Projected clustering :math:`w_p(r_p)` for all eight bins.  Black points are the data; the
+   blue line and shaded regions are the posterior-predictive median and 68 %/95 % credible
+   bands (the band is narrow because the fit is well constrained).  Lower strips show
+   ``data / (posterior median) − 1``: residuals are within :math:`\pm10\%` across the fitted
+   range, consistent with :math:`\chi^2/\mathrm{dof}<1`.  The highest-mass bin (11.4–12.0)
+   carries the largest residual (:math:`\sim25\%` at intermediate scales).
 
 .. figure:: _images/bgs_zm15_joint__ngal.png
-   :width: 75%
+   :width: 78%
 
-   Galaxy number density per stellar-mass bin: observed (black, fitted) vs
-   posterior-predictive band and MAP.  The abundance is reproduced to well within its 5 %
-   error floor in every bin.
+   Galaxy number density per stellar-mass bin — **point-by-point** comparison of the
+   observed value (black) and the posterior-predictive 68 / 95 % interval (blue), with the
+   fractional difference below.  The abundance is reproduced to within a few percent — well
+   inside its 5 % error floor — in every bin.
 
 .. figure:: _images/bgs_zm15_joint__smf.png
    :width: 75%
@@ -265,16 +315,101 @@ model, giving 68 %/95 % credible bands on each **fitted** observable.
 Derived relations
 -----------------
 
-Analytic quantities implied by the posterior (fast to sample, so these use a larger draw
-budget than the observables above).
+Physical quantities implied by the posterior, each propagated through the halo model with
+68 % credible intervals.
+
+Per-bin halo occupation
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For every fitted stellar-mass bin, the posterior of the mean host halo mass
+:math:`\langle M_h\rangle`, effective large-scale bias :math:`b_{\rm eff}`, and satellite
+fraction :math:`f_{\rm sat}` (occupation-weighted over the halo mass function):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 26 26 26
+
+   * - :math:`\log_{10} M_*` bin
+     - :math:`\langle\log_{10} M_h\rangle\,[M_\odot/h]`
+     - :math:`b_{\rm eff}`
+     - :math:`f_{\rm sat}`
+   * - 10.0 – 10.2
+     - :math:`12.04^{+0.04}_{-0.06}`
+     - :math:`1.05\pm0.01`
+     - :math:`0.169^{+0.033}_{-0.019}`
+   * - 10.2 – 10.4
+     - :math:`12.20^{+0.03}_{-0.05}`
+     - :math:`1.11\pm0.01`
+     - :math:`0.191^{+0.035}_{-0.022}`
+   * - 10.4 – 10.6
+     - :math:`12.38^{+0.03}_{-0.05}`
+     - :math:`1.17\pm0.01`
+     - :math:`0.209^{+0.039}_{-0.021}`
+   * - 10.6 – 10.8
+     - :math:`12.54^{+0.03}_{-0.04}`
+     - :math:`1.23\pm0.02`
+     - :math:`0.211^{+0.036}_{-0.022}`
+   * - 10.8 – 11.0
+     - :math:`12.70^{+0.03}_{-0.04}`
+     - :math:`1.28\pm0.01`
+     - :math:`0.198^{+0.027}_{-0.022}`
+   * - 11.0 – 11.2
+     - :math:`12.88\pm0.03`
+     - :math:`1.37\pm0.02`
+     - :math:`0.174^{+0.024}_{-0.016}`
+   * - 11.2 – 11.4
+     - :math:`13.09^{+0.03}_{-0.04}`
+     - :math:`1.51\pm0.02`
+     - :math:`0.144^{+0.019}_{-0.017}`
+   * - 11.4 – 12.0
+     - :math:`13.32^{+0.06}_{-0.08}`
+     - :math:`1.73\pm0.05`
+     - :math:`0.087^{+0.015}_{-0.020}`
+
+The occupation-weighted mean host halo mass climbs steadily from
+:math:`10^{12.0}` to :math:`10^{13.3}\,M_\odot/h`, the effective bias grows from
+:math:`1.05` to :math:`1.73`, and the satellite fraction falls from :math:`\sim0.21` at the
+low-mass peak to :math:`0.09` as the sample becomes central-dominated at high :math:`M_*`.
+:math:`\langle\log_{10}M_h\rangle` is the mean over centrals *and* satellites, so it sits
+above the central-only inverse-SHMR curve (figure below) by the satellite contribution.
+
+Stellar-to-halo mass relation and scatter
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The posterior SHMR peaks in star-formation efficiency at
+:math:`\log_{10}(M_h/[M_\odot h^{-1}]) = 11.9^{+0.2}_{-0.2}` with a peak ratio
+:math:`M_*/M_h \approx 0.026`, and the cumulative satellite fraction is
+:math:`f_{\rm sat}(>10^{10}\,M_\odot)\approx0.19`, dropping to
+:math:`\approx0.16` above :math:`10^{11}\,M_\odot`.
 
 .. figure:: _images/bgs_zm15_joint__shmr.png
    :width: 78%
 
-   Stellar-to-halo mass relation :math:`M_*(M_h)`.  Blue: this-work posterior band and MAP;
-   green dotted: ZM15 published; dash-dot: Moster+2013 and Behroozi+2013 at the sample
-   effective redshift.  The BGS-constrained SHMR sits slightly above the abundance-matching
-   relations at the pivot, reflecting the larger fitted scatter :math:`\sigma_{\ln M_*}`.
+   Stellar-to-halo mass relation :math:`M_*(M_h)`.  Blue: this-work posterior median and
+   68 / 95 % band; green dotted: ZM15 published; dash-dot: Moster+2013 and Behroozi+2013 at
+   the sample effective redshift :math:`z\approx0.14`.  The BGS-constrained SHMR sits
+   slightly above the abundance-matching relations at the pivot, reflecting the larger
+   fitted scatter :math:`\sigma_{\ln M_*}`.
+
+.. figure:: _images/bgs_zm15_joint__scatter.png
+   :width: 74%
+
+   Log-normal scatter :math:`\sigma_{\ln M_*}(M_h)` (ZM15 Eq. 20).  The fit prefers a
+   larger low-mass scatter (:math:`\approx0.72` vs ZM15's :math:`0.50`) and a steeper
+   decline with halo mass (more negative :math:`\eta`) — a direct consequence of the higher
+   abundance and shallower clustering of the BGS sample.
+
+.. figure:: _images/bgs_zm15_joint__mhalo_mstar.png
+   :width: 80%
+
+   Halo mass vs stellar mass (ZM15 Fig. 11 analogue).  The blue band is the inverted
+   *central* SHMR :math:`\log_{10}M_h(M_*)`; the green points are the per-bin
+   occupation-weighted mean :math:`\langle\log_{10}M_h\rangle` of all galaxies (centrals +
+   satellites), which sit above the central curve because the satellite fraction adds
+   galaxies in more massive haloes.
+
+Occupation and conditional stellar mass function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. figure:: _images/bgs_zm15_joint__hod_occupation.png
    :width: 78%
@@ -284,13 +419,41 @@ budget than the observables above).
    branch is well localised in amplitude; its low-mass turn-over (governed by
    :math:`B_{\rm cut},\beta_{\rm cut}`) is the least-constrained feature.
 
+.. figure:: _images/bgs_zm15_joint__csmf_2d.png
+   :width: 82%
+
+   Two-dimensional HOD / conditional stellar mass function (ZM15 Fig. 3 analogue) at the
+   posterior median: colour is :math:`\log_{10}\Phi(M_*|M_h)`, the mean number of galaxies
+   per dex in :math:`M_*` within haloes of mass :math:`M_h`.  The white curve is the central
+   SHMR ridge :math:`M_*(M_h)`.
+
 .. figure:: _images/bgs_zm15_joint__satellite_fraction.png
    :width: 72%
 
-   Satellite fraction :math:`f_{\rm sat}(>M_*)` as a function of the stellar-mass
-   threshold, with posterior band and MAP.  :math:`f_{\rm sat}` decreases with increasing
+   Satellite fraction :math:`f_{\rm sat}(>M_*)` as a function of the stellar-mass threshold,
+   with posterior median and 68 / 95 % band.  :math:`f_{\rm sat}` decreases with increasing
    :math:`M_*` as expected, and is constrained at the few-percent level over most of the
    range.
+
+----
+
+Relation to the Zu & Mandelbaum figure set
+-------------------------------------------
+
+This page reproduces, for the BGS :math:`w_p+n_{\rm gal}` fit, the model-side figures of the
+iHOD paper (Zu & Mandelbaum 2015): the confidence regions (their Fig. 7 → corner), the
+SHMR and its scatter (Figs. 8, 10), the inverse :math:`\langle M_h|M_*\rangle` relation
+(Fig. 11), the 2D HOD / conditional SMF (Fig. 3), the satellite HODs (Fig. 8, right), the
+stellar mass function (Fig. 9) and the clustering (Fig. 6, clustering panels).  The
+lensing panels of ZM15 are not reproduced here because this run fits
+:math:`w_p+n_{\rm gal}` only.
+
+The follow-up papers **Zu & Mandelbaum 2016** (iHOD galaxy quenching, arXiv:1509.06758) and
+**Zu & Mandelbaum 2018** (halo quenching / colour, arXiv:1703.09219) split the sample by
+colour and add a quenching sector.  Their central figures (colour-dependent SHMRs, red/blue
+satellite HODs, quenched fractions, conformity) require that colour/quenching extension,
+which the present 13-parameter fit does **not** include, so they are outside the scope of
+this page.
 
 ----
 
@@ -322,8 +485,12 @@ The chain itself is regenerated (or resumed) with::
 References
 ----------
 
-- Zu & Mandelbaum 2015, MNRAS 454, 1161
+- Zu & Mandelbaum 2015, MNRAS 454, 1161 — iHOD
   (`arXiv:1505.02781 <https://arxiv.org/abs/1505.02781>`_)
+- Zu & Mandelbaum 2016, MNRAS 457, 4360 — iHOD galaxy quenching
+  (`arXiv:1509.06758 <https://arxiv.org/abs/1509.06758>`_)
+- Zu & Mandelbaum 2018, MNRAS 476, 1637 — halo quenching / colour
+  (`arXiv:1703.09219 <https://arxiv.org/abs/1703.09219>`_)
 - Moster, Naab & White 2013, MNRAS 428, 3121
   (`arXiv:1205.5807 <https://arxiv.org/abs/1205.5807>`_)
 - Behroozi, Wechsler & Conroy 2013, ApJ 770, 57
