@@ -116,11 +116,15 @@ class GasDensityDPM:
         # where σ = sigma_scatter × ln(10)
         self._scatter_boost = float(np.exp((float(sigma_scatter) * np.log(10.0)) ** 2))
 
-    def _gnfw_f(self, x: np.ndarray) -> np.ndarray:
-        """gNFW shape function f(x|α) — Eq. 1 of arXiv:2505.14782."""
-        x = np.asarray(x, dtype=float)
+    def _gnfw_f(self, x) -> jnp.ndarray:
+        """gNFW shape function f(x|α) — Eq. 1 of arXiv:2505.14782.
+
+        jnp so the emissivity FT is differentiable on the eh98 backend; concrete
+        inputs (CAMB) pass through unchanged.
+        """
+        x = jnp.asarray(x, dtype=float)
         # Guard against x ≤ 0 (inner boundary)
-        x_safe = np.where(x > 1e-8, x, 1e-8)
+        x_safe = jnp.where(x > 1e-8, x, 1e-8)
         return (x_safe**(-self._alpha_in)
                 * (1.0 + x_safe**self._alpha_tr)
                 ** ((self._alpha_in - self._alpha_out) / self._alpha_tr))
@@ -144,12 +148,14 @@ class GasDensityDPM:
         c_arr : (NM,) dimensionless concentration c₂₀₀c
         """
         if self._concentration_model == "fixed":
-            return np.full(len(m200_arr), self._C_DPM)
+            return jnp.full(jnp.shape(m200_arr)[0], self._C_DPM)
+        # kept jnp (no np.asarray / float(Omega_m)) so c(M) traces w.r.t.
+        # cosmology on the eh98 backend; z stays a static Python float.
         m_jax   = jnp.asarray(m200_arr, dtype=float)
         sigma   = self._hmf.sigma(m_jax, float(z), theta_cosmo)
         n_eff   = _neff_eisenstein_hu(m_jax, theta_cosmo)
-        omega_m = float(theta_cosmo["Omega_m"])
-        return np.asarray(c_diemer15(m_jax, sigma, n_eff, omega_m, float(z)))
+        omega_m = theta_cosmo["Omega_m"]
+        return c_diemer15(m_jax, sigma, n_eff, omega_m, float(z))
 
     def density_3d(
         self,
@@ -218,17 +224,16 @@ class GasDensityDPM:
         -------
         uk : (Nk, NM) [(Mpc/h)³ cm⁻³]
         """
-        omega_m = float(theta_cosmo["Omega_m"])
-        m200    = np.asarray(m200_arr, dtype=float)
-        r200    = np.asarray(r200_arr, dtype=float)
-        k       = np.asarray(k_arr,    dtype=float)
-        NM      = len(m200)
-        c_arr   = np.asarray(self._concentration(m200, z, theta_cosmo), dtype=float)
+        omega_m = theta_cosmo["Omega_m"]
+        m200    = jnp.asarray(m200_arr, dtype=float)
+        r200    = jnp.asarray(r200_arr, dtype=float)
+        k       = jnp.asarray(k_arr,    dtype=float)
+        c_arr   = jnp.asarray(self._concentration(m200, z, theta_cosmo))
 
         m_c = m200[:, None]; r_c = r200[:, None]; c_c = c_arr[:, None]   # (NM, 1)
-        ez  = np.sqrt(omega_m * (1.0 + z)**3 + (1.0 - omega_m))
+        ez  = jnp.sqrt(omega_m * (1.0 + z)**3 + (1.0 - omega_m))
 
-        def _integrand(r_nodes: np.ndarray) -> np.ndarray:
+        def _integrand(r_nodes):
             """n_e(r, M) for all halos on the quadrature grid (vectorised)."""
             return self._ne_grid(r_nodes, m_c, r_c, c_c, ez)
 
@@ -258,17 +263,16 @@ class GasDensityDPM:
             "an ApecCoolingTable.",
             DeprecationWarning, stacklevel=2,
         )
-        omega_m = float(theta_cosmo["Omega_m"])
-        m200    = np.asarray(m200_arr, dtype=float)
-        r200    = np.asarray(r200_arr, dtype=float)
-        k       = np.asarray(k_arr,    dtype=float)
-        NM      = len(m200)
-        c_arr   = np.asarray(self._concentration(m200, z, theta_cosmo), dtype=float)
+        omega_m = theta_cosmo["Omega_m"]
+        m200    = jnp.asarray(m200_arr, dtype=float)
+        r200    = jnp.asarray(r200_arr, dtype=float)
+        k       = jnp.asarray(k_arr,    dtype=float)
+        c_arr   = jnp.asarray(self._concentration(m200, z, theta_cosmo))
 
         m_c = m200[:, None]; r_c = r200[:, None]; c_c = c_arr[:, None]   # (NM, 1)
-        ez  = np.sqrt(omega_m * (1.0 + z)**3 + (1.0 - omega_m))
+        ez  = jnp.sqrt(omega_m * (1.0 + z)**3 + (1.0 - omega_m))
 
-        def _integrand(r_nodes: np.ndarray) -> np.ndarray:
+        def _integrand(r_nodes):
             ne = self._ne_grid(r_nodes, m_c, r_c, c_c, ez)
             return ne**2 * self._scatter_boost
 
