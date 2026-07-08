@@ -564,7 +564,7 @@ class HaloModelCrossSpectra:
             # (Mpc/h)³ cm⁻⁶ convention as emissivity_uk / the AGN term; the
             # Λ(T,Z)/Λ_ref ratio keeps the temperature/metallicity dependence and
             # the overall amplitude is absorbed by the free A_gas.
-            X_uk = np.asarray(X_uk) / lambda_ref
+            X_uk = jnp.asarray(X_uk) / lambda_ref
         else:
             X_uk = self._density_uk_cached(z, theta_cosmo, sc, emissivity=True)   # (Nk, NM)
 
