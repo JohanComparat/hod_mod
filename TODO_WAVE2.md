@@ -37,26 +37,31 @@ Validated `tests/test_eh98_backend.py` (jacfwd==FD ~1e-7; eh98-vs-CAMB ~2%).
   Result: **`cl_gy(ℓ)` (tSZ) is jacfwd-able w.r.t. cosmology** (rel 3e-8 vs FD);
   CAMB cross-spectra regressions green.
 
+- **Phase 4 — X-ray (cl_gX) + AGN, production fidelity — DONE.** Ported
+  `GasDensityDPM._gnfw_f`/`_concentration`/`density_uk`/`emissivity_uk`/
+  `emissivity_full_uk` to accept **traced** inputs; `ApecCoolingTable.__call__` is
+  now a pure-jnp 2D log-log bilinear interp on the soxs-built (T,Z) grid (matches the
+  former scipy RGI to 8e-15 on the interior); `temperature_from_profiles` → jnp;
+  `XrayAGNModel.agn_emissivity_uk` returns jnp and the AGN conversion keeps h traced;
+  `_density_uk_cached` bypasses the concrete cache under trace. Result — all X-ray
+  legs jacfwd-able w.r.t. cosmology: **density-only `cl_gX`** (4e-8 vs FD),
+  **full-APEC `cl_gX`** with T(r)/Z(r) cooling (7e-6), **galaxy×AGN cross** (1.4e-7).
+  CAMB gas/dpm/agn regressions green. Commits `89a3d41`, `a8cffdb`, `b5ef892`.
+
 ### Remaining
 
-- **Phase 4 — X-ray (cl_gX/cl_XX) + AGN, production fidelity.** The tSZ path is
-  done; the X-ray path needs: (a) `GasDensityDPM.emissivity_uk`/`density_uk`
-  integrand callbacks (`_ne_grid` etc., `gas/density.py`) to accept **traced**
-  `r_nodes` (they currently `np.asarray` them — fine for CAMB-concrete, breaks
-  under trace); (b) the APEC cooling `ApecCoolingTable.__call__` scipy
-  `RegularGridInterpolator` → `jax.scipy.interpolate.RegularGridInterpolator` (or
-  reuse the JAX band tables in `forecast/apec_bands.py`) + `temperature_from_profiles`
-  → jnp, to carry gradients through T(r),Z(r); (c) `XrayAGNModel.agn_emissivity_uk`
-  and `HODAgnModel.nc_ns_agn`/`agn_emissivity_uk` to return jnp (drop the
-  `np.asarray`/`np.power`/`np.ones` boundary casts; the Lx/occupation kernels are
-  already jnp); (d) `_density_uk_cached` cache bypass under trace (like the pressure
-  one). The `_pk_tables_gX/XX` assembly + Limber are already jnp, so they trace once
-  fed traced inputs. Then wire the production cross-probes into
-  `MultiProbeGaussianLikelihood` as a production-fidelity backend option and demo a
-  joint galaxies+ΔΣ+cl_gy+cl_gX+shear+AGN MAP + NUTS. `cross_clustering._pk_table_cg`
-  gets the same `_get_halo_tables` swap (nearly free — assembly already jnp).
-- **Phase 5 — n(z) hook, docs, validation, close.** Real galaxy n(z) injection into
-  `ForwardModel` (currently a synthetic narrow Gaussian, forward_jax.py:509-514);
+- **Production cross-probes into the likelihood.** `MultiProbeGaussianLikelihood`
+  runs on the surrogate `ForwardModel` (Phase 1). Add a production-backend forward
+  function that assembles the now-differentiable production observables
+  (`FullHaloModelPrediction.wp/delta_sigma` + `HaloModelCrossSpectra.angular_cl_gy/gX`)
+  into one `value_and_grad`-able data vector, and demo a joint
+  galaxies+ΔΣ+cl_gy+cl_gX+AGN MAP + NUTS at production fidelity.
+  `cross_clustering._pk_table_cg` gets the same `_get_halo_tables` swap (nearly free).
+  Also still numpy: `HODAgnModel.nc_ns_agn`/`agn_emissivity_uk` (only needed for the
+  HOD-AGN, not parametric, cross); `cl_XX` auto-spectrum (`_pk_tables_XX`); the
+  `x_uk_override` emulator fast path.
+- **n(z) hook, docs, validation, close.** Real galaxy n(z) injection into
+  `ForwardModel` (synthetic narrow Gaussian, forward_jax.py:509-514);
   surrogate-vs-production amplitude validation on cl_gy/cl_gX;
   `docs/differentiable_inference.rst`; full `--cov` re-baseline + raise floor.
 
