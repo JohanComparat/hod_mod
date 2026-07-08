@@ -1,3 +1,26 @@
+Update Todos
+
+Fold 90-param production numbers into missing_physics_implementation.rst Results
+
+Phase 0: log10m_min kwarg + slice freeze + figure hard-codes; tier-2 bit-identity gate
+
+Phase A: +12 params & _pk_tracer_field refactor
+
+Phase B: radio/IR fields + 7 map observables + cl_yy/cl_HIHI/ncl/ds_agn
+
+Phase C: band LFs + tests/test_forecast_tier3.py (22 tests green)
+
+Phase D: noise.py surveys + two-tier completeness + tier2 hooks + Tier3Forecast (smoke green)
+TODO:
+Phase E: run_tier3_forecast.py driver + assembly tests
+
+Phase F: --jobs multiprocessing (parallel == serial gate)
+
+Phase G: docs (tier3 section, verified refs) + CHANGELOG; commit
+
+Phase H: launch tier-3 production run --jobs; report decomposition
+
+
 JAX_PLATFORMS=cpu HOD_MOD_RESULTS=/home/comparat/data/hod_mod_results \
   python -m hod_mod.scripts.forecasts.run_sensitivity_study --add-planck-prior
 
