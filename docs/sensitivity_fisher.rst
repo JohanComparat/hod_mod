@@ -185,12 +185,15 @@ function panel above) — so they pin the occupation and the halo-mass scale
    :width: 100%
 
    1σ Fisher ellipses at a small-scale cut (:math:`R_{\min}=0.1` Mpc/h, 1 %
-   errors, weakly-informative nuisance priors).  Adding SZ (green), X-ray
-   (orange) and both (red) **shrinks** and **de-rotates** the ellipses of
-   :math:`\sigma_8` with :math:`\Omega_m`, with the baryon-feedback mass scale
-   :math:`\log_{10}M_{\rm pivot}` (middle — see the next section), and with the
-   satellite amplitude :math:`b_{\rm sat}`.  De-rotation is the signature of a
-   broken degeneracy, not merely more data.
+   errors, weakly-informative nuisance priors).  The data vector grows
+   cumulatively: clustering + galaxy–galaxy lensing (blue), :math:`+` SZ
+   :math:`+` X-ray (orange), :math:`+` cosmic-shear and CMB-lensing spectra
+   (green), and all twelve statistics (red, adding :math:`n_{\rm gal}`, the SMF
+   and the AGN XLF).  Each addition **shrinks** and **de-rotates** the ellipses
+   of :math:`\sigma_8` with :math:`\Omega_m`, with the baryon-feedback mass
+   scale :math:`\log_{10}M_{\rm pivot}` (middle — see the next section), and
+   with the satellite amplitude :math:`b_{\rm sat}`.  De-rotation is the
+   signature of a broken degeneracy, not merely more data.
 
 
 The result: small scales help — conditionally
@@ -240,6 +243,49 @@ lensing power spectra — cosmic shear and CMB lensing — contribute the larges
 independent share of the total gain.  The abundance statistics
 (:math:`n_{\rm gal}`, SMF, XLF) instead target the occupation (:math:`f_c`, the
 SHMR), leaving :math:`\sigma_8/\Omega_m` essentially unchanged.
+
+
+The price of parameter freedom: 31 free parameters vs 111
+-----------------------------------------------------------
+
+The study documented on this page was published with the original
+**31-parameter** tier-1 vector.  The model has since grown to **111 parameters**
+(the :doc:`missing-physics <missing_physics>` waves and the tier-2/3/4
+extensions: extra HOD / baryon / AGN shape parameters, redshift-evolution
+slopes, an X-ray spectral sector, quenching, morphology, dark energy
+:math:`w_0, w_a`, :math:`\sum m_\nu`, …), which the tier-1 scripts pin to their
+fiducials by default (``--free-tier2`` releases them).  Rerunning the identical
+data setup — the same twelve statistics, the same 229 data points, the same
+constant 1 % errors, weakly-informative priors only — with **everything free**
+asks the sharpest version of the robustness question: *how much cosmology is
+lost when nothing is held fixed?*
+
+.. figure:: _images/sensitivity_fisher__param_freedom.png
+   :width: 100%
+
+   Both runs are derived from the same 111-parameter Jacobian: the published
+   case pins the 80 post-publication parameters with delta-function priors, so
+   the comparison isolates the effect of parameter freedom alone.  **Left**:
+   the :math:`(\Omega_m,\sigma_8)` 1σ ellipse at :math:`R_{\min}=0.1` Mpc/h
+   barely inflates and does **not rotate** — no new degeneracy direction
+   opens.  **Middle**: marginalised errors vs scale cut for the two runs.
+   **Right**: the error-inflation factor stays :math:`\lesssim\times1.2` at
+   every scale cut — from :math:`R_{\min}=10` to :math:`0.1` Mpc/h it is
+   ×1.05→×1.11 for :math:`\sigma_8` and ×1.10→×1.19 for :math:`\Omega_m`.
+
+The cosmology is nearly free of charge: opening the parameter space from 31 to
+111 free parameters costs only **11 % on** :math:`\sigma(\sigma_8)` **and 19 %
+on** :math:`\sigma(\Omega_m)` at the smallest scale cut
+(:math:`\sigma(\sigma_8)=1.45\to1.61\times10^{-3}`,
+:math:`\sigma(\Omega_m)=0.92\to1.09\times10^{-3}`).  This is the
+self-calibration argument of the previous section at full strength: the
+twelve-statistic vector measures the newly-freed parameters that *do* touch the
+observables (the satellite and baryon shape sectors, the X-ray spectral sector,
+quenching, …) well enough that marginalising them is cheap, while the
+parameters it cannot see (the HI / radio / IR sectors of tier 3) sit in
+cosmology-orthogonal directions and simply return their priors.  The mild
+growth of the penalty towards small :math:`R_{\min}` mirrors the baryon story
+below: the new freedom lives mostly in the one-halo regime.
 
 
 Baryonic feedback: contaminating lensing, calibrated by X-ray / SZ
@@ -688,7 +734,10 @@ Parameters that could be freed
    :doc:`tier-2 forecast <tier2_forecast>` (61 parameters in the original
    design; 90 with the :doc:`missing-physics extension <missing_physics>`);
    the tier-1 scripts pin the extension to its fiducials by default
-   (``--free-tier2`` to release).
+   (``--free-tier2`` to release).  The cosmology cost of releasing
+   *everything* on this same twelve-statistic data vector is quantified in
+   the parameter-freedom figure above: :math:`\lesssim20\%` on
+   :math:`\sigma(\Omega_m)` and :math:`\sigma(\sigma_8)`.
 
 Beyond the 31 in the vector, about **21 more parameters** could be freed: **16**
 currently-fixed nuisance shape parameters the machinery already supports (only a
