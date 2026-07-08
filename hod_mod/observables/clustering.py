@@ -671,6 +671,41 @@ class FullHaloModelPrediction:
                 "pk_backend='eh98_jax' does not support BNL or a CAMB non-linear "
                 "2-halo term (baryon split and satellite cutoffs are supported).")
 
+    def _get_halo_tables(self, z: float, theta_cosmo: dict, hod_params: dict) -> dict:
+        """Backend-agnostic halo tables for the cross-spectra modules (Wave 3).
+
+        Returns a dict keyed like the numpy ``_static_cache``
+        (``m_np, dndm_np, bias_np, uk, pk_lin, c_np, r_delta, rho_m, k_np``).
+        On the CAMB backend these are the float64 numpy per-cosmology cache; on
+        ``pk_backend='eh98_jax'`` they are **traced** jnp arrays recomputed each
+        call, so any cross-power built from them (``cl_gy``/``cl_gX``/P_cg)
+        becomes ``jax.jit`` / ``jax.jacfwd``-able w.r.t. cosmology.
+        """
+        if self._pk_backend == "eh98_jax":
+            from hod_mod.core.halo_profiles import (
+                mdef_delta_rho, nfw_uk_jax, einasto_uk)
+            m   = self._hod._m_grid
+            k   = self._k
+            hmf = self._hod._hmf
+            dndm = hmf.dndm(m, z, theta_cosmo)
+            bias = self._hod._bias(m, z, theta_cosmo)
+            c    = self._halo_profile.concentration(m, z, theta_cosmo)
+            delta, rho_ref = mdef_delta_rho(self._halo_profile.mdef, z, theta_cosmo)
+            r_delta = (3.0 * m / (4.0 * jnp.pi * delta * rho_ref)) ** (1.0 / 3.0)
+            if self._profile == "einasto":
+                uk = einasto_uk(k, r_delta / c, c, alpha=self._einasto_alpha)
+            else:
+                uk = nfw_uk_jax(k, r_delta / c, c)
+            return {
+                "m_np":    m,        "dndm_np": dndm,   "bias_np": bias,
+                "uk":      uk,       "pk_lin":  self._pk_lin.pk_linear(k, z, theta_cosmo),
+                "c_np":    c,        "r_delta": r_delta,
+                "rho_m":   _rho_m(theta_cosmo), "k_np": k,
+            }
+        # CAMB: trigger the numpy static cache and return it.
+        self._pk_tables_full(z, theta_cosmo, hod_params)
+        return self._static_cache[self._cosmo_cache_key(z, theta_cosmo)]
+
     @staticmethod
     def _cosmo_cache_key(z: float, theta_cosmo: dict) -> tuple:
         """Rounded cache key for theta_cosmo.
