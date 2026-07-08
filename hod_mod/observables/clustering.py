@@ -29,6 +29,7 @@ import jax.numpy as jnp
 from functools import partial
 
 from hod_mod.core.power_spectrum import rho_critical_0
+from hod_mod.core.numerics import safe_log
 
 
 # ---------------------------------------------------------------------------
@@ -128,19 +129,19 @@ def _rho_m(theta_cosmo: dict):
 
 
 # ---------------------------------------------------------------------------
-# Flat ΛCDM geometry helpers (numpy-level, used at the non-JAX boundary)
+# Flat ΛCDM geometry helpers
 # ---------------------------------------------------------------------------
 
-def _hubble_E(z: np.ndarray, Omega_m: float) -> np.ndarray:
+def _hubble_E(z: jnp.ndarray, Omega_m: float) -> jnp.ndarray:
     """Dimensionless Hubble function E(z) = H(z)/H0 for flat ΛCDM.
 
     .. math::
         E(z) = \\sqrt{\\Omega_m(1+z)^3 + (1-\\Omega_m)}
     """
-    return np.sqrt(Omega_m * (1.0 + z) ** 3 + (1.0 - Omega_m))
+    return jnp.sqrt(Omega_m * (1.0 + z) ** 3 + (1.0 - Omega_m))
 
 
-def _comoving_dist_h(z_arr: np.ndarray, theta_cosmo: dict) -> np.ndarray:
+def _comoving_dist_h(z_arr: np.ndarray, theta_cosmo: dict) -> jnp.ndarray:
     """Comoving distance χ(z) [Mpc/h] for flat ΛCDM via trapezoidal quadrature.
 
     .. math::
@@ -160,13 +161,13 @@ def _comoving_dist_h(z_arr: np.ndarray, theta_cosmo: dict) -> np.ndarray:
     c_over_H0 = 2997.92  # Mpc/h  (c / [100 km/s/Mpc])
     z_arr = np.asarray(z_arr, dtype=float)
     n_fine = max(2000, 20 * len(z_arr))
-    z_fine = np.linspace(0.0, float(z_arr.max()), n_fine)
+    z_fine = jnp.linspace(0.0, float(z_arr.max()), n_fine)
     inv_E = 1.0 / _hubble_E(z_fine, Omega_m)
-    chi_fine = np.concatenate([
-        [0.0],
-        np.cumsum(c_over_H0 * 0.5 * (inv_E[:-1] + inv_E[1:]) * np.diff(z_fine)),
+    chi_fine = jnp.concatenate([
+        jnp.zeros(1),
+        jnp.cumsum(c_over_H0 * 0.5 * (inv_E[:-1] + inv_E[1:]) * jnp.diff(z_fine)),
     ])
-    return np.interp(z_arr, z_fine, chi_fine)
+    return jnp.interp(jnp.asarray(z_arr), z_fine, chi_fine)
 
 
 # ---------------------------------------------------------------------------
@@ -248,8 +249,8 @@ class HODClusteringPrediction:
         k = self._k
         pk_lin = self._pk_lin.pk_linear(np.asarray(k), float(z), theta_cosmo)
         log_k = jnp.log(k)
-        log_pgg = jnp.log(jnp.maximum(b_eff**2 * jnp.asarray(pk_lin), 1e-20))
-        log_pgm = jnp.log(jnp.maximum(b_eff * jnp.asarray(pk_lin), 1e-20))
+        log_pgg = safe_log(b_eff**2 * jnp.asarray(pk_lin), 1e-20)
+        log_pgm = safe_log(b_eff * jnp.asarray(pk_lin), 1e-20)
         return log_k, log_pgg, log_pgm
 
     # ------------------------------------------------------------------
@@ -599,9 +600,13 @@ class FullHaloModelPrediction:
         pk_nl=None,
         nl_2halo: bool = False,
         bnl_model=None,
+        pk_backend: str = "camb",
     ):
         if profile not in ("nfw", "einasto"):
             raise ValueError(f"profile must be 'nfw' or 'einasto', got {profile!r}")
+        if pk_backend not in ("camb", "eh98_jax"):
+            raise ValueError(
+                f"pk_backend must be 'camb' or 'eh98_jax', got {pk_backend!r}")
         self._pk_lin = pk_lin
         self._hod = hod
         self._halo_profile = halo_profile
@@ -612,10 +617,94 @@ class FullHaloModelPrediction:
         self._pk_nl = pk_nl
         self._nl_2halo = nl_2halo and (pk_nl is not None)
         self._bnl_model = bnl_model
+        self._pk_backend = pk_backend
         # Cache for HOD-parameter-independent quantities (pk_lin, uk, dndm, c).
         # Keyed by _cosmo_cache_key() so re-evaluated only when cosmology changes.
         # Rounded keys prevent per-step cache misses during free-cosmo MAP fitting.
+        # Unused by the 'eh98_jax' backend (jit compilation caching instead).
         self._static_cache: dict = {}
+        if pk_backend == "eh98_jax":
+            self._validate_eh98_backend()
+
+    # Concentration models whose c(M,z) is pure-JAX and so traceable in the
+    # differentiable backend (klypin16's z-interpolation is jnp since Wave 1).
+    _EH98_TRACEABLE_CM = ("duffy08", "dutton14", "klypin16")
+    # HOD keys the traced backend still cannot reproduce.  Wave-3 lifted the
+    # satellite inner-cutoff extensions (f_cut/gamma_inner now trace via
+    # satellite_nfw_uk's jnp.where), so this is empty; kept for future guards.
+    _EH98_UNSUPPORTED_HOD_KEYS = ()
+
+    def _validate_eh98_backend(self):
+        """Fail fast when the differentiable EH98 backend is mis-wired.
+
+        The structural requirements that make the whole ``predict`` path
+        traceable: an EH98 linear P(k), a pure-JAX analytic HMF, an NFW or
+        Einasto profile with a traceable ``ConcentrationModel``.  Baryon split
+        and satellite inner-cutoff extensions are supported (Wave 3); only BNL
+        and the CAMB-based non-linear 2-halo term remain rejected.  Use
+        :func:`make_differentiable_prediction` to wire these correctly.
+        """
+        from hod_mod.forecast.pk_eisenstein_hu import EisensteinHu98PkLinear
+        from hod_mod.core.halo_mass_function import HaloMassFunction
+        from hod_mod.core.concentration import ConcentrationModel
+
+        if not isinstance(self._pk_lin, EisensteinHu98PkLinear):
+            raise TypeError(
+                "pk_backend='eh98_jax' requires an EisensteinHu98PkLinear "
+                "P(k) (CAMB is not JAX-traceable); "
+                "use make_differentiable_prediction().")
+        if not isinstance(self._hod._hmf, HaloMassFunction):
+            raise TypeError(
+                "pk_backend='eh98_jax' requires an analytic JAX HMF "
+                "(make_hmf('tinker08', pk_func=eh.as_hmf_pk_func())); "
+                f"got {type(self._hod._hmf).__name__}.")
+        if not isinstance(self._halo_profile, ConcentrationModel):
+            raise TypeError(
+                "pk_backend='eh98_jax' requires a ConcentrationModel "
+                f"(traceable c(M)); got {type(self._halo_profile).__name__}.")
+        if self._halo_profile.model not in self._EH98_TRACEABLE_CM:
+            raise ValueError(
+                f"pk_backend='eh98_jax' c(M) model must be one of "
+                f"{self._EH98_TRACEABLE_CM}; got {self._halo_profile.model!r}.")
+        if self._bnl_model is not None or self._nl_2halo:
+            raise ValueError(
+                "pk_backend='eh98_jax' does not support BNL or a CAMB non-linear "
+                "2-halo term (baryon split and satellite cutoffs are supported).")
+
+    def _get_halo_tables(self, z: float, theta_cosmo: dict, hod_params: dict) -> dict:
+        """Backend-agnostic halo tables for the cross-spectra modules (Wave 3).
+
+        Returns a dict keyed like the numpy ``_static_cache``
+        (``m_np, dndm_np, bias_np, uk, pk_lin, c_np, r_delta, rho_m, k_np``).
+        On the CAMB backend these are the float64 numpy per-cosmology cache; on
+        ``pk_backend='eh98_jax'`` they are **traced** jnp arrays recomputed each
+        call, so any cross-power built from them (``cl_gy``/``cl_gX``/P_cg)
+        becomes ``jax.jit`` / ``jax.jacfwd``-able w.r.t. cosmology.
+        """
+        if self._pk_backend == "eh98_jax":
+            from hod_mod.core.halo_profiles import (
+                mdef_delta_rho, nfw_uk_jax, einasto_uk)
+            m   = self._hod._m_grid
+            k   = self._k
+            hmf = self._hod._hmf
+            dndm = hmf.dndm(m, z, theta_cosmo)
+            bias = self._hod._bias(m, z, theta_cosmo)
+            c    = self._halo_profile.concentration(m, z, theta_cosmo)
+            delta, rho_ref = mdef_delta_rho(self._halo_profile.mdef, z, theta_cosmo)
+            r_delta = (3.0 * m / (4.0 * jnp.pi * delta * rho_ref)) ** (1.0 / 3.0)
+            if self._profile == "einasto":
+                uk = einasto_uk(k, r_delta / c, c, alpha=self._einasto_alpha)
+            else:
+                uk = nfw_uk_jax(k, r_delta / c, c)
+            return {
+                "m_np":    m,        "dndm_np": dndm,   "bias_np": bias,
+                "uk":      uk,       "pk_lin":  self._pk_lin.pk_linear(k, z, theta_cosmo),
+                "c_np":    c,        "r_delta": r_delta,
+                "rho_m":   _rho_m(theta_cosmo), "k_np": k,
+            }
+        # CAMB: trigger the numpy static cache and return it.
+        self._pk_tables_full(z, theta_cosmo, hod_params)
+        return self._static_cache[self._cosmo_cache_key(z, theta_cosmo)]
 
     @staticmethod
     def _cosmo_cache_key(z: float, theta_cosmo: dict) -> tuple:
@@ -724,6 +813,9 @@ class FullHaloModelPrediction:
         * ``n_gal``        — galaxy number density [h³ Mpc⁻³]
         * ``b_eff``        — HOD-weighted effective bias
         """
+        if self._pk_backend == "eh98_jax":
+            return self._pk_tables_full_jax(z, theta_cosmo, hod_params, baryon_params)
+
         # ---- HOD-parameter-independent tables (cached by z + cosmology) ----
         cosmo_key = self._cosmo_cache_key(z, theta_cosmo)
         if cosmo_key not in self._static_cache:
@@ -793,13 +885,17 @@ class FullHaloModelPrediction:
             }
 
         sc = self._static_cache[cosmo_key]
+        # Static cache stays float64 numpy (built once per cosmology under
+        # disable_jit); the per-call assembly below runs in jnp.
         m_np     = sc["m_np"]
-        dndm_np  = sc["dndm_np"]
-        bias_np  = sc["bias_np"]
-        rho_m    = sc["rho_m"]
-        uk       = sc["uk"]
-        pk_lin   = sc["pk_lin"]
         k_np     = sc["k_np"]
+        m        = jnp.asarray(sc["m_np"])
+        dndm     = jnp.asarray(sc["dndm_np"])
+        bias     = jnp.asarray(sc["bias_np"])
+        rho_m    = sc["rho_m"]
+        uk       = jnp.asarray(sc["uk"])
+        pk_lin   = jnp.asarray(sc["pk_lin"])
+        k        = jnp.asarray(sc["k_np"])
 
         # Satellite-profile extensions A/B/C: b_sat_conc, f_cut, gamma_inner.
         # These are HOD-level free parameters that modify only the satellite FT
@@ -809,30 +905,30 @@ class FullHaloModelPrediction:
         gamma_inner = float(hod_params.get("gamma_inner",   0.0))
         if f_cut > 0.0 or gamma_inner > 0.0:
             from hod_mod.core.halo_profiles import satellite_nfw_uk
-            uk_sat = np.asarray(satellite_nfw_uk(
+            uk_sat = satellite_nfw_uk(
                 k_np,
                 sc["r_delta"] / sc["c_np"],   # DM scale radius
                 sc["c_np"],                    # DM concentration
                 sc["r_delta"],                 # halo radius
                 b_sat_conc=b_sat_conc, f_cut=f_cut, gamma=gamma_inner,
-            ))
+            )
         elif b_sat_conc != 1.0:
             from hod_mod.core.halo_profiles import nfw_uk
             c_sat   = b_sat_conc * sc["c_np"]
             r_s_sat = sc["r_delta"] / c_sat
-            uk_sat = np.asarray(nfw_uk(k_np, r_s_sat, c_sat))
+            uk_sat = jnp.asarray(nfw_uk(k_np, r_s_sat, c_sat))
         else:
             uk_sat = uk
 
         # HOD occupation on the mass grid (fast, pure JAX)
         with jax.disable_jit():
             nc_arr, ns_arr = self._hod.nc_ns(self._hod._log10m_grid, hod_params)
-        nc_np = np.asarray(nc_arr, dtype=float)
-        ns_np = np.asarray(ns_arr, dtype=float)
+        nc = jnp.asarray(nc_arr)
+        ns = jnp.asarray(ns_arr)
 
         # n_gal and b_eff from cached dndm + bias, no CAMB call needed
-        nt_np = nc_np + ns_np
-        n_gal = float(np.trapezoid(dndm_np * nt_np, m_np))
+        nt = nc + ns
+        n_gal = float(jnp.trapezoid(dndm * nt, m))
 
         # Assembly bias correction (Hearin+2016 decorated HOD kernel):
         # A_cen/A_sat modify b_eff via (b-1)/b kernel matching Lange25HODModel._integrate().
@@ -840,14 +936,14 @@ class FullHaloModelPrediction:
         A_cen_pk = float(hod_params.get("A_cen", 0.0))
         A_sat_pk = float(hod_params.get("A_sat", 0.0))
         if A_cen_pk != 0.0 or A_sat_pk != 0.0:
-            gamma_pk = (bias_np - 1.0) / np.where(bias_np > 0.5, bias_np, 0.5)
-            b_nc_pk  = bias_np * (1.0 + A_cen_pk * gamma_pk)
-            b_ns_pk  = bias_np * (1.0 + A_sat_pk * gamma_pk)
+            gamma_pk = (bias - 1.0) / jnp.where(bias > 0.5, bias, 0.5)
+            b_nc_pk  = bias * (1.0 + A_cen_pk * gamma_pk)
+            b_ns_pk  = bias * (1.0 + A_sat_pk * gamma_pk)
             b_eff = float(
-                np.trapezoid(dndm_np * (nc_np * b_nc_pk + ns_np * b_ns_pk), m_np) / n_gal
+                jnp.trapezoid(dndm * (nc * b_nc_pk + ns * b_ns_pk), m) / n_gal
             )
         else:
-            b_eff = float(np.trapezoid(dndm_np * nt_np * bias_np, m_np) / n_gal)
+            b_eff = float(jnp.trapezoid(dndm * nt * bias, m) / n_gal)
 
         # Off-centering: H_c(k,M) = N_c × [(1-p_off) + p_off × exp(-k² σ_off²/2)]
         # Two conventions supported:
@@ -859,35 +955,35 @@ class FullHaloModelPrediction:
 
         if p_off > 0.0 and R_off > 0.0:
             # More+2015 Eq. 9: mass-dependent width R_off × r_s(M)
-            r_s_m = sc["r_delta"] / sc["c_np"]                      # (NM,)
-            W_off = np.exp(
-                -k_np[:, None]**2 * (R_off * r_s_m[None, :])**2 / 2.0
+            r_s_m = jnp.asarray(sc["r_delta"] / sc["c_np"])         # (NM,)
+            W_off = jnp.exp(
+                -k[:, None]**2 * (R_off * r_s_m[None, :])**2 / 2.0
             )                                                         # (Nk, NM)
-            nc_eff = nc_np[None, :] * ((1.0 - p_off) + p_off * W_off)  # (Nk, NM)
+            nc_eff = nc[None, :] * ((1.0 - p_off) + p_off * W_off)   # (Nk, NM)
         elif p_off > 0.0 and sigma_off > 0.0:
             # Legacy fixed-width (Johnston+2007)
-            W_off  = np.exp(-k_np**2 * sigma_off**2 / 2.0)          # (Nk,)
-            nc_eff = nc_np[None, :] * ((1.0 - p_off) + p_off * W_off[:, None])  # (Nk, NM)
+            W_off  = jnp.exp(-k**2 * sigma_off**2 / 2.0)            # (Nk,)
+            nc_eff = nc[None, :] * ((1.0 - p_off) + p_off * W_off[:, None])  # (Nk, NM)
         else:
-            nc_eff = nc_np[None, :]                                  # (1, NM) — no off-centering
+            nc_eff = nc[None, :]                                     # (1, NM) — no off-centering
 
         # 1-halo galaxy-galaxy (More+2015 arXiv:1211.6211 Eq. 9, Poisson satellites)
         # uk_sat: satellite spatial FT (may differ from DM profile via Extensions A/B/C)
-        integrand_pgg = dndm_np[None, :] * (
-            ns_np[None, :]**2 * uk_sat**2
-            + 2.0 * nc_eff * ns_np[None, :] * uk_sat
+        integrand_pgg = dndm[None, :] * (
+            ns[None, :]**2 * uk_sat**2
+            + 2.0 * nc_eff * ns[None, :] * uk_sat
         )
-        P_gg_1h = np.trapezoid(integrand_pgg, m_np, axis=1) / n_gal**2   # (Nk,)
+        P_gg_1h = jnp.trapezoid(integrand_pgg, m, axis=1) / n_gal**2   # (Nk,)
 
         # 1-halo galaxy-matter (More+2015 arXiv:1211.6211 Eq. 13)
-        m_over_rho = m_np / rho_m                                # (NM,)
+        m_over_rho = m / rho_m                                # (NM,)
 
         log_pgm_cdm = None
         log_pgm_b   = None
         P_gm_cdm    = None
         P_gm_b      = None
 
-        pk_2h = sc["pk_nl"] if self._nl_2halo else pk_lin
+        pk_2h = jnp.asarray(sc["pk_nl"]) if self._nl_2halo else pk_lin
 
         if self._baryon_fraction is not None and baryon_params is not None:
             # Gas profile: NFW with mass-dependent concentration ratio η(M).
@@ -907,40 +1003,40 @@ class FullHaloModelPrediction:
 
             # Always NFW for the gas component (Mead+2015 arXiv:1611.08606 §2.3)
             from hod_mod.core.halo_profiles import nfw_uk
-            uk_gas = np.asarray(nfw_uk(k_np, r_s_gas_np, c_gas_np))    # (Nk, NM)
+            uk_gas = jnp.asarray(nfw_uk(k_np, r_s_gas_np, c_gas_np))    # (Nk, NM)
 
             # Mass-dependent baryon fraction f_b(M) (FLAMINGO arXiv:2510.25419;
             # closure-radius model arXiv:2603.13095)
             m_grid = self._hod._m_grid
-            fb_np = np.asarray(
-                self._baryon_fraction(m_grid, theta_cosmo, baryon_params), dtype=float
+            fb = jnp.asarray(
+                self._baryon_fraction(m_grid, theta_cosmo, baryon_params)
             )                                                             # (NM,)
 
             # Galaxy profile weight: N_c_eff + N_s × ũ_sat
-            nt_arr = nc_eff + ns_np[None, :] * uk_sat                   # (Nk, NM)
+            nt_arr = nc_eff + ns[None, :] * uk_sat                      # (Nk, NM)
 
             # CDM contribution: (1 - f_b) × ũ_DM for the matter Fourier transform
             integrand_pgm_cdm = (
-                dndm_np[None, :] * nt_arr * m_over_rho[None, :]
-                * uk * (1.0 - fb_np[None, :])
+                dndm[None, :] * nt_arr * m_over_rho[None, :]
+                * uk * (1.0 - fb[None, :])
             )
             # Gas contribution: f_b × ũ_gas for the matter Fourier transform
             integrand_pgm_b = (
-                dndm_np[None, :] * nt_arr * m_over_rho[None, :]
-                * uk_gas * fb_np[None, :]
+                dndm[None, :] * nt_arr * m_over_rho[None, :]
+                * uk_gas * fb[None, :]
             )
-            P_gm_cdm_1h = np.trapezoid(integrand_pgm_cdm, m_np, axis=1) / n_gal
-            P_gm_b_1h   = np.trapezoid(integrand_pgm_b,   m_np, axis=1) / n_gal
+            P_gm_cdm_1h = jnp.trapezoid(integrand_pgm_cdm, m, axis=1) / n_gal
+            P_gm_b_1h   = jnp.trapezoid(integrand_pgm_b,   m, axis=1) / n_gal
             P_gm_1h     = P_gm_cdm_1h + P_gm_b_1h
 
             P_gm_cdm = P_gm_cdm_1h + b_eff * pk_2h   # updated below if BNL active
             P_gm_b   = P_gm_b_1h
         else:
             # Standard 1-halo galaxy-matter without baryon split
-            integrand_pgm = dndm_np[None, :] * (
-                nc_eff + ns_np[None, :] * uk_sat
+            integrand_pgm = dndm[None, :] * (
+                nc_eff + ns[None, :] * uk_sat
             ) * m_over_rho[None, :] * uk
-            P_gm_1h = np.trapezoid(integrand_pgm, m_np, axis=1) / n_gal
+            P_gm_1h = jnp.trapezoid(integrand_pgm, m, axis=1) / n_gal
 
         P_gg_2h = b_eff**2 * pk_2h
         P_gm_2h = b_eff * pk_2h
@@ -949,13 +1045,13 @@ class FullHaloModelPrediction:
         if self._bnl_model is not None:
             bnl_matrix = sc["bnl_matrix"]   # (Nk, NM, NM), pre-computed per cosmology
             # Trapezoid integration weights for the mass grid
-            _dm = np.zeros_like(m_np)
-            _dm[:-1] += np.diff(m_np) / 2.0
-            _dm[1:]  += np.diff(m_np) / 2.0
+            dm_half = jnp.diff(m) / 2.0
+            _dm = (jnp.concatenate([dm_half, jnp.zeros(1)])
+                   + jnp.concatenate([jnp.zeros(1), dm_half]))
             # Galaxy-side weight: dndm * N_tot * b / n_gal * dm
-            w_g = dndm_np * nt_np * bias_np / n_gal * _dm        # (NM,)
+            w_g = dndm * nt * bias / n_gal * _dm                 # (NM,)
             # Matter-side weight: dndm * M * b / rho_m * dm
-            w_m = dndm_np * m_np * bias_np / rho_m * _dm         # (NM,)
+            w_m = dndm * m * bias / rho_m * _dm                  # (NM,)
             delta_gg = self._bnl_model.correction_2h_gg(
                 k_np, sc["nu_np"], w_g, uk, beta_matrix=bnl_matrix
             )
@@ -968,19 +1064,19 @@ class FullHaloModelPrediction:
                 P_gm_cdm = P_gm_cdm + pk_2h * delta_gm
 
         if P_gm_cdm is not None:
-            log_pgm_cdm = jnp.log(jnp.maximum(jnp.asarray(P_gm_cdm), 1e-20))
-            log_pgm_b   = jnp.log(jnp.maximum(jnp.asarray(P_gm_b),   1e-20))
+            log_pgm_cdm = safe_log(P_gm_cdm, 1e-20)
+            log_pgm_b   = safe_log(P_gm_b,   1e-20)
 
         P_gg = P_gg_1h + P_gg_2h
         P_gm = P_gm_1h + P_gm_2h
 
         log_k       = jnp.log(self._k)
-        log_pgg     = jnp.log(jnp.maximum(jnp.asarray(P_gg),     1e-20))
-        log_pgg_1h  = jnp.log(jnp.maximum(jnp.asarray(P_gg_1h),  1e-20))
-        log_pgg_2h  = jnp.log(jnp.maximum(jnp.asarray(P_gg_2h),  1e-20))
-        log_pgm     = jnp.log(jnp.maximum(jnp.asarray(P_gm),     1e-20))
-        log_pgm_1h  = jnp.log(jnp.maximum(jnp.asarray(P_gm_1h),  1e-20))
-        log_pgm_2h  = jnp.log(jnp.maximum(jnp.asarray(P_gm_2h),  1e-20))
+        log_pgg     = safe_log(P_gg,     1e-20)
+        log_pgg_1h  = safe_log(P_gg_1h,  1e-20)
+        log_pgg_2h  = safe_log(P_gg_2h,  1e-20)
+        log_pgm     = safe_log(P_gm,     1e-20)
+        log_pgm_1h  = safe_log(P_gm_1h,  1e-20)
+        log_pgm_2h  = safe_log(P_gm_2h,  1e-20)
         return {
             "log_k":       log_k,
             "log_pgg":     log_pgg,
@@ -989,6 +1085,154 @@ class FullHaloModelPrediction:
             "log_pgm":     log_pgm,
             "log_pgm_1h":  log_pgm_1h,
             "log_pgm_2h":  log_pgm_2h,
+            "log_pgm_cdm": log_pgm_cdm,
+            "log_pgm_b":   log_pgm_b,
+            "n_gal":       n_gal,
+            "b_eff":       b_eff,
+        }
+
+    # ------------------------------------------------------------------
+    # Differentiable EH98 backend (pk_backend='eh98_jax')
+    # ------------------------------------------------------------------
+
+    def _pk_tables_full_jax(
+        self,
+        z: float,
+        theta_cosmo: dict,
+        hod_params: dict,
+        baryon_params: dict = None,
+    ) -> dict:
+        """Traceable twin of :meth:`_pk_tables_full` (``pk_backend='eh98_jax'``).
+
+        Builds the P_gg/P_gm log-tables entirely in jnp — EH98 linear P(k)
+        (no CAMB), the analytic JAX HMF, ``nfw_uk_jax`` and **traced**
+        ``hod_params`` — with no static cache and no ``jax.disable_jit``.  The
+        downstream Hankel transforms in :meth:`wp` / :meth:`delta_sigma` /
+        :meth:`xi_3d` are already pure JAX, so the whole observable becomes
+        ``jax.jit`` / ``jax.jacfwd`` / ``jax.grad``-able end-to-end w.r.t. the
+        cosmology (σ8, Ω_m, …) and HOD parameters.
+
+        The standard 1h+2h assembly is reproduced branchlessly, plus the smooth
+        extensions ``A_cen``/``A_sat`` (assembly bias), off-centering
+        (``p_off`` with ``R_off`` or ``sigma_off``) and ``b_sat_conc`` — each
+        an identity at its default, and each carrying gradients as a traced
+        multiplier.  Only the off-centering *width convention* branches, on
+        static dict-key membership.  Unsupported physics (baryon split, BNL,
+        non-linear 2-halo, ``f_cut``/``gamma_inner`` satellite cutoffs) is
+        rejected rather than silently ignored.
+        """
+        from hod_mod.core.halo_profiles import (
+            mdef_delta_rho, nfw_uk_jax, einasto_uk, satellite_nfw_uk)
+
+        m       = self._hod._m_grid                       # (NM,)
+        log10m  = self._hod._log10m_grid
+        k       = self._k                                 # (Nk,)
+        hmf     = self._hod._hmf
+
+        # Traced, cosmology-dependent tables — recomputed every call (jit caches).
+        dndm    = hmf.dndm(m, z, theta_cosmo)             # (NM,)
+        bias    = self._hod._bias(m, z, theta_cosmo)      # (NM,)
+        rho_m   = _rho_m(theta_cosmo)
+        c       = self._halo_profile.concentration(m, z, theta_cosmo)   # (NM,)
+        delta, rho_ref = mdef_delta_rho(self._halo_profile.mdef, z, theta_cosmo)
+        r_delta = (3.0 * m / (4.0 * jnp.pi * delta * rho_ref)) ** (1.0 / 3.0)
+
+        # Matter profile FT — NFW or Einasto (both jnp; Wave-3 lifted einasto).
+        def _prof_uk(r_s_arr, c_arr):
+            if self._profile == "einasto":
+                return einasto_uk(k, r_s_arr, c_arr, alpha=self._einasto_alpha)
+            return nfw_uk_jax(k, r_s_arr, c_arr)
+
+        uk      = _prof_uk(r_delta / c, c)                # (Nk, NM)
+        pk_lin  = self._pk_lin.pk_linear(k, z, theta_cosmo)   # (Nk,)
+
+        # Satellite profile FT.  Inner-cutoff extensions (f_cut/gamma_inner,
+        # Wave-3 traceable via satellite_nfw_uk's jnp.where) route through the
+        # NFW satellite FT; otherwise the concentration-bias b_sat_conc (traced,
+        # == uk at 1.0) scales the standard profile.
+        if "f_cut" in hod_params or "gamma_inner" in hod_params:
+            uk_sat = satellite_nfw_uk(
+                k, r_delta / c, c, r_delta,
+                b_sat_conc=hod_params.get("b_sat_conc", 1.0),
+                f_cut=hod_params.get("f_cut", 0.0),
+                gamma=hod_params.get("gamma_inner", 0.0))
+        else:
+            c_sat  = hod_params.get("b_sat_conc", 1.0) * c
+            uk_sat = _prof_uk(r_delta / c_sat, c_sat)     # (Nk, NM)
+
+        # Occupation from traced hod_params (jitted kernels accept tracers).
+        nc, ns  = self._hod.nc_ns(log10m, hod_params)
+        nt      = nc + ns
+        n_gal   = jnp.trapezoid(dndm * nt, m)
+
+        # Assembly bias (A_cen/A_sat; identity at 0) — Hearin+2016 (b−1)/b kernel.
+        A_cen   = hod_params.get("A_cen", 0.0)
+        A_sat   = hod_params.get("A_sat", 0.0)
+        gam     = (bias - 1.0) / jnp.where(bias > 0.5, bias, 0.5)
+        b_eff   = jnp.trapezoid(
+            dndm * (nc * bias * (1.0 + A_cen * gam)
+                    + ns * bias * (1.0 + A_sat * gam)), m) / n_gal
+
+        # Off-centering — width convention chosen by static key membership.
+        p_off = hod_params.get("p_off", hod_params.get("f_off", 0.0))
+        if "R_off" in hod_params:                          # More+2015 Eq. 9
+            r_s_m  = r_delta / c
+            W_off  = jnp.exp(-k[:, None]**2
+                             * (hod_params["R_off"] * r_s_m[None, :])**2 / 2.0)
+            nc_eff = nc[None, :] * ((1.0 - p_off) + p_off * W_off)
+        elif "sigma_off" in hod_params:                    # Johnston+2007 fixed
+            W_off  = jnp.exp(-k**2 * hod_params["sigma_off"]**2 / 2.0)
+            nc_eff = nc[None, :] * ((1.0 - p_off) + p_off * W_off[:, None])
+        else:
+            nc_eff = nc[None, :]
+
+        # 1-halo galaxy-galaxy (More+2015 Eq. 9, Poisson satellites).
+        P_gg_1h = jnp.trapezoid(
+            dndm[None, :] * (ns[None, :]**2 * uk_sat**2
+                             + 2.0 * nc_eff * ns[None, :] * uk_sat),
+            m, axis=1) / n_gal**2
+        m_over_rho = m / rho_m
+        nt_arr = nc_eff + ns[None, :] * uk_sat            # (Nk, NM) galaxy weight
+
+        # 1-halo galaxy-matter, optionally split into CDM + gas (baryon feedback,
+        # Wave-3): gas uses a reduced NFW concentration c·η(M) (Mead+2015) and the
+        # pure-jnp f_b(M).  All of eta_min/M_eta/beta_eta and f_b are traced.
+        _split = (self._baryon_fraction is not None and baryon_params is not None)
+        if _split:
+            eta_min  = 10.0 ** baryon_params.get("log10_eta_min", np.log10(0.6))
+            M_eta    = 10.0 ** baryon_params.get("log10_M_eta",   13.0)
+            beta_eta = baryon_params.get("beta_eta", 1.5)
+            eta_M    = 1.0 - (1.0 - eta_min) / (1.0 + (m / M_eta) ** beta_eta)
+            c_gas    = c * eta_M
+            uk_gas   = nfw_uk_jax(k, r_delta / c_gas, c_gas)      # gas always NFW
+            fb       = self._baryon_fraction(m, theta_cosmo, baryon_params)  # (NM,)
+            P_gm_cdm_1h = jnp.trapezoid(
+                dndm[None, :] * nt_arr * m_over_rho[None, :] * uk * (1.0 - fb[None, :]),
+                m, axis=1) / n_gal
+            P_gm_b_1h = jnp.trapezoid(
+                dndm[None, :] * nt_arr * m_over_rho[None, :] * uk_gas * fb[None, :],
+                m, axis=1) / n_gal
+            P_gm_1h = P_gm_cdm_1h + P_gm_b_1h
+        else:
+            P_gm_1h = jnp.trapezoid(
+                dndm[None, :] * nt_arr * m_over_rho[None, :] * uk, m, axis=1) / n_gal
+
+        # 2-halo (linear; More+2015 §3.1) + totals.
+        P_gg_2h = b_eff**2 * pk_lin
+        P_gm_2h = b_eff * pk_lin
+        P_gg    = P_gg_1h + P_gg_2h
+        P_gm    = P_gm_1h + P_gm_2h
+        log_pgm_cdm = safe_log(P_gm_cdm_1h + b_eff * pk_lin, 1e-20) if _split else None
+        log_pgm_b   = safe_log(P_gm_b_1h, 1e-20) if _split else None
+
+        return {
+            "log_k":       jnp.log(k),
+            "log_pgg":     safe_log(P_gg,    1e-20),
+            "log_pgg_1h":  safe_log(P_gg_1h, 1e-20),
+            "log_pgg_2h":  safe_log(P_gg_2h, 1e-20),
+            "log_pgm":     safe_log(P_gm,    1e-20),
+            "log_pgm_1h":  safe_log(P_gm_1h, 1e-20),
+            "log_pgm_2h":  safe_log(P_gm_2h, 1e-20),
             "log_pgm_cdm": log_pgm_cdm,
             "log_pgm_b":   log_pgm_b,
             "n_gal":       n_gal,
@@ -1354,9 +1598,9 @@ class FullHaloModelPrediction:
         with jax.disable_jit():
             nc_arr, ns_arr = self._hod.nc_ns(self._hod._log10m_grid, hod_params)
         return float(
-            np.trapezoid(
-                sc["dndm_np"] * (np.asarray(nc_arr) + np.asarray(ns_arr)),
-                sc["m_np"],
+            jnp.trapezoid(
+                jnp.asarray(sc["dndm_np"]) * (jnp.asarray(nc_arr) + jnp.asarray(ns_arr)),
+                jnp.asarray(sc["m_np"]),
             )
         )
 
@@ -1572,6 +1816,7 @@ _HOD_MODEL_MAP = {
     "zacharegkas25": "Zacharegkas25HODModel",
     "leauthaud12":  "Leauthaud12HODModel",
     "clf_cacciato09": "CLFModel",
+    "clf_cacciato13": "CLFModel13",
 }
 
 
@@ -1773,3 +2018,83 @@ class NonLinearHaloModelPrediction:
         hod_params : HOD/CLF parameter dict
         """
         return self._pred.xi_3d(r, z, theta_cosmo, hod_params)
+
+
+# ---------------------------------------------------------------------------
+# Factory: differentiable EH98 production predictor (pk_backend='eh98_jax')
+# ---------------------------------------------------------------------------
+
+def make_differentiable_prediction(
+    hod_model: str = "more15",
+    cm_model: str = "dutton14",
+    mdef: str = "200c",
+    hmf_model: str = "tinker08",
+    camb_ratio: dict = None,
+    k_min: float = 1e-4,
+    k_max: float = 200.0,
+    n_k: int = 1024,
+):
+    """Build a jit/grad-able :class:`FullHaloModelPrediction` on the EH98 backend.
+
+    Wires an :class:`~hod_mod.forecast.pk_eisenstein_hu.EisensteinHu98PkLinear`
+    linear P(k), an analytic JAX HMF, and a :class:`~hod_mod.core.concentration.
+    ConcentrationModel` so that ``wp`` / ``delta_sigma`` / ``xi_3d`` are
+    differentiable end-to-end w.r.t. cosmology and HOD parameters — no CAMB.
+    CAMB stays the default of :class:`FullHaloModelPrediction`; this is the
+    opt-in differentiable path (``pk_backend='eh98_jax'``).
+
+    Example
+    -------
+    >>> import jax
+    >>> pred = make_differentiable_prediction("more15")
+    >>> theta = {"Omega_m": 0.31, "Omega_b": 0.048, "h": 0.68,
+    ...          "n_s": 0.96, "sigma8": 0.81}
+    >>> hod = pred.default_hod_params() if False else \\
+    ...       __import__("hod_mod.connection.hod", fromlist=["MoreHODModel"]) \\
+    ...           .MoreHODModel.default_params()
+    >>> g = jax.jacfwd(lambda s8: pred.wp(
+    ...         jnp.array([1.0]), 100.0, 0.2, dict(theta, sigma8=s8), hod))(0.81)
+
+    Parameters
+    ----------
+    hod_model : str
+        Any key of :data:`_HOD_MODEL_MAP` (e.g. ``'more15'``, ``'zheng07'``,
+        ``'zumand15'``).  The occupation kernels are already pure-JAX.
+    cm_model : str
+        Concentration–mass relation: ``'duffy08'``, ``'dutton14'`` or
+        ``'klypin16'`` (the traceable analytic models).
+    mdef : str
+        Spherical-overdensity mass definition: ``'200m'``, ``'200c'`` or
+        ``'vir'``.
+    hmf_model : str
+        Analytic multiplicity function for :func:`~hod_mod.core.
+        halo_mass_function.make_hmf` (default ``'tinker08'``).
+    camb_ratio : dict, optional
+        Linearized CAMB/EH98 shape-ratio table
+        (:func:`hod_mod.forecast.pk_camb_ratio.load`) making the spectrum and
+        its first derivatives CAMB-accurate near the fiducial.
+    k_min, k_max, n_k : float, float, int
+        Wavenumber tabulation passed to :class:`FullHaloModelPrediction`.
+
+    Returns
+    -------
+    FullHaloModelPrediction with ``pk_backend='eh98_jax'``.
+
+    Notes
+    -----
+    **Cosmology-dict convention.**  The EH98 backend is parameterised by
+    **σ8** — keys ``Omega_m``, ``Omega_b``, ``h``, ``n_s``, ``sigma8`` (plus
+    optional ``sum_mnu``, ``w0``, ``wa``) — *not* the ``ln10^{10}A_s`` used by
+    the CAMB backend.  For gradient work run under ``JAX_ENABLE_X64=1``.
+    """
+    from hod_mod.forecast.pk_eisenstein_hu import EisensteinHu98PkLinear
+    from hod_mod.core.halo_mass_function import make_hmf
+    from hod_mod.core.concentration import ConcentrationModel
+
+    eh  = EisensteinHu98PkLinear(camb_ratio=camb_ratio)
+    hmf = make_hmf(hmf_model, pk_func=eh.as_hmf_pk_func())
+    cm  = ConcentrationModel(cm_model, mdef=mdef)
+    hod = NonLinearHaloModelPrediction._build_hod(hod_model, hmf)
+    return FullHaloModelPrediction(
+        eh, hod, cm, profile="nfw", pk_backend="eh98_jax",
+        k_min=k_min, k_max=k_max, n_k=n_k)

@@ -396,3 +396,70 @@ class TestBASILISKCLFModel:
         n_lo, _, _ = basilisk_clf._integrate(0.1, _THETA, p_lo)
         n_hi, _, _ = basilisk_clf._integrate(0.1, _THETA, p_hi)
         assert float(n_hi) < float(n_lo), "Higher threshold must give fewer galaxies"
+
+
+# ---------------------------------------------------------------------------
+# CLFModel13 class (Cacciato+2013 quadratic satellite normalization)
+# ---------------------------------------------------------------------------
+
+class TestCLFModel13:
+    @pytest.fixture(scope="class")
+    def clf13(self, hmf):
+        from hod_mod.connection.clf import CLFModel13
+        return CLFModel13(hmf, hmf.bias)
+
+    def test_dispatched_by_clustering_key(self, hmf):
+        # clf_cacciato13 is a live key of the production HOD dispatch
+        from hod_mod.connection.clf import CLFModel13
+        from hod_mod.observables.clustering import NonLinearHaloModelPrediction
+        obj = NonLinearHaloModelPrediction._build_hod("clf_cacciato13", hmf)
+        assert isinstance(obj, CLFModel13)
+
+    def test_nc_ns_shapes_and_ranges(self, clf13):
+        from hod_mod.connection.clf import CLFModel13
+        p = CLFModel13.default_params()
+        nc, ns = clf13.nc_ns(_LOG10M, p)
+        assert nc.shape == _LOG10M.shape and ns.shape == _LOG10M.shape
+        assert jnp.all(nc >= 0.0) and jnp.all(nc <= 1.0)
+        assert jnp.all(ns >= 0.0)
+        assert jnp.all(jnp.isfinite(nc)) and jnp.all(jnp.isfinite(ns))
+        # satellites dominate in the highest-mass haloes
+        assert float(ns[-1]) > 1.0
+
+    def test_integrate_finite_and_physical(self, clf13):
+        from hod_mod.connection.clf import CLFModel13
+        p = CLFModel13.default_params()
+        n_gal, b_eff, m_eff = clf13._integrate(0.3, _THETA, p)
+        assert float(n_gal) > 0.0
+        assert 0.5 < float(b_eff) < 5.0
+        assert float(m_eff) > 1e11
+
+    def test_higher_threshold_fewer_galaxies(self, clf13):
+        from hod_mod.connection.clf import CLFModel13
+        p = CLFModel13.default_params()
+        n_lo = float(clf13.galaxy_number_density(0.3, _THETA, dict(p, log10l_lim=9.0)))
+        n_hi = float(clf13.galaxy_number_density(0.3, _THETA, dict(p, log10l_lim=10.5)))
+        assert n_lo > n_hi
+
+    def test_reduces_to_clf09_for_linear_phi_s(self, clf13, hmf):
+        # With b2=0, b1=1 and b0 = log10(b_sat/(sqrt(2pi) sigma_c)), the 2013
+        # quadratic normalization is exactly the 2009 single-parameter form,
+        # so the two models must produce identical occupations.
+        from hod_mod.connection.clf import CLFModel, CLFModel13
+        p09 = CLFModel.default_params()
+        b0 = float(np.log10(p09["b_sat"] / (np.sqrt(2.0 * np.pi) * p09["sigma_c"])))
+        p13 = {k: p09[k] for k in ("log10m1", "log10l0", "alpha_cen", "beta_cen",
+                                   "sigma_c", "alpha_sat", "log10l_lim")}
+        p13.update(b0=b0, b1=1.0, b2=0.0)
+        clf09 = CLFModel(hmf, hmf.bias)
+        nc09, ns09 = clf09.nc_ns(_LOG10M, p09)
+        nc13, ns13 = clf13.nc_ns(_LOG10M, p13)
+        np.testing.assert_allclose(np.asarray(nc13), np.asarray(nc09), rtol=1e-6)
+        np.testing.assert_allclose(np.asarray(ns13), np.asarray(ns09), rtol=1e-5)
+
+    def test_b2_curvature_changes_satellites(self, clf13):
+        from hod_mod.connection.clf import CLFModel13
+        p = CLFModel13.default_params()
+        _, ns_quad = clf13.nc_ns(_LOG10M, p)
+        _, ns_flat = clf13.nc_ns(_LOG10M, dict(p, b2=0.0))
+        assert not jnp.allclose(ns_quad, ns_flat)

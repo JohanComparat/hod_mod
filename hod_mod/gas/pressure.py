@@ -1,5 +1,6 @@
 """Electron-pressure profiles (Arnaud+2010, DPM) for the tSZ Compton-y signal."""
 import numpy as np
+import jax.numpy as jnp
 from .conversions import _MPC_CM, _RHO_CRIT0, _SIGMA_T_OVER_ME_C2, _gnfw_f_params, _profile_uk_gl, m200_to_m500c
 
 
@@ -54,25 +55,25 @@ class PressureProfileA10:
 
     def _p3d(
         self,
-        r_over_r500: np.ndarray,
-        m500c: float,
+        r_over_r500: jnp.ndarray,
+        m500c,
         z: float,
         h: float,
         omega_m: float,
-    ) -> np.ndarray:
+    ) -> jnp.ndarray:
         """P_e(r/R₅₀₀c | M₅₀₀c, z) in keV cm⁻³ (Arnaud+2010 Eq. 11).
 
         Parameters
         ----------
-        r_over_r500 : dimensionless radii x = r/R₅₀₀c
-        m500c : M₅₀₀c [Msun/h]
+        r_over_r500 : dimensionless radii x = r/R₅₀₀c; broadcasts against m500c
+        m500c : M₅₀₀c [Msun/h], scalar or array broadcastable against x
         z, h, omega_m : redshift, Hubble parameter, matter fraction
         """
         h70  = h / 0.7
-        ez   = np.sqrt(omega_m * (1.0 + z)**3 + (1.0 - omega_m))
-        x    = r_over_r500
+        ez   = jnp.sqrt(omega_m * (1.0 + z)**3 + (1.0 - omega_m))
+        x    = jnp.asarray(r_over_r500)
         pnorm = (1.65e-3 * h70**2 * ez**(8.0 / 3.0)
-                 * (m500c / (3.0e14 * h70))**(2.0 / 3.0 + self._alpha_p))
+                 * (jnp.asarray(m500c) / (3.0e14 * h70))**(2.0 / 3.0 + self._alpha_p))
         shape = (
             self._P0
             / ((self._c500 * x)**self._gamma
@@ -127,14 +128,16 @@ class PressureProfileA10:
         -------
         uk : (Nk, NM) [(Mpc/h)²]
         """
-        h       = float(theta_cosmo["h"])
-        omega_m = float(theta_cosmo["Omega_m"])
+        # Kept traceable (jnp, no float()) so the tSZ cross-power is
+        # differentiable w.r.t. cosmology on the eh98 backend; concrete inputs
+        # (CAMB) pass through jnp.asarray unchanged.
+        h       = theta_cosmo["h"]
+        omega_m = theta_cosmo["Omega_m"]
 
-        m200 = np.asarray(m200_arr, dtype=float)
-        r200 = np.asarray(r200_arr, dtype=float)
-        c200 = np.asarray(c200_arr, dtype=float)
-        k    = np.asarray(k_arr,    dtype=float)
-        NM   = len(m200)
+        m200 = jnp.asarray(m200_arr, dtype=float)
+        r200 = jnp.asarray(r200_arr, dtype=float)
+        c200 = jnp.asarray(c200_arr, dtype=float)
+        k    = jnp.asarray(k_arr,    dtype=float)
 
         # Comoving critical density at z — required for M₂₀₀→M₅₀₀c conversion
         ez2          = omega_m * (1.0 + z)**3 + (1.0 - omega_m)
@@ -143,22 +146,19 @@ class PressureProfileA10:
         # M₂₀₀ → M₅₀₀c, R₅₀₀c (NFW bisection, ~0.02 s for NM=200)
         m500c, r500c = m200_to_m500c(m200, c200, r200, rho_crit_z)
 
-        # For each halo, build a closure capturing its M₅₀₀c and R₅₀₀c
-        def _integrand(r_nodes: np.ndarray) -> np.ndarray:
-            """P_e(r, M) for all halos on the quadrature grid.
+        def _integrand(r_nodes) -> jnp.ndarray:
+            """P_e(r, M) for all halos on the quadrature grid, broadcast
+            over the mass axis (no per-halo loop).
 
             Args:
                 r_nodes : (NM, n_gl) [Mpc/h]
             Returns:
                 P_e : (NM, n_gl) [keV/cm³]
             """
-            out = np.empty_like(r_nodes)
-            for i in range(NM):
-                out[i] = self._p3d(
-                    r_nodes[i] / r500c[i],
-                    m500c[i], z, h, omega_m,
-                )
-            return out
+            return self._p3d(
+                jnp.asarray(r_nodes) / r500c[:, None],
+                m500c[:, None], z, h, omega_m,
+            )
 
         r_max = self._r_max_factor * r500c   # (NM,) [Mpc/h]
         raw   = _profile_uk_gl(k, r_max, _integrand, n_gl=self._n_gl)   # (Nk, NM) [keV/cm³ × (Mpc/h)³]
@@ -263,30 +263,30 @@ class PressureProfileDPM:
 
     def _pressure_3d(
         self,
-        r: np.ndarray,
-        m200: float,
-        r200: float,
+        r: jnp.ndarray,
+        m200,
+        r200,
         z: float,
         omega_m: float,
-    ) -> np.ndarray:
+    ) -> jnp.ndarray:
         """P(r | M₂₀₀, z) in the same units as P_0.3 (keV cm⁻³).
 
         DPM Eq. 2 with mass-dependent outer slope (Eq. 5).
 
         Parameters
         ----------
-        r      : radii [Mpc/h]
-        m200   : M₂₀₀ [Msun/h]
-        r200   : R₂₀₀ [Mpc/h]
+        r      : radii [Mpc/h]; broadcasts against m200/r200
+        m200   : M₂₀₀ [Msun/h], scalar or array broadcastable against r
+        r200   : R₂₀₀ [Mpc/h], scalar or array broadcastable against r
         z      : redshift
         omega_m: matter fraction Ω_m
         """
-        r_s  = r200 / self._C_DPM
-        x    = np.asarray(r, dtype=float) / r_s
-        M12  = m200 / 1.0e12                          # in h-units
-        ez   = np.sqrt(omega_m * (1.0 + z) ** 3 + (1.0 - omega_m))
+        r_s  = jnp.asarray(r200) / self._C_DPM
+        x    = jnp.asarray(r) / r_s
+        M12  = jnp.asarray(m200) / 1.0e12             # in h-units
+        ez   = jnp.sqrt(omega_m * (1.0 + z) ** 3 + (1.0 - omega_m))
         # Mass-dependent outer slope (Eq. 5)
-        alpha_out_eff = self._alpha_out_12 + self._alpha_out_var * np.log10(np.maximum(M12, 1e-10))
+        alpha_out_eff = self._alpha_out_12 + self._alpha_out_var * jnp.log10(jnp.maximum(M12, 1e-10))
         f = _gnfw_f_params(x, self._alpha_in, self._alpha_tr, alpha_out_eff)
         return self._P0 * f * ez ** self._gamma * M12 ** self._beta
 
@@ -321,13 +321,11 @@ class PressureProfileDPM:
         m200    = np.asarray(m200_arr, dtype=float)
         r200    = np.asarray(r200_arr, dtype=float)
         k       = np.asarray(k_arr,    dtype=float)
-        NM      = len(m200)
 
-        def _integrand(r_nodes: np.ndarray) -> np.ndarray:
-            out = np.empty_like(r_nodes)
-            for i in range(NM):
-                out[i] = self._pressure_3d(r_nodes[i], m200[i], r200[i], z, omega_m)
-            return out
+        def _integrand(r_nodes) -> jnp.ndarray:
+            # broadcast over the mass axis (no per-halo loop)
+            return self._pressure_3d(
+                jnp.asarray(r_nodes), m200[:, None], r200[:, None], z, omega_m)
 
         r_max = self._r_max_factor * r200
         raw   = _profile_uk_gl(k, r_max, _integrand, n_gl=self._n_gl)  # (Nk, NM)

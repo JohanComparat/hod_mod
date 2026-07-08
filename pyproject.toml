@@ -31,7 +31,10 @@ hod-mod = "hod_mod.cli.__main__:main"
 
 [project.optional-dependencies]
 fitting   = ["emcee", "pyyaml", "pandas"]
-dev       = ["pytest", "pytest-cov", "sphinx", "sphinx-rtd-theme", "numpydoc"]
+# blackjax powers the gradient-based NUTS sampler in fitting/jax_inference.py;
+# optional (run_nuts raises a clear ImportError if absent).
+inference = ["blackjax"]
+dev       = ["pytest", "pytest-cov", "sphinx", "sphinx-rtd-theme", "numpydoc", "blackjax"]
 # Optional emulator backends are git-only (not on PyPI). They are NOT declared as
 # extras here because PyPI forbids direct-URL dependencies in uploaded metadata.
 # Install them manually when you need make_hmf("csst") / make_hmf("aemulusnu"):
@@ -55,6 +58,7 @@ include = ["hod_mod*"]
 testpaths = ["tests"]
 markers = [
     "slow: marks tests as slow (build the CAMB static cache / JAX JIT); deselect with -m 'not slow'",
+    "x64: needs JAX_ENABLE_X64=1 (gradient-vs-finite-difference checks); run as a separate pytest process",
 ]
 
 [tool.coverage.run]
@@ -63,6 +67,6 @@ omit = ["*/hod_mod/scripts/*"]
 [tool.coverage.report]
 omit = ["*/hod_mod/scripts/*"]
 # Floor enforced when coverage is reported (CI: `pytest -m "" --cov=hod_mod`).
-# Full suite reaches ~85%; the margin covers environments where the
-# soxs/CEmulator-gated `slow` tests skip. Not applied to plain `pytest`.
-fail_under = 82
+# Full suite measures 86.4% (2026-07); the ~2-point margin covers environments
+# where the soxs/CEmulator-gated `slow` tests skip. Not applied to plain `pytest`.
+fail_under = 84
