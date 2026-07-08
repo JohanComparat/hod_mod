@@ -128,13 +128,16 @@ class PressureProfileA10:
         -------
         uk : (Nk, NM) [(Mpc/h)²]
         """
-        h       = float(theta_cosmo["h"])
-        omega_m = float(theta_cosmo["Omega_m"])
+        # Kept traceable (jnp, no float()) so the tSZ cross-power is
+        # differentiable w.r.t. cosmology on the eh98 backend; concrete inputs
+        # (CAMB) pass through jnp.asarray unchanged.
+        h       = theta_cosmo["h"]
+        omega_m = theta_cosmo["Omega_m"]
 
-        m200 = np.asarray(m200_arr, dtype=float)
-        r200 = np.asarray(r200_arr, dtype=float)
-        c200 = np.asarray(c200_arr, dtype=float)
-        k    = np.asarray(k_arr,    dtype=float)
+        m200 = jnp.asarray(m200_arr, dtype=float)
+        r200 = jnp.asarray(r200_arr, dtype=float)
+        c200 = jnp.asarray(c200_arr, dtype=float)
+        k    = jnp.asarray(k_arr,    dtype=float)
 
         # Comoving critical density at z — required for M₂₀₀→M₅₀₀c conversion
         ez2          = omega_m * (1.0 + z)**3 + (1.0 - omega_m)
