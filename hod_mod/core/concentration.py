@@ -361,14 +361,19 @@ def _neff_eisenstein_hu(m_h: jnp.ndarray, theta: dict,
     k_R = kappa * 2.0 * jnp.pi / R                             # h/Mpc
 
     k_grid = np.logspace(-3, 2, 500)                           # static grid
+    log_k_np = np.log(k_grid)                                  # uniform log spacing
+    dlk = float(log_k_np[1] - log_k_np[0])   # concrete spacing (static grid → jit-safe)
     pk_grid = eisenstein_hu_pk(jnp.asarray(k_grid), theta)
-    log_k = jnp.log(jnp.asarray(k_grid))                       # uniform spacing
+    log_k = jnp.asarray(log_k_np)
     log_pk = jnp.log(jnp.maximum(pk_grid, 1e-30))
-    d_log_pk = jnp.gradient(log_pk, float(log_k[1] - log_k[0]))
+    d_log_pk = jnp.gradient(log_pk, dlk)
     return jnp.interp(jnp.log(k_R), log_k, d_log_pk)
 
 
-@partial(jax.jit, static_argnums=(3, 4, 5))
+# omega_m (arg 3) is dynamic — it is unused in the body (cosmology enters via
+# sigma/n_eff), so keeping it non-static lets a traced Ω_m pass through
+# harmlessly (needed for the differentiable gas-density concentration).
+@partial(jax.jit, static_argnums=(4, 5))
 def c_diemer15(
     m_h: jnp.ndarray,
     sigma: jnp.ndarray,

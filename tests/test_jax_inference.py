@@ -119,3 +119,63 @@ class TestNuts:
         # posterior mean within ~2 sigma of the injected truth
         z = np.abs(out["mean"] - x_true) / np.maximum(out["std"], 1e-6)
         assert np.max(z) < 3.0
+
+
+class TestProductionInference:
+    """Differentiable inference on the PRODUCTION observables (not the surrogate)."""
+
+    def _model(self, which_cross=False):
+        from hod_mod.observables import make_differentiable_prediction
+        from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+        from hod_mod.gas import PressureProfileA10, GasDensityDPM
+        from hod_mod.connection.hod import MoreHODModel
+        from hod_mod.fitting.jax_inference import ProductionMultiProbeModel
+        pred = make_differentiable_prediction("more15")
+        cross = None
+        if which_cross:
+            cross = HaloModelCrossSpectra(
+                pred, pressure_profile=PressureProfileA10(r_max_over_r500c=3.0, n_gl=24),
+                density_profile=GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=24))
+        base_cosmo = {"Omega_m": 0.31, "Omega_b": 0.0493, "h": 0.6736,
+                      "n_s": 0.9649, "sigma8": 0.8111}
+        zg = np.linspace(0.15, 0.25, 3)
+        return ProductionMultiProbeModel(
+            pred, cross=cross, z=0.2,
+            rp_wp=np.logspace(-1, 1.2, 5), rp_ds=np.logspace(-1, 1.2, 5),
+            ell=np.logspace(2, 3.2, 4), z_grid=zg,
+            nz_g=np.exp(-0.5 * ((zg - 0.2) / 0.03) ** 2),
+            base_cosmo=base_cosmo, base_hod=MoreHODModel.default_params(),
+            cosmo_params=["Omega_m", "sigma8"], hod_free=["log10mmin", "alpha"])
+
+    @pytest.mark.x64
+    def test_production_wp_ds_map_recovers(self):
+        if not jax.config.jax_enable_x64:
+            pytest.skip("requires JAX_ENABLE_X64=1")
+        from hod_mod.fitting.jax_inference import (
+            MultiProbeGaussianLikelihood, run_map_jax)
+        prod = self._model(which_cross=False)
+        free = ["Omega_m", "sigma8", "log10mmin", "alpha"]
+        like, x_true = MultiProbeGaussianLikelihood.synthetic_production(
+            prod, ["wp", "ds"], free, rel_err=0.05, seed=1)
+        assert like.free_names == free
+        res = run_map_jax(like, np.asarray(x_true) * np.array([1.04, 0.96, 1.01, 1.03]))
+        assert res["success"]
+        np.testing.assert_allclose(res["x"], x_true, rtol=0.05)
+
+    @pytest.mark.slow
+    @pytest.mark.x64
+    def test_production_full_multiprobe_gradient(self):
+        if not jax.config.jax_enable_x64:
+            pytest.skip("requires JAX_ENABLE_X64=1")
+        import warnings
+        from hod_mod.fitting.jax_inference import MultiProbeGaussianLikelihood
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            prod = self._model(which_cross=True)
+            free = ["Omega_m", "sigma8", "log10mmin", "alpha"]
+            like, x_true = MultiProbeGaussianLikelihood.synthetic_production(
+                prod, ["wp", "ds", "cl_gy", "cl_gX"], free, rel_err=0.05, seed=1)
+            # one jitted value_and_grad over the full production multi-probe vector
+            v, g = jax.jit(jax.value_and_grad(like.neg_logprob))(jnp.asarray(x_true))
+        assert np.isfinite(float(v))
+        assert np.all(np.isfinite(np.asarray(g))) and np.any(np.abs(np.asarray(g)) > 0)
