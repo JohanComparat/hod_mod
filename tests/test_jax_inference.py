@@ -97,15 +97,24 @@ class TestNuts:
         if not jax.config.jax_enable_x64:
             pytest.skip("requires JAX_ENABLE_X64=1")
         pytest.importorskip("blackjax")
+        from hod_mod.forecast.forward_jax import ForwardModel
         from hod_mod.fitting.jax_inference import (
             MultiProbeGaussianLikelihood, run_map_jax, run_nuts)
 
-        fm = _small_model()
+        # Projected + abundance probes for a tractable NUTS run: the Limber
+        # angular spectra (cl_*) inflate the NUTS trajectory compile ~10x, so
+        # sampling over them is impractical (MAP handles them fine — see
+        # TestGradientAndMap on the full 6-probe vector). This still exercises a
+        # genuine multi-probe posterior: clustering + g-g lensing + AGN XLF.
+        fm = ForwardModel(z_eff=0.2, n_k=96, n_m=96, n_gl=32, n_z=3,
+                          rp_wp=np.logspace(-1, 1.3, 6),
+                          rp_ds=np.logspace(-1, 1.3, 6))
+        which = ["wp", "ds", "xlf"]
         like, x_true = MultiProbeGaussianLikelihood.synthetic(
-            fm, _WHICH, _FREE, rel_err=0.05, seed=1)
+            fm, which, _FREE, rel_err=0.05, seed=1)
         res = run_map_jax(like, np.asarray(x_true) * 1.02)
-        out = run_nuts(like, res["x"], n_warmup=150, n_samples=300, seed=0)
-        assert out["samples"].shape == (300, len(_FREE))
+        out = run_nuts(like, res["x"], n_warmup=100, n_samples=200, seed=0)
+        assert out["samples"].shape == (200, len(_FREE))
         assert 0.5 < out["accept_rate"] <= 1.0
         # posterior mean within ~2 sigma of the injected truth
         z = np.abs(out["mean"] - x_true) / np.maximum(out["std"], 1e-6)

@@ -213,6 +213,13 @@ def run_nuts(likelihood, x0, n_warmup=500, n_samples=1000, seed=0,
     gradients — the payoff of the whole JAX port for posterior inference.
     ``blackjax`` is an optional dependency (``pip install blackjax``).
 
+    Performance note: the forecast angular spectra (``cl_gy``/``cl_gX``/``cl_kk``
+    etc.) do a Limber projection over the redshift grid, which unrolls into the
+    NUTS trajectory ``while_loop`` and inflates the compile ~10×.  MAP
+    (:func:`run_map_jax`) handles the full multi-probe vector cheaply; for NUTS
+    prefer projected/abundance observables (``wp``/``ds``/``xlf``/``smf``), a
+    small ``n_z``, or fewer samples when angular spectra are included.
+
     Returns a dict: ``samples`` (n_samples × n_free), ``mean``, ``std``,
     ``params`` (name→mean), ``accept_rate``, ``step_size``.
     """
