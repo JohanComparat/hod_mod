@@ -31,7 +31,10 @@ hod-mod = "hod_mod.cli.__main__:main"
 
 [project.optional-dependencies]
 fitting   = ["emcee", "pyyaml", "pandas"]
-dev       = ["pytest", "pytest-cov", "sphinx", "sphinx-rtd-theme", "numpydoc"]
+# blackjax powers the gradient-based NUTS sampler in fitting/jax_inference.py;
+# optional (run_nuts raises a clear ImportError if absent).
+inference = ["blackjax"]
+dev       = ["pytest", "pytest-cov", "sphinx", "sphinx-rtd-theme", "numpydoc", "blackjax"]
 # Optional emulator backends are git-only (not on PyPI). They are NOT declared as
 # extras here because PyPI forbids direct-URL dependencies in uploaded metadata.
 # Install them manually when you need make_hmf("csst") / make_hmf("aemulusnu"):
