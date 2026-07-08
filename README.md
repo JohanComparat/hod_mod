@@ -14,10 +14,13 @@ predictions and fitting.
 ## Overview
 
 `hod_mod` is a Python 3.11+ package for forward-modelling galaxy clustering (w_p),
-weak gravitational lensing (ΔΣ), and galaxy × gas cross-correlations (tSZ Compton-y,
-soft X-ray) from Halo Occupation Distribution (HOD) and inverse-SHMR (iHOD) models.
-All numerical code is JAX-native, enabling automatic differentiation and JIT
-compilation for efficient MCMC inference.
+weak and strong gravitational lensing (ΔΣ, Einstein radii), and galaxy × gas
+cross-correlations (tSZ Compton-y, soft X-ray) from Halo Occupation Distribution
+(HOD) and inverse-SHMR (iHOD) models. All numerical code is JAX-native, so the
+production forward model is **differentiable end-to-end**: the same observables
+drive gradient-based MAP optimisation and Hamiltonian Monte Carlo (NUTS) — not
+just gradient-free `emcee` — and feed a Fisher-forecast package for Stage-IV
+multi-probe surveys.
 
 ## Install
 
@@ -170,6 +173,43 @@ Benchmark data for [Comparat et al. 2025](https://arxiv.org/abs/2503.19796)
 (galaxy × eROSITA 0.5–2 keV, 7 stellar-mass-selected samples, LS DR10 × eRASS:5)
 is included in `hod_mod/data/benchmarks/xray/`.
 
+## Weak and strong lensing
+
+`hod_mod` predicts weak- and strong-lensing observables from analytic truncated
+halo profiles in **pure JAX** — no colossus / astropy / fftlog dependency. It
+ports the feature set of the [`halo_lensing`](https://github.com/massarin/halo_lensing)
+reference ([Oguri et al. 2026](https://arxiv.org/abs/2512.13954), PASJ 78, 416)
+and adds a strong-lensing block.
+
+**Profile families** (`hod_mod.core.lensing_profiles`, all in comoving h-units):
+
+| Prefix | Profile | Reference |
+|---|---|---|
+| `tnfw_*` | sharply truncated NFW | [Takada & Jain 2003](https://arxiv.org/abs/astro-ph/0209167) |
+| `bmo_*` | Baltz-Marshall-Oguri smoothly truncated NFW | [Baltz et al. 2009](https://arxiv.org/abs/0705.0682) |
+| `hernquist_*` | Hernquist stellar profile | [Hernquist 1990](https://doi.org/10.1086/168845) |
+
+**`ClusterLensingPrediction`** (`hod_mod.observables.lensing`) assembles the
+stacked-cluster model:
+
+| Regime | Method | Observable |
+|---|---|---|
+| Weak | `kappa`, `gamma_t` | convergence κ, tangential shear / ΔΣ (mis-centering + Tinker10 2-halo) |
+| Strong | `einstein_radius` | θ_E (implicit-function-theorem `jax.grad`) |
+| Strong | `magnification`, `tangential_shear`, `radial_critical_radius` | μ, critical curves |
+
+```python
+from hod_mod.observables.lensing import ClusterLensingPrediction
+
+clp     = ClusterLensingPrediction(profile="bmo", cm_relation="duffy08")
+gamma   = clp.gamma_t(rp, m_h=1e14, z=0.3, z_s=1.0, theta_cosmo=theta)  # ΔΣ / shear
+theta_E = clp.einstein_radius(m_h=1e15, z=0.3, z_s=2.0, theta_cosmo=theta)
+```
+
+The full pipeline reproduces the reference fftlog ΔΣ to ~1% max / 0.04% median.
+A worked tour is in `notebooks/halo_lensing.ipynb`; see
+[docs/lensing.rst](docs/lensing.rst) for the profile math and validation.
+
 ## Quick start — clustering and lensing
 
 ```python
@@ -215,6 +255,79 @@ chain   = sampler.get_chain(flat=True)  # shape (n_steps * n_walkers, n_free)
 
 The sample data file `data/more2015_boss_cmass/wp_cmass_z052.csv` is included in
 the repository (More+2015, arXiv:1407.1856, Figure 2).
+
+## Differentiable multi-probe inference
+
+Because the forward model is JAX-differentiable end-to-end, you can fit with the
+JAX gradient instead of gradient-free Powell / `emcee`:
+`hod_mod.fitting.jax_inference` wraps a `MultiProbeGaussianLikelihood` for
+gradient MAP (`run_map_jax`, scipy L-BFGS-B driven by the JAX gradient) and
+blackjax NUTS (`run_nuts`). Two differentiable backends are available:
+
+- **Forecast surrogate** — `forecast.forward_jax.ForwardModel` computes *every*
+  probe (`wp`, `ds`, `cl_gy`, `cl_gX`, `cl_kk` shear, `xlf`/`wp_agn`, `smf`, …)
+  as one `jacfwd`-able call in the σ8-native EH98 parameterisation. Fast; the
+  X-ray/tSZ legs are analytic surrogates and `n(z)` is synthetic (override via
+  `ForwardModel(galaxy_nz=(z_grid, nz))`).
+- **Production, full fidelity** — `FullHaloModelPrediction(pk_backend="eh98_jax")`
+  (built via `hod_mod.observables.make_differentiable_prediction`) plus
+  `HaloModelCrossSpectra`, assembled through `ProductionMultiProbeModel`, give
+  the real production amplitudes. Each observable is validated against central
+  finite differences:
+
+  | Observable | Path | `jacfwd` vs FD |
+  |---|---|---|
+  | `wp` / ΔΣ | `FullHaloModelPrediction` | ~1e-7 |
+  | tSZ `cl_gy(ℓ)` | `HaloModelCrossSpectra` | ~3e-8 |
+  | X-ray `cl_gX` (density) | `GasDensityDPM` | ~4e-8 |
+  | X-ray `cl_gX` (full-APEC) | `GasDensityDPM` + `ApecCoolingTable` | ~7e-6 |
+  | galaxy × AGN X-ray | `XrayAGNModel` | ~1e-7 |
+  | cluster × galaxy `w_p^{cg}` | `ClusterGalaxyCrossCorrelation` | ~7e-7 |
+
+  CAMB stays the default backend; `eh98_jax` is opt-in and reproduces CAMB
+  clustering to ~2%.
+
+```python
+from hod_mod.forecast.forward_jax import ForwardModel
+from hod_mod.fitting.jax_inference import (
+    MultiProbeGaussianLikelihood, run_map_jax, run_nuts)
+
+fm    = ForwardModel()
+which = ["wp", "ds", "cl_gy", "cl_gX", "xlf"]     # galaxies + SZ + X-ray + AGN
+free  = ["Omega_m", "sigma8", "lg_m1h", "lg_m0star"]
+
+like, x_true = MultiProbeGaussianLikelihood.synthetic(fm, which, free, rel_err=0.05)
+res  = run_map_jax(like, x0)      # scipy L-BFGS-B driven by the JAX gradient
+post = run_nuts(like, res["x"])   # blackjax NUTS (pip install hod-mod[inference])
+```
+
+Practical notes: run gradient work under `JAX_ENABLE_X64=1` (float32 finite
+differences are noise); the differentiable backends are **σ8-native** (keys
+`Omega_m, Omega_b, h, n_s, sigma8` + optional `sum_mnu, w0, wa`), *not* the
+`ln10^{10}A_s` of the CAMB path; NUTS is cheap on projected/abundance probes but
+the Limber angular spectra inflate the trajectory compile ~10×. Full details and
+a production worked example are in
+[docs/differentiable_inference.rst](docs/differentiable_inference.rst).
+
+## Fisher forecasts
+
+`hod_mod.forecast` turns the differentiable `ForwardModel` into a Fisher
+information matrix for multi-probe **Stage-IV** survey forecasts, with realistic
+per-observable noise. Three tiers grow the free parameter vector 61 → 111 (every
+addition fiducial-preserving and gated by an exact invariant), and a companion
+sensitivity study reports parameter-freedom robustness (31 vs 111 params).
+
+| Tier | Driver | Adds |
+|---|---|---|
+| tier-2 (61 params) | `run_tier2_forecast.py` | (z, M*) cell grid, multi-band APEC X-ray, tomographic shear |
+| tier-3 (102 params) | `run_tier3_forecast.py` | radio/IR intensity maps, band LFs, tSZ/HI autos, cluster counts |
+| tier-4 (111 params) | `run_tier4_forecast.py` | morphology split, BH-bulge coupling |
+
+See [docs/sensitivity_fisher.rst](docs/sensitivity_fisher.rst),
+[docs/tier2_forecast.rst](docs/tier2_forecast.rst),
+[docs/tier3_forecast.rst](docs/tier3_forecast.rst),
+[docs/tier4_forecast.rst](docs/tier4_forecast.rst), and
+[docs/stage4_forecast.rst](docs/stage4_forecast.rst).
 
 ## Reproducing published results
 
