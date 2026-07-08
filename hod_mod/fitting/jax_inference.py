@@ -40,12 +40,16 @@ class MultiProbeGaussianLikelihood:
     """
 
     def __init__(self, model_fn, data, icov, free_idx, theta0,
-                 prior_mean=None, prior_sigma=None):
+                 prior_mean=None, prior_sigma=None, param_names=None):
         self._f = model_fn                                   # f(theta_full)->vec
         self._data = jnp.asarray(data)
         self._icov = jnp.asarray(icov)
         self._free_idx = jnp.asarray(np.asarray(free_idx), dtype=int)
         self._theta0 = jnp.asarray(theta0)
+        # full-parameter names (forecast 111-vector by default; the production
+        # backend passes its own [cosmo + HOD] layout)
+        self._param_names = list(param_names) if param_names is not None \
+            else list(_fparams.PARAM_NAMES)
         n_free = self._free_idx.shape[0]
         mu = np.zeros(n_free) if prior_mean is None else np.asarray(prior_mean, float)
         sig = np.full(n_free, np.inf) if prior_sigma is None \
@@ -89,7 +93,7 @@ class MultiProbeGaussianLikelihood:
 
     @property
     def free_names(self):
-        return [_fparams.PARAM_NAMES[int(i)] for i in np.asarray(self._free_idx)]
+        return [self._param_names[int(i)] for i in np.asarray(self._free_idx)]
 
     def params_dict(self, x):
         """Map a free vector to a ``{name: value}`` dict."""
@@ -163,6 +167,125 @@ class MultiProbeGaussianLikelihood:
             prior_sigma = sig_full[free_idx]
         like = cls(f, data, icov, free_idx, theta0, prior_mean, prior_sigma)
         return like, np.asarray(theta0)[free_idx]
+
+    @classmethod
+    def synthetic_production(cls, prod_model, which, free_names, rel_err=0.05,
+                             seed=0):
+        """Synthetic-data likelihood on a :class:`ProductionMultiProbeModel`.
+
+        The production-fidelity counterpart of :meth:`synthetic`: data =
+        production model at the fiducial + Gaussian noise; the free vector runs
+        over the model's ``[cosmo + HOD]`` parameter layout.  Returns
+        ``(likelihood, x_true)``.
+        """
+        names = prod_model.param_names
+        theta0 = prod_model.fiducial_vector()
+        f, _, _ = prod_model.data_vector_fn(list(which))
+        truth = np.asarray(f(jnp.asarray(theta0)), dtype=float)
+        sigma = np.abs(truth) * float(rel_err) + 1e-30
+        rng = np.random.default_rng(seed)
+        data = truth + sigma * rng.standard_normal(truth.shape)
+        icov = np.diag(1.0 / sigma ** 2)
+        free_idx = [names.index(n) for n in free_names]
+        like = cls(f, data, icov, free_idx, theta0, param_names=names)
+        return like, np.asarray(theta0)[free_idx]
+
+
+class ProductionMultiProbeModel:
+    """Assemble the differentiable PRODUCTION observables into one data vector.
+
+    The production-fidelity counterpart to wrapping the forecast ``ForwardModel``:
+    stitches ``wp``/``ΔΣ`` from a differentiable (``pk_backend='eh98_jax'``)
+    :class:`~hod_mod.observables.clustering.FullHaloModelPrediction` and the tSZ
+    ``cl_gy`` / X-ray ``cl_gX`` from
+    :class:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra` into a single
+    ``jax.value_and_grad``-able map ``param_vector → concatenated observables``.
+
+    Parameters are a flat vector over ``[cosmo_params, hod_free]`` (names in that
+    order); the rest of ``base_cosmo``/``base_hod`` are held fixed.
+
+    Parameters
+    ----------
+    predictor : FullHaloModelPrediction (pk_backend='eh98_jax')
+    cross : HaloModelCrossSpectra | None
+        Provides ``angular_cl_gy`` (needs a pressure profile) and/or
+        ``angular_cl_gX`` (needs a density/gas profile).  Required if ``cl_gy``
+        or ``cl_gX`` is requested.
+    z : float — effective redshift for the projected observables.
+    rp_wp, rp_ds, ell : arrays — the observable abscissae.
+    z_grid, nz_g : arrays — galaxy n(z) for the Limber projection.
+    base_cosmo, base_hod : dict — fiducial cosmology / HOD (σ8 convention).
+    cosmo_params, hod_free : sequence[str] — free-parameter names, in vector order.
+    pi_max : float — line-of-sight integration limit for wp.
+    """
+
+    def __init__(self, predictor, *, z, rp_wp, rp_ds, ell, z_grid, nz_g,
+                 base_cosmo, base_hod, cosmo_params=(), hod_free=(),
+                 cross=None, pi_max=100.0):
+        self._pred = predictor
+        self._cross = cross
+        self.z = float(z)
+        self.rp_wp = jnp.asarray(rp_wp)
+        self.rp_ds = jnp.asarray(rp_ds)
+        self.ell = np.asarray(ell)
+        self.z_grid = np.asarray(z_grid)
+        self.nz_g = np.asarray(nz_g)
+        self.pi_max = float(pi_max)
+        self._base_cosmo = dict(base_cosmo)
+        self._base_hod = dict(base_hod)
+        self._cosmo_params = list(cosmo_params)
+        self._hod_free = list(hod_free)
+        self.param_names = self._cosmo_params + self._hod_free
+        self._n_cosmo = len(self._cosmo_params)
+
+    def fiducial_vector(self):
+        vals = [self._base_cosmo[n] for n in self._cosmo_params] \
+             + [self._base_hod[n] for n in self._hod_free]
+        return np.asarray(vals, dtype=float)
+
+    def _split(self, pvec):
+        cosmo = dict(self._base_cosmo)
+        for i, n in enumerate(self._cosmo_params):
+            cosmo[n] = pvec[i]
+        hod = dict(self._base_hod)
+        for j, n in enumerate(self._hod_free):
+            hod[n] = pvec[self._n_cosmo + j]
+        return cosmo, hod
+
+    def predict(self, pvec, which):
+        """Return a dict of the requested production observables at ``pvec``."""
+        cosmo, hod = self._split(pvec)
+        out = {}
+        if "wp" in which:
+            out["wp"] = self._pred.wp(self.rp_wp, self.pi_max, self.z, cosmo, hod)
+        if "ds" in which:
+            out["ds"] = self._pred.delta_sigma(self.rp_ds, self.z, cosmo, hod)
+        if "cl_gy" in which:
+            out["cl_gy"] = self._cross.angular_cl_gy(
+                self.ell, self.z_grid, self.nz_g, cosmo, hod)
+        if "cl_gX" in which:
+            out["cl_gX"] = self._cross.angular_cl_gX(
+                self.ell, self.z_grid, self.nz_g, cosmo, hod)
+        return out
+
+    def _grid_of(self, name):
+        return {"wp": self.rp_wp, "ds": self.rp_ds,
+                "cl_gy": self.ell, "cl_gX": self.ell}[name]
+
+    def data_vector_fn(self, which):
+        """Return ``(f, row_obs, row_x)`` with ``f(pvec) -> concat observables``."""
+        which = list(which)
+
+        def f(pvec):
+            p = self.predict(pvec, which)
+            return jnp.concatenate([jnp.atleast_1d(p[n]) for n in which])
+
+        row_obs, row_x = [], []
+        for n in which:
+            g = np.asarray(self._grid_of(n))
+            row_obs += [n] * g.size
+            row_x += list(g)
+        return f, np.array(row_obs), np.array(row_x, dtype=float)
 
 
 # ---------------------------------------------------------------------------
