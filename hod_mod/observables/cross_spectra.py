@@ -661,7 +661,7 @@ class HaloModelCrossSpectra:
             # where Λ_ref is a reference cooling-function value at T=1 keV, Z=0.3 Z☉.
             # For the APEC table path, we use the actual table value; for the
             # deprecated plain-emissivity path we use the old power-law reference.
-            h_val = float(theta_cosmo.get("h", 0.6736))
+            h_val = theta_cosmo.get("h", 0.6736)   # kept traced on the eh98 backend
             mpc_cm_h = _MPC_CM / h_val          # cm per (Mpc/h)
             agn_conv = 1e43 / (lambda_ref * mpc_cm_h ** 3)   # lambda_ref hoisted above
             # Fold the true AGN ECF (absorbed power law Γ=1.9) so the AGN leg
