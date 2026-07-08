@@ -50,21 +50,9 @@ _MPC_CM = 3.0857e24
 _ARCSEC_TO_RAD = float(jnp.pi) / (180.0 * 3600.0)
 
 
-def _safe_log(P, floor: float = 1e-30):
-    """``log(max(P, floor))`` with non-finite ``P`` floored instead of propagated.
-
-    The full-APEC gas emissivity has a tiny high-k tail (k ≳ 150 h/Mpc) that can
-    underflow float32 to NaN/inf inside the halo-model integrals.  Those k are far
-    beyond any fitted angular scale, so we floor them to ``floor`` (≈ zero power)
-    rather than let a single NaN poison the whole Limber/Hankel transform.
-
-    ``floor`` must stay representable in float32 (JAX's default dtype): a smaller
-    value (e.g. 1e-60) underflows to 0, so ``log`` returns ``-inf`` for an all-zero
-    field (e.g. the AGN leg when no AGN model is set), and a constant ``-inf`` table
-    makes ``jnp.interp`` produce ``(-inf) - (-inf) = NaN`` in the Limber integral.
-    """
-    P = jnp.nan_to_num(P, nan=0.0, posinf=0.0, neginf=0.0)
-    return jnp.log(jnp.maximum(P, floor))
+# Shared float32-safe log floor (see hod_mod.core.numerics.safe_log for the
+# full rationale: NaN high-k tails and the -inf/-inf jnp.interp hazard).
+from hod_mod.core.numerics import safe_log as _safe_log
 
 
 def psf_window_ell(ell_arr: np.ndarray, fwhm_arcsec: float = 30.0) -> np.ndarray:
@@ -333,31 +321,46 @@ class HaloModelCrossSpectra:
         """Stable hashable key for a cosmology dict."""
         return tuple(sorted((k, float(v)) for k, v in theta_cosmo.items()))
 
+    def _eh98(self) -> bool:
+        """True when the underlying predictor is the differentiable EH98 backend."""
+        return getattr(self._fhmp, "_pk_backend", "camb") == "eh98_jax"
+
     def _get_static_cache(self, z: float, theta_cosmo: dict, hod_params: dict) -> dict:
-        """Trigger FullHaloModelPrediction static cache population and return it."""
-        from hod_mod.observables.clustering import FullHaloModelPrediction
-        _ = self._fhmp._pk_tables_full(z, theta_cosmo, hod_params)
-        cosmo_key = FullHaloModelPrediction._cosmo_cache_key(z, theta_cosmo)
-        return self._fhmp._static_cache[cosmo_key]
+        """Halo tables from the predictor — numpy (CAMB) or traced jnp (eh98).
+
+        Backend-agnostic via :meth:`FullHaloModelPrediction._get_halo_tables`;
+        on the EH98 backend the returned arrays are traced, so the cross-power
+        built from them is differentiable w.r.t. cosmology.
+        """
+        return self._fhmp._get_halo_tables(z, theta_cosmo, hod_params)
 
     def _get_hod_weights(
         self, z: float, theta_cosmo: dict, hod_params: dict, sc: dict
-    ) -> tuple[np.ndarray, np.ndarray, float, float]:
-        """Return (nc_np, ns_np, n_gal, b_eff) using the static-cache mass grid."""
-        import jax
-        with jax.disable_jit():
-            nc_arr, ns_arr = self._fhmp._hod.nc_ns(
-                self._fhmp._hod._log10m_grid, hod_params
-            )
-        nc_np  = np.asarray(nc_arr, dtype=float)
-        ns_np  = np.asarray(ns_arr, dtype=float)
-        nt_np  = nc_np + ns_np
-        dndm   = sc["dndm_np"]
-        bias   = sc["bias_np"]
-        m_np   = sc["m_np"]
-        n_gal  = float(np.trapezoid(dndm * nt_np, m_np))
-        b_eff  = float(np.trapezoid(dndm * nt_np * bias, m_np) / n_gal)
-        return nc_np, ns_np, n_gal, b_eff
+    ) -> tuple:
+        """Return (nc, ns, n_gal, b_eff) on the static-cache mass grid.
+
+        On the EH98 backend everything stays traced (no ``disable_jit``, no
+        ``float``); on CAMB it keeps the former numpy/float behaviour.
+        """
+        if self._eh98():
+            nc = self._fhmp._hod.nc_ns(self._fhmp._hod._log10m_grid, hod_params)
+            nc, ns = nc
+        else:
+            import jax
+            with jax.disable_jit():
+                nc_arr, ns_arr = self._fhmp._hod.nc_ns(
+                    self._fhmp._hod._log10m_grid, hod_params)
+            nc = jnp.asarray(np.asarray(nc_arr, dtype=float))
+            ns = jnp.asarray(np.asarray(ns_arr, dtype=float))
+        nt    = nc + ns
+        dndm  = jnp.asarray(sc["dndm_np"])
+        bias  = jnp.asarray(sc["bias_np"])
+        m     = jnp.asarray(sc["m_np"])
+        n_gal = jnp.trapezoid(dndm * nt, m)
+        b_eff = jnp.trapezoid(dndm * nt * bias, m) / n_gal
+        if not self._eh98():
+            n_gal, b_eff = float(n_gal), float(b_eff)
+        return nc, ns, n_gal, b_eff
 
     def _pressure_uk_cached(
         self, z: float, theta_cosmo: dict, sc: dict
@@ -365,16 +368,14 @@ class HaloModelCrossSpectra:
         """ỹ(k|M,z) from PressureProfileA10, with caching. (Nk, NM) [(Mpc/h)²]."""
         if self._pp is None:
             raise RuntimeError("No pressure_profile provided to HaloModelCrossSpectra")
+        y_uk = lambda: self._pp.pressure_uk(
+            k_arr=sc["k_np"], m200_arr=sc["m_np"], r200_arr=sc["r_delta"],
+            c200_arr=sc["c_np"], z=z, theta_cosmo=theta_cosmo)
+        if self._eh98():
+            return y_uk()                 # traced — a concrete cache would leak
         gas_key = ("pressure", id(self._pp), z, self._cosmo_key(theta_cosmo))
         if gas_key not in self._gas_cache:
-            self._gas_cache[gas_key] = self._pp.pressure_uk(
-                k_arr     = sc["k_np"],
-                m200_arr  = sc["m_np"],
-                r200_arr  = sc["r_delta"],
-                c200_arr  = sc["c_np"],
-                z         = z,
-                theta_cosmo = theta_cosmo,
-            )
+            self._gas_cache[gas_key] = y_uk()
         return self._gas_cache[gas_key]
 
     def _density_uk_cached(
@@ -383,26 +384,16 @@ class HaloModelCrossSpectra:
         """ñ_e(k|M) or X̃(k|M) from GasDensityDPM, with caching. (Nk, NM)."""
         if self._dp is None:
             raise RuntimeError("No density_profile provided to HaloModelCrossSpectra")
+        def _compute():
+            fn = self._dp.emissivity_uk if emissivity else self._dp.density_uk
+            return fn(k_arr=sc["k_np"], m200_arr=sc["m_np"],
+                      r200_arr=sc["r_delta"], z=z, theta_cosmo=theta_cosmo)
+        if self._eh98():
+            return _compute()                 # traced — a concrete cache would leak
         kind    = "emissivity" if emissivity else "density"
         gas_key = (kind, id(self._dp), z, self._cosmo_key(theta_cosmo))
         if gas_key not in self._gas_cache:
-            if emissivity:
-                result = self._dp.emissivity_uk(
-                    k_arr     = sc["k_np"],
-                    m200_arr  = sc["m_np"],
-                    r200_arr  = sc["r_delta"],
-                    z         = z,
-                    theta_cosmo = theta_cosmo,
-                )
-            else:
-                result = self._dp.density_uk(
-                    k_arr     = sc["k_np"],
-                    m200_arr  = sc["m_np"],
-                    r200_arr  = sc["r_delta"],
-                    z         = z,
-                    theta_cosmo = theta_cosmo,
-                )
-            self._gas_cache[gas_key] = result
+            self._gas_cache[gas_key] = _compute()
         return self._gas_cache[gas_key]
 
     # ------------------------------------------------------------------
@@ -573,7 +564,7 @@ class HaloModelCrossSpectra:
             # (Mpc/h)³ cm⁻⁶ convention as emissivity_uk / the AGN term; the
             # Λ(T,Z)/Λ_ref ratio keeps the temperature/metallicity dependence and
             # the overall amplitude is absorbed by the free A_gas.
-            X_uk = np.asarray(X_uk) / lambda_ref
+            X_uk = jnp.asarray(X_uk) / lambda_ref
         else:
             X_uk = self._density_uk_cached(z, theta_cosmo, sc, emissivity=True)   # (Nk, NM)
 
@@ -670,7 +661,7 @@ class HaloModelCrossSpectra:
             # where Λ_ref is a reference cooling-function value at T=1 keV, Z=0.3 Z☉.
             # For the APEC table path, we use the actual table value; for the
             # deprecated plain-emissivity path we use the old power-law reference.
-            h_val = float(theta_cosmo.get("h", 0.6736))
+            h_val = theta_cosmo.get("h", 0.6736)   # kept traced on the eh98 backend
             mpc_cm_h = _MPC_CM / h_val          # cm per (Mpc/h)
             agn_conv = 1e43 / (lambda_ref * mpc_cm_h ** 3)   # lambda_ref hoisted above
             # Fold the true AGN ECF (absorbed power law Γ=1.9) so the AGN leg
@@ -954,20 +945,19 @@ class HaloModelCrossSpectra:
         nz_g   = np.asarray(nz_g,   dtype=float)
         ell    = jnp.asarray(ell_arr)
 
-        h       = float(theta_cosmo["h"])
-        omega_m = float(theta_cosmo["Omega_m"])
-        chi_z = np.array([
-            float(np.asarray(comoving_distance(float(zi), h, omega_m)).ravel()[0]) * h
-            for zi in z_arr
-        ])
+        # χ(z) in jnp (no float()) so the projection is differentiable w.r.t.
+        # cosmology on the eh98 backend; concrete h/Ω_m (CAMB) pass through.
+        h       = theta_cosmo["h"]
+        omega_m = theta_cosmo["Omega_m"]
+        chi_z_j = comoving_distance(jnp.asarray(z_arr), h, omega_m) * h   # (Nz,) [Mpc/h]
 
-        dndchi_j = jnp.asarray(nz_g) / jnp.trapezoid(jnp.asarray(nz_g), jnp.asarray(chi_z))
-        chi_z_j  = jnp.asarray(chi_z)
+        dndchi_j = jnp.asarray(nz_g) / jnp.trapezoid(jnp.asarray(nz_g), chi_z_j)
 
         raw_gy = [self._pk_tables_gy(zi, theta_cosmo, hod_params) for zi in z_arr]
-        log_k_ref_gy = np.asarray(raw_gy[0]["log_k"])
+        # keep jnp (the k grid is a constant but abstract under jit — np.asarray
+        # would raise a TracerArrayConversionError inside a jitted likelihood)
         log_pgy_stack = jnp.stack([jnp.asarray(t["log_pgy"]) for t in raw_gy])  # (Nz, Nk)
-        log_k_j_gy   = jnp.asarray(log_k_ref_gy)
+        log_k_j_gy   = jnp.asarray(raw_gy[0]["log_k"])
 
         ell_j    = jnp.asarray(ell_arr, dtype=float)
         k_lim_gy = jnp.log(jnp.maximum((ell_j[:, None] + 0.5) / chi_z_j[None, :], 1e-4))
@@ -1124,15 +1114,13 @@ class HaloModelCrossSpectra:
         nz_g   = np.asarray(nz_g,   dtype=float)
         ell    = jnp.asarray(ell_arr)
 
-        h       = float(theta_cosmo["h"])
-        omega_m = float(theta_cosmo["Omega_m"])
-        chi_z = np.array([
-            float(np.asarray(comoving_distance(float(zi), h, omega_m)).ravel()[0]) * h
-            for zi in z_arr
-        ])
+        # χ(z) in jnp (no float()) so the projection is differentiable w.r.t.
+        # cosmology on the eh98 backend; concrete h/Ω_m (CAMB) pass through.
+        h       = theta_cosmo["h"]
+        omega_m = theta_cosmo["Omega_m"]
+        chi_z_j = comoving_distance(jnp.asarray(z_arr), h, omega_m) * h   # (Nz,) [Mpc/h]
 
-        dndchi_j = jnp.asarray(nz_g) / jnp.trapezoid(jnp.asarray(nz_g), jnp.asarray(chi_z))
-        chi_z_j  = jnp.asarray(chi_z)
+        dndchi_j = jnp.asarray(nz_g) / jnp.trapezoid(jnp.asarray(nz_g), chi_z_j)
 
         # ------------------------------------------------------------------ #
         # Step 1: build P_{g,X}(k) tables at each redshift.                  #
@@ -1165,8 +1153,8 @@ class HaloModelCrossSpectra:
 
         # Stack per-component log-P tables into (Nz, Nk) arrays for fast
         # vectorized Limber integration below.
-        log_k_ref = np.asarray(raw_tables[0]["log_k"])   # (Nk,) — same grid for all z
-        Nk = len(log_k_ref)
+        log_k_ref = raw_tables[0]["log_k"]   # (Nk,) jnp — abstract under jit
+        Nk = log_k_ref.shape[0]
         log_pgX_stack = {
             comp: jnp.stack([jnp.asarray(raw_tables[i][key]) for i in range(nz)])
             for comp, key in (
@@ -1321,7 +1309,7 @@ class HaloModelCrossSpectra:
             with ThreadPoolExecutor(max_workers=min(_nw, nz)) as pool:
                 raw_tables = list(pool.map(_tables_at_z, z_arr))
 
-        log_k_ref = np.asarray(raw_tables[0]["log_k"])
+        log_k_ref = raw_tables[0]["log_k"]   # jnp — abstract under jit
         log_pXX_stack = {
             comp: jnp.stack([jnp.asarray(raw_tables[i][key]) for i in range(nz)])
             for comp, key in (

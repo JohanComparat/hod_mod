@@ -388,46 +388,50 @@ def satellite_nfw_uk(
     uk : jnp.ndarray, shape (Nk, NM)
     """
     k     = np.asarray(k_arr,     dtype=float).ravel()   # (Nk,)
-    r_s   = np.asarray(r_s_arr,   dtype=float).ravel()   # (NM,)
-    c     = np.asarray(c_arr,     dtype=float).ravel()   # (NM,)
-    r_vir = np.asarray(r_vir_arr, dtype=float).ravel()   # (NM,)
+    r_vir = jnp.asarray(np.asarray(r_vir_arr, dtype=float).ravel())   # (NM,)
+    c     = jnp.asarray(np.asarray(c_arr,     dtype=float).ravel())   # (NM,)
 
     c_sat   = float(b_sat_conc) * c          # (NM,)
     r_s_sat = r_vir / c_sat                  # (NM,)
 
-    x_gl, w_gl = np.polynomial.legendre.leggauss(n_r)
-    r_h     = r_vir                                         # = c * r_s = c_sat * r_s_sat
-    r_nodes = np.outer(r_h / 2.0, x_gl + 1.0)            # (NM, n_r)
-    w_eff   = np.outer(r_h / 2.0, w_gl)                   # (NM, n_r)
+    x_gl, w_gl = np.polynomial.legendre.leggauss(n_r)     # static GL nodes
+    r_h     = r_vir                                        # = c * r_s = c_sat * r_s_sat
+    r_nodes = (r_h / 2.0)[:, None] * (jnp.asarray(x_gl) + 1.0)[None, :]  # (NM, n_r)
+    w_eff   = (r_h / 2.0)[:, None] * jnp.asarray(w_gl)[None, :]          # (NM, n_r)
 
     x       = r_nodes / r_s_sat[:, None]                  # (NM, n_r)
     rho_nfw = 1.0 / (x * (1.0 + x)**2)                   # (NM, n_r), ρ_s cancels
 
-    weight = np.ones_like(r_nodes)
-    if float(f_cut) > 0.0:
-        weight *= 1.0 - np.exp(-r_nodes / (float(f_cut) * r_vir[:, None]))
-    if float(gamma) > 0.0:
-        weight *= (r_nodes / r_vir[:, None]) ** float(gamma)
+    # Extensions B/C written branchlessly so f_cut/gamma may be **traced**
+    # (differentiable backend), while staying numerically identical to the
+    # former concrete `if float(...)>0` guards: each factor is exactly 1 at its
+    # default (f_cut=0 / gamma=0).  The `jnp.where` on f_cut keeps its gradient
+    # finite at 0 (the extension is only meaningful for f_cut>0, opted into by
+    # passing it); gamma needs no guard — (r/r_vir)^0 = 1 with correct gradient.
+    f_cut = jnp.asarray(f_cut, dtype=float)
+    gamma = jnp.asarray(gamma, dtype=float)
+    r_cut = jnp.maximum(f_cut, 1e-12) * r_vir[:, None]
+    cut   = jnp.where(f_cut > 0.0, -jnp.expm1(-r_nodes / r_cut), 1.0)
+    weight = cut * (r_nodes / r_vir[:, None]) ** gamma
 
     integrand = rho_nfw * weight * r_nodes**2             # (NM, n_r)
-    norm      = np.sum(w_eff * integrand, axis=1)         # (NM,)
-    norm      = np.where(norm > 0.0, norm, 1.0)
+    norm      = jnp.sum(w_eff * integrand, axis=1)        # (NM,)
+    norm      = jnp.where(norm > 0.0, norm, 1.0)
 
     # GL on coarse k grid to keep array sizes manageable
     k_coarse = np.logspace(np.log10(k.min()), np.log10(k.max()), n_k_coarse)
-    K   = k_coarse[:, None, None] * r_nodes[None, :, :]  # (n_k_coarse, NM, n_r)
-    j0  = np.where(K < 1e-6, 1.0 - K**2 / 6.0, np.sin(K) / K)
-    uk_c = (np.sum(w_eff[None, :, :] * integrand[None, :, :] * j0, axis=2)
+    K   = jnp.asarray(k_coarse)[:, None, None] * r_nodes[None, :, :]  # (n_k_coarse, NM, n_r)
+    j0  = jnp.where(K < 1e-6, 1.0 - K**2 / 6.0, jnp.sin(K) / K)
+    uk_c = (jnp.sum(w_eff[None, :, :] * integrand[None, :, :] * j0, axis=2)
             / norm[None, :])                               # (n_k_coarse, NM)
 
-    # Log-linear interpolation to the full k grid
-    log_k_c = np.log(k_coarse)
-    log_k_f = np.log(k)
-    uk_fine = np.empty((len(k), len(r_s)), dtype=float)
-    for j in range(len(r_s)):
-        uk_fine[:, j] = np.interp(log_k_f, log_k_c, uk_c[:, j])
+    # Log-linear interpolation to the full k grid, vectorised over mass
+    log_k_c = jnp.log(jnp.asarray(k_coarse))
+    log_k_f = jnp.log(jnp.asarray(k))
+    uk_fine = jax.vmap(lambda col: jnp.interp(log_k_f, log_k_c, col),
+                       in_axes=1, out_axes=1)(uk_c)        # (Nk, NM)
 
-    return jnp.asarray(uk_fine)
+    return uk_fine
 
 
 @jax.jit
@@ -615,6 +619,44 @@ def concentration_dutton14_jax(m_h: jnp.ndarray, z: float) -> jnp.ndarray:
     return 10.0 ** (a + b * (jnp.log10(m_h) - 12.0))
 
 
+def mdef_delta_rho(mdef: str, z: float, theta_cosmo: dict) -> tuple[float, float]:
+    """Return (delta, rho_ref) for a spherical-overdensity mass definition.
+
+    rho_ref is the comoving reference density [(Msun/h)/(Mpc/h)³] such that
+    r_delta = (3 M / (4π delta rho_ref))^{1/3} gives the comoving halo radius.
+
+    Supported definitions
+    ---------------------
+    '200m' — 200× comoving mean matter density (z-independent in h-units).
+    '200c' — 200× comoving critical density at z (Ω_m + Ω_Λ/(1+z)³ × ρ_crit0).
+    'vir'  — virial overdensity vs critical (Bryan & Norman 1998).
+
+    ``theta_cosmo['Omega_m']`` may be a traced JAX value — no float() cast —
+    so gradients w.r.t. cosmology flow through (delta, rho_ref).
+    """
+    omega_m = theta_cosmo["Omega_m"]
+    omega_l = 1.0 - omega_m  # flat ΛCDM
+
+    if mdef == "200m":
+        return 200.0, omega_m * _RHO_CRIT0
+
+    # comoving critical density: ρ_crit_proper(z)/(1+z)³ = ρ_crit0 E²(z)/(1+z)³
+    ez2 = omega_m * (1.0 + z) ** 3 + omega_l
+    rho_crit_comoving = _RHO_CRIT0 * ez2 / (1.0 + z) ** 3
+
+    if mdef == "200c":
+        return 200.0, rho_crit_comoving
+
+    if mdef == "vir":
+        # Bryan & Norman 1998, Eq. 6 — overdensity w.r.t. critical for flat ΛCDM
+        omega_m_z = omega_m * (1.0 + z) ** 3 / ez2
+        x = omega_m_z - 1.0
+        delta_vir = 18.0 * np.pi ** 2 + 82.0 * x - 39.0 * x ** 2
+        return delta_vir, rho_crit_comoving
+
+    raise ValueError(f"Unknown mdef '{mdef}'. Supported: '200m', '200c', 'vir'.")
+
+
 class HaloProfile:
     """Concentration–mass relation and NFW profile parameters.
 
@@ -665,38 +707,9 @@ class HaloProfile:
     def _mdef_delta_rho(self, z: float, theta_cosmo: dict) -> tuple[float, float]:
         """Return (delta, rho_ref) for the mass definition in comoving h-units.
 
-        rho_ref is the comoving reference density [(Msun/h)/(Mpc/h)³] such that
-        r_delta = (3 M / (4π delta rho_ref))^{1/3} gives the comoving halo radius.
-
-        Supported definitions
-        ---------------------
-        '200m' — 200× comoving mean matter density (z-independent in h-units).
-        '200c' — 200× comoving critical density at z (Ω_m + Ω_Λ/(1+z)³ × ρ_crit0).
-        'vir'  — virial overdensity vs critical (Bryan & Norman 1998).
+        Delegates to the module-level :func:`mdef_delta_rho`.
         """
-        omega_m = float(theta_cosmo["Omega_m"])
-        omega_l = 1.0 - omega_m  # flat ΛCDM
-
-        if self._mdef == "200m":
-            return 200.0, omega_m * _RHO_CRIT0
-
-        # comoving critical density: ρ_crit_proper(z)/(1+z)³ = ρ_crit0 E²(z)/(1+z)³
-        ez2 = omega_m * (1.0 + z) ** 3 + omega_l
-        rho_crit_comoving = _RHO_CRIT0 * ez2 / (1.0 + z) ** 3
-
-        if self._mdef == "200c":
-            return 200.0, rho_crit_comoving
-
-        if self._mdef == "vir":
-            # Bryan & Norman 1998, Eq. 6 — overdensity w.r.t. critical for flat ΛCDM
-            omega_m_z = omega_m * (1.0 + z) ** 3 / ez2
-            x = omega_m_z - 1.0
-            delta_vir = 18.0 * np.pi ** 2 + 82.0 * x - 39.0 * x ** 2
-            return float(delta_vir), rho_crit_comoving
-
-        raise ValueError(
-            f"Unknown mdef '{self._mdef}'. Supported: '200m', '200c', 'vir'."
-        )
+        return mdef_delta_rho(self._mdef, z, theta_cosmo)
 
     def concentration(self, m_h: jnp.ndarray, z: float) -> jnp.ndarray:
         """Concentration parameter c(M, z) from the chosen c-M relation."""

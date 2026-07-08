@@ -4,6 +4,8 @@ Halos
 Halo profiles, lensing quantities, and concentration–mass relations.
 The NFW profile math and derivations are in :doc:`cosmology` under **Halo Profiles**;
 this page provides the full API reference for the halo sub-package.
+Truncated NFW (Takada–Jain, BMO) and Hernquist lensing profiles, Σ_crit,
+mis-centering and strong lensing live on the dedicated :doc:`lensing` page.
 
 ---
 

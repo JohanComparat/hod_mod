@@ -1,5 +1,6 @@
 """X-ray cooling/emissivity: APEC table, temperature and cooling function."""
 import numpy as np
+import jax.numpy as jnp
 
 
 # ---------------------------------------------------------------------------
@@ -25,8 +26,9 @@ def temperature_from_profiles(
     -------
     T : [keV]
     """
-    ne_safe = np.where(np.asarray(n_electron) > 1e-40, n_electron, 1e-40)
-    return np.asarray(pressure) / ne_safe
+    n_electron = jnp.asarray(n_electron)
+    ne_safe = jnp.where(n_electron > 1e-40, n_electron, 1e-40)
+    return jnp.asarray(pressure) / ne_safe
 
 
 def temperature_from_dpm(
@@ -189,16 +191,17 @@ class ApecCoolingTable:
         self._T_grid = T_grid
         self._Z_grid = Z_grid
         self._table  = table
-        self._interp = RegularGridInterpolator(
-            (np.log10(T_grid), np.log10(Z_grid)),
-            np.log10(np.maximum(table, 1e-60)),
-            method="linear",
-            bounds_error=False,
-            fill_value=None,   # linear extrapolation beyond grid edges
-        )
+        # log-log grid held as jnp constants for the differentiable __call__.
+        self._logT = jnp.asarray(np.log10(T_grid))
+        self._logZ = jnp.asarray(np.log10(Z_grid))
+        self._logL = jnp.asarray(np.log10(np.maximum(table, 1e-60)))  # (n_T, n_Z)
 
-    def __call__(self, T_keV: np.ndarray, Z_solar: np.ndarray) -> np.ndarray:
-        """Λ_{n_e²}(T, Z) [erg cm³ s⁻¹] by 2D log-log interpolation.
+    def __call__(self, T_keV, Z_solar):
+        """Λ_{n_e²}(T, Z) [erg cm³ s⁻¹] by 2D log-log bilinear interpolation.
+
+        Pure jnp (edge-clamped extrapolation) so the full-APEC X-ray emissivity
+        is differentiable w.r.t. the temperature/metallicity profiles on the
+        eh98 backend.  The (T, Z) grid of Λ is a soxs-built constant.
 
         Parameters
         ----------
@@ -207,12 +210,25 @@ class ApecCoolingTable:
 
         Returns
         -------
-        Lambda : same shape as T_keV  [erg cm³ s⁻¹]
+        Lambda : same shape as broadcast(T_keV, Z_solar)  [erg cm³ s⁻¹]
         """
-        T = np.asarray(T_keV,   dtype=float)
-        Z = np.asarray(Z_solar, dtype=float)
-        pts = np.column_stack([
-            np.log10(np.maximum(T.ravel(), 1e-6)),
-            np.log10(np.maximum(Z.ravel(), 1e-6)),
-        ])
-        return 10.0 ** self._interp(pts).reshape(T.shape)
+        lt = jnp.log10(jnp.maximum(jnp.asarray(T_keV), 1e-6))
+        lz = jnp.log10(jnp.maximum(jnp.asarray(Z_solar), 1e-6))
+
+        # fractional index into each 1-D grid (clamped to the edge cells so
+        # extrapolation is flat rather than NaN — Λ beyond the grid is a small
+        # correction at extreme radii).
+        def _frac(q, grid):
+            n = grid.shape[0]
+            i = jnp.clip(jnp.searchsorted(grid, q) - 1, 0, n - 2)
+            w = (q - grid[i]) / (grid[i + 1] - grid[i])
+            return i, jnp.clip(w, 0.0, 1.0)
+
+        it, wt = _frac(lt, self._logT)
+        iz, wz = _frac(lz, self._logZ)
+        L = self._logL
+        f00 = L[it,     iz];     f01 = L[it,     iz + 1]
+        f10 = L[it + 1, iz];     f11 = L[it + 1, iz + 1]
+        logL = ((1 - wt) * (1 - wz) * f00 + (1 - wt) * wz * f01
+                + wt * (1 - wz) * f10 + wt * wz * f11)
+        return 10.0 ** logL
