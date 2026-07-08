@@ -48,22 +48,27 @@ Validated `tests/test_eh98_backend.py` (jacfwd==FD ~1e-7; eh98-vs-CAMB ~2%).
   **full-APEC `cl_gX`** with T(r)/Z(r) cooling (7e-6), **galaxy×AGN cross** (1.4e-7).
   CAMB gas/dpm/agn regressions green. Commits `89a3d41`, `a8cffdb`, `b5ef892`.
 
-### Remaining
+### Wave 5 — production-fidelity inference wiring — DONE
 
-- **Production cross-probes into the likelihood.** `MultiProbeGaussianLikelihood`
-  runs on the surrogate `ForwardModel` (Phase 1). Add a production-backend forward
-  function that assembles the now-differentiable production observables
-  (`FullHaloModelPrediction.wp/delta_sigma` + `HaloModelCrossSpectra.angular_cl_gy/gX`)
-  into one `value_and_grad`-able data vector, and demo a joint
-  galaxies+ΔΣ+cl_gy+cl_gX+AGN MAP + NUTS at production fidelity.
-  `cross_clustering._pk_table_cg` gets the same `_get_halo_tables` swap (nearly free).
-  Also still numpy: `HODAgnModel.nc_ns_agn`/`agn_emissivity_uk` (only needed for the
-  HOD-AGN, not parametric, cross); `cl_XX` auto-spectrum (`_pk_tables_XX`); the
-  `x_uk_override` emulator fast path.
-- **n(z) hook, docs, validation, close.** Real galaxy n(z) injection into
-  `ForwardModel` (synthetic narrow Gaussian, forward_jax.py:509-514);
-  surrogate-vs-production amplitude validation on cl_gy/cl_gX;
-  `docs/differentiable_inference.rst`; full `--cov` re-baseline + raise floor.
+- **`ProductionMultiProbeModel`** (`fitting/jax_inference.py`) assembles the
+  differentiable production observables (`FullHaloModelPrediction.wp/delta_sigma`
+  + `HaloModelCrossSpectra.angular_cl_gy/gX`) into one `value_and_grad`-able data
+  vector; `MultiProbeGaussianLikelihood` generalized with `param_names` +
+  `synthetic_production`. Production wp+ds MAP recovers injected params; full
+  4-probe gradient compiles + is finite (steady 0.8 s/eval). Fixed three jit-only
+  concretizations (c_diemer15 dynamic omega_m; _neff grid spacing; angular log_k
+  jnp). Commit `8b810b2`.
+- **cluster × galaxy `w_p^{cg}`** differentiable (`_get_halo_tables` swap). `99cc486`.
+- **Real n(z) hook** `ForwardModel(galaxy_nz=(z,nz))`. `89b5fdc`.
+- **Docs** `docs/differentiable_inference.rst`. `d9b6101`.
+
+### Remaining (small follow-ons)
+
+- `HODAgnModel.nc_ns_agn`/`agn_emissivity_uk` jnp (HOD-AGN, not parametric, cross);
+  `cl_XX` auto-spectrum production-differentiable; `x_uk_override` emulator path.
+- NUTS over the full angular-spectra vector (compile cost; MAP is fine).
+- Surrogate-vs-production amplitude validation on cl_gy/cl_gX.
+- Coverage floor re-baseline after the Wave-3/4/5 additions.
 
 ## Guardrails / oracles to keep green
 
