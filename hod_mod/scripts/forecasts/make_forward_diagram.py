@@ -144,7 +144,7 @@ def make_figure(out_dir=None, *, beamer=False):
             ha="center", va="top", fontsize=11, color=_MUTED)
 
     # ---- S0 : inputs -------------------------------------------------
-    s0 = _box(ax, 4.9, 11.55, 5.7, 0.72, "cosmo",
+    s0 = _box(ax, 4.25, 11.55, 7.0, 0.72, "cosmo",
               "Input parameter vector",
               [(None, r"$\theta$ = 5 cosmo | 9 HOD | 6 X-ray | 2 baryon | "
                       r"$\log_{10}$DC, $\beta_P$ | 7 AGN   (31)")],
@@ -209,20 +209,20 @@ def make_figure(out_dir=None, *, beamer=False):
               title_size=11.5, eq_size=10.4)
 
     # ---- S8 : projection & abundance ---------------------------------
-    s8a = _box(ax, 0.35, 1.35, 4.55, 1.75, "obs",
+    s8a = _box(ax, 0.35, 1.52, 4.55, 1.75, "obs",
                "Projection: real space",
                [("22", r"$\xi(r)=\frac{1}{2\pi^2}\!\int\!P\,j_0(kr)k^2dk$"),
                 ("23", r"$w_p(r_p)=2\!\int_0^{\Pi}\!\xi_{gg}\,d\pi$"),
                 ("24", r"$\Delta\Sigma=\bar\Sigma({<}R)-\Sigma(R)$")],
                title_size=10.5, eq_size=10.0)
-    s8b = _box(ax, 5.05, 1.35, 4.9, 1.75, "obs",
+    s8b = _box(ax, 5.05, 1.52, 4.9, 1.75, "obs",
                "Projection: Limber angular",
                [("25", r"$C_\ell=\!\int\!\frac{d\chi}{\chi^2}W_1W_2\,"
                        r"P\!\left(\frac{\ell+1/2}{\chi},z\right)$"),
                 ("26", r"kernels $W_\kappa$ (shear), $W_{\kappa_{\rm CMB}}$"),
-                ("27", r"$C_\ell^{gX,gy,XX,\kappa\kappa,\kappa\kappa_c,g\kappa_c,\kappa\kappa_c}$")],
+                ("27", r"$C_\ell^{gX,gy,XX,\kappa\kappa,\kappa_c\kappa_c,g\kappa_c,\kappa\kappa_c}$")],
                title_size=10.5, eq_size=10.0)
-    s8c = _box(ax, 10.1, 1.35, 5.05, 1.75, "obs",
+    s8c = _box(ax, 10.1, 1.52, 5.05, 1.75, "obs",
                "Abundances",
                [("28", r"$n_{\rm gal}$   (scalar; pins $f_c$)"),
                 ("29", r"$\Phi(M_*)=-\,d\bar n({>}M_*)/d\log M_*$"),
@@ -231,10 +231,13 @@ def make_figure(out_dir=None, *, beamer=False):
                title_size=10.5, eq_size=9.6)
 
     # ---- S9 : data vector + Fisher -----------------------------------
-    s9 = _box(ax, 3.55, 0.18, 8.4, 0.86, "fisher",
+    s9 = _box(ax, 1.7, 0.10, 12.1, 1.16, "fisher",
               "Data vector  &  Fisher matrix",
-              [("31", r"$d=[\,w_p,\Delta\Sigma,C_\ell^{\dots},\Phi,n_{\rm gal}\,]$ (12);  "
-                      r"$F_{ab}=\frac{1}{f^2}\sum_i\partial_a\!\ln d_i\,\partial_b\!\ln d_i$")],
+              [("31", r"$d=[\,w_p,\ \Delta\Sigma,\ C_\ell^{gX},\ C_\ell^{gy},\ C_\ell^{XX},"
+                      r"\ C_\ell^{\kappa\kappa},\ C_\ell^{\kappa_c\kappa_c},\ C_\ell^{g\kappa_c},"
+                      r"\ C_\ell^{\kappa\kappa_c},\ \Phi(\log L_X),\ n_{\rm gal},"
+                      r"\ \Phi(M_*)\,]$   (12 observables)"),
+               (None, r"$F_{ab}=\frac{1}{f^2}\sum_i\partial_a\!\ln d_i\,\partial_b\!\ln d_i$")],
               title_size=11, eq_size=10.0)
 
     # ---- flow arrows (drawn in front of the boxes, with a white halo) ----
@@ -263,19 +266,19 @@ def make_figure(out_dir=None, *, beamer=False):
             bbox=dict(boxstyle="round,pad=0.3", fc=_tint(SECTOR["gas"][0], 0.14),
                       ec=SECTOR["gas"][0], lw=1.2))
     # AGN → XLF (abundance)
-    _arrow(ax, (13.1, 5.55), (12.7, 3.12), color=SECTOR["agn"][0], rad=0.10)
+    _arrow(ax, (13.1, 5.55), (12.7, 3.29), color=SECTOR["agn"][0], rad=0.10)
     # power spectra → projections
-    _arrow(ax, (3.0, 3.55), (3.0, 3.12))
-    _arrow(ax, (7.5, 3.55), (7.5, 3.12))
+    _arrow(ax, (3.0, 3.55), (3.0, 3.29))
+    _arrow(ax, (7.5, 3.55), (7.5, 3.29))
     # abundances bypass the 3-D power spectra (n_gal / SMF come straight from the
     # HOD occupation × dn/dM); flagged by a note rather than a box-crossing arrow.
-    ax.text(10.75, 3.34, "bypass $P(k)$", color=_VIO, fontsize=8.4, style="italic",
+    ax.text(10.75, 3.42, "bypass $P(k)$", color=_VIO, fontsize=8.4, style="italic",
             ha="left", va="center", zorder=7,
             path_effects=[pe.withStroke(linewidth=2.6, foreground=_SURFACE)])
     # projections → data vector / Fisher
-    _arrow(ax, bottom(s8a), (5.0, 1.06), rad=0.06)
+    _arrow(ax, bottom(s8a), (2.8, 1.26), rad=0.04)
     _arrow(ax, bottom(s8b), top(s9))
-    _arrow(ax, bottom(s8c), (10.5, 1.06), rad=-0.06)
+    _arrow(ax, bottom(s8c), (12.4, 1.26), rad=-0.04)
 
     # ---- sector legend (upper-left, in the empty corner) ------------
     _short = {"cosmo": "Cosmology", "hmf": "Halo abundance", "prof": "Halo structure",

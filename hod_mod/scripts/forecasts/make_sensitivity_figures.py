@@ -10,8 +10,8 @@ Tells one story in four figures:
    five summary statistics: cosmological response **grows towards small scales**,
    and each statistic responds to a different set of parameters.
 3. ``degeneracy_breaking`` — 1σ Fisher ellipses at a fixed small-scale cut,
-   showing how adding an X-ray and/or SZ statistic **breaks** the
-   cosmology↔galaxy-halo-connection degeneracy that limits clustering+lensing.
+   showing how growing the data vector from clustering+lensing to all twelve
+   summary statistics **breaks** the cosmology↔galaxy-halo-connection degeneracy.
 4. ``sigma_vs_scale`` — the thesis plot: σ(σ8), σ(Ω_m) vs the scale cut R_min for
    growing probe sets — the cosmological sensitivity improves towards small scales
    **only to the fuller extent that an X-ray and/or SZ statistic is included**.
@@ -240,12 +240,15 @@ def _ellipse(ax, cov, i, j, cx, cy, color, label, ls="-"):
 
 
 def fig_degeneracy_breaking(model, fid, d0, J, row_obs, row_x, out, rmin=0.1, rel_err=0.01):
-    # pairs showing the cosmology↔(HOD, baryon) degeneracies broken by X-ray/SZ
+    # pairs showing the cosmology↔(HOD, baryon) degeneracies broken as the data
+    # vector grows cumulatively from wp+ΔΣ to all twelve summary statistics
     pairs = [("sigma8", "Omega_m"), ("sigma8", "log10_M_pivot"), ("sigma8", "bsat")]
-    sets = [("wp+ds", ["wp", "ds"], "C0", "-"),
-            ("+ SZ", ["wp", "ds", "cl_gy"], "C2", "--"),
-            ("+ X-ray", ["wp", "ds", "cl_gX", "cl_XX"], "C1", "-."),
-            ("all five", ["wp", "ds", "cl_gX", "cl_gy", "cl_XX"], "C3", "-")]
+    s_cl = ["wp", "ds", "cl_gy", "cl_gX", "cl_XX"]                       # + SZ + X-ray
+    s_le = s_cl + ["cl_kk", "cl_kCMB", "cl_gkCMB", "cl_shear_kCMB"]      # + lensing spectra
+    sets = [("wp+ΔΣ", ["wp", "ds"], "C0", "-"),
+            ("+ SZ + X-ray", s_cl, "C1", "--"),
+            ("+ shear + CMB lensing", s_le, "C2", "-."),
+            (r"all twelve (+ $n_{\rm gal}$, SMF, XLF)", list(OBSERVABLES), "C3", "-")]
     prior = params.regularizing_prior(add_planck=False)   # bounds flat nuisances
     smask0 = model.scale_cut_mask(row_obs, row_x, rmin)
     covs = {}
@@ -266,8 +269,9 @@ def fig_degeneracy_breaking(model, fid, d0, J, row_obs, row_x, out, rmin=0.1, re
         ax.relim(); ax.autoscale_view()
     axes[0].legend(fontsize=9, loc="best")
     fig.suptitle(rf"Degeneracy breaking at $R_{{\min}}={rmin}$ Mpc/h "
-                 rf"(1σ, {rel_err*100:g}% errors): X-ray / SZ cross-statistics shrink and "
-                 rf"de-rotate the cosmology↔galaxy-halo-connection ellipses", fontsize=11.5)
+                 rf"(1σ, {rel_err*100:g}% errors): growing the data vector to all twelve "
+                 rf"statistics shrinks and de-rotates the cosmology↔galaxy-halo-connection "
+                 rf"ellipses", fontsize=11.5)
     fig.tight_layout(rect=[0, 0, 1, 0.94])
     p = os.path.join(out, _PFX + "degeneracy_breaking.png")
     fig.savefig(p, dpi=120); plt.close(fig)
@@ -562,6 +566,102 @@ def fig_xlf_cosmology(model, fid, d0, J, row_obs, row_x, out,
     print("[fig]", p)
 
 
+# ---------------------------------------------------------------------------
+# Figure 10 — parameter freedom: published 31-parameter vector vs all free
+# ---------------------------------------------------------------------------
+
+# Tier-1 parameter vector of the published 2026-07-02 study.  Pinning every
+# parameter added since (missing-physics waves, tier-2/3/4 extensions)
+# reproduces that run from the same Jacobian, so the comparison below isolates
+# the effect of parameter freedom alone.
+_PUBLISHED_31 = [
+    "Omega_m", "sigma8", "h", "n_s", "Omega_b",
+    "lg_m1h", "lg_m0star", "beta", "delta", "gamma", "sigma_lnmstar", "eta",
+    "fc", "bsat", "lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max",
+    "log10DC", "beta_pressure", "log10_M_pivot", "log10_eta_min",
+    "agn_mu_bh", "agn_al_bh", "agn_sig_bh", "agn_log10_lstar",
+    "agn_delta1", "agn_delta2", "agn_log10_ferdf",
+]
+
+
+def fig_param_freedom(model, fid, d0, J, row_obs, row_x, out,
+                      rmins=(0.1, 0.5, 2.5, 10.0), rel_err=0.01):
+    """Cosmology cost of opening the parameter space from 31 to all free."""
+    runs = [(f"{len(_PUBLISHED_31)} parameters (published study)",
+             params.regularizing_prior(add_planck=False, fix=tuple(
+                 p for p in PARAM_NAMES if p not in _PUBLISHED_31)), "C0", "o", "-"),
+            (f"all {len(PARAM_NAMES)} parameters free",
+             params.regularizing_prior(add_planck=False), "C3", "D", "-")]
+    iom, is8 = _IDX["Omega_m"], _IDX["sigma8"]
+
+    sig = {}   # label -> (n_rmin, n_param) marginalised sigmas
+    cov01 = {}  # label -> covariance at the smallest scale cut
+    for label, prior, _, _, _ in runs:
+        ss = []
+        for rm in rmins:
+            m = model.scale_cut_mask(row_obs, row_x, rm)
+            F = fisher.fisher_matrix(d0[m], J[m], rel_err, prior)
+            c, s, _ = fisher.constraints(F, ridge=0.0)
+            ss.append(s)
+            if rm == min(rmins):
+                cov01[label] = c
+        sig[label] = np.array(ss)
+
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.3))
+
+    # --- panel 1: (Omega_m, sigma8) 1σ ellipses at the smallest scale cut ---
+    ax = axes[0]
+    cx, cy = fid[iom], fid[is8]
+    for label, _, color, _, ls in runs:
+        _ellipse(ax, cov01[label], iom, is8, cx, cy, color, label, ls)
+    ax.plot(cx, cy, "k+", ms=9)
+    ax.set_xlabel(params.PARAM_LATEX["Omega_m"])
+    ax.set_ylabel(params.PARAM_LATEX["sigma8"])
+    ax.set_title(rf"$(\Omega_m,\sigma_8)$ at $R_{{\min}}={min(rmins)}$ Mpc/h")
+    ax.legend(fontsize=8.5, loc="best")
+    ax.relim(); ax.autoscale_view()
+
+    # --- panel 2: sigma vs scale cut for both runs ---
+    ax = axes[1]
+    for label, _, color, mk, _ in runs:
+        ax.loglog(rmins, sig[label][:, is8], mk + "-", color=color,
+                  label=label + r"  ($\sigma_8$)")
+        ax.loglog(rmins, sig[label][:, iom], mk + "--", color=color, mfc="none",
+                  label=label + r"  ($\Omega_m$)")
+    ax.set_xlabel(r"scale cut  $R_{\min}\;[\mathrm{Mpc}/h]$")
+    ax.set_ylabel(r"$\sigma(\theta)$")
+    ax.set_title("marginalised errors vs scale cut")
+    ax.invert_xaxis()
+    ax.legend(fontsize=7.5, loc="best")
+
+    # --- panel 3: error-inflation factor from opening the parameter space ---
+    ax = axes[2]
+    l31, lfree = runs[0][0], runs[1][0]
+    ax.semilogx(rmins, sig[lfree][:, is8] / sig[l31][:, is8], "s-", color="C2",
+                label=r"$\sigma_8$")
+    ax.semilogx(rmins, sig[lfree][:, iom] / sig[l31][:, iom], "^--", color="C4",
+                label=r"$\Omega_m$")
+    ax.axhline(1.0, color="k", lw=0.6, ls=":")
+    ax.set_xlabel(r"scale cut  $R_{\min}\;[\mathrm{Mpc}/h]$")
+    ax.set_ylabel(r"$\sigma_{\rm free}/\sigma_{31}$")
+    ax.set_title("error inflation from opening\nthe parameter space")
+    ax.invert_xaxis()
+    ax.legend(fontsize=9)
+
+    fig.suptitle(rf"The cosmology cost of parameter freedom: same twelve statistics, same "
+                 rf"{rel_err*100:g}% errors, no external prior — {len(_PUBLISHED_31)} "
+                 rf"published parameters vs all {len(PARAM_NAMES)} free", fontsize=11.5)
+    fig.tight_layout(rect=[0, 0, 1, 0.93])
+    p = os.path.join(out, _PFX + "param_freedom.png")
+    fig.savefig(p, dpi=120); plt.close(fig)
+    print("[fig]", p)
+    # numbers for the doc text
+    for j, nm in [(is8, "sigma8"), (iom, "Omega_m")]:
+        r = sig[lfree][:, j] / sig[l31][:, j]
+        print(f"[freedom] {nm}: sigma31={sig[l31][0, j]:.3e} free={sig[lfree][0, j]:.3e} "
+              f"inflation Rmin=0.1: x{r[0]:.2f}  Rmin=10: x{r[-1]:.2f}")
+
+
 def main():
     out = _docs_images()
     fid = params.fiducial_vector()
@@ -576,6 +676,7 @@ def main():
     fig_shear_vs_ds_baryons(model, fid, out)
     fig_energy_closure(fid, out)
     fig_xlf_cosmology(model, fid, d0, J, row_obs, row_x, out)
+    fig_param_freedom(model, fid, d0, J, row_obs, row_x, out)
     print("[done] figures in", out)
 
 
