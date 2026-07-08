@@ -376,3 +376,41 @@ class TestEh98CrossSpectra:
         fd = (clf(0.8111 + eps) - clf(0.8111 - eps)) / (2 * eps)
         assert jnp.all(jnp.isfinite(g)) and jnp.any(jnp.abs(g) > 0)
         np.testing.assert_allclose(np.asarray(g), np.asarray(fd), rtol=2e-3)
+
+
+class TestEh98XrayCrossSpectra:
+    def _cross(self):
+        from hod_mod.observables import make_differentiable_prediction
+        from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+        from hod_mod.gas import GasDensityDPM
+        dp = GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=48)
+        return HaloModelCrossSpectra(make_differentiable_prediction("more15"),
+                                     density_profile=dp)
+
+    def test_pk_gX_finite(self):
+        import warnings
+        cx = self._cross()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            t = cx._pk_tables_gX(0.2, _THETA_EH, _hod())
+        assert jnp.all(jnp.isfinite(t["log_pgX"]))
+
+    @pytest.mark.x64
+    def test_cl_gX_differentiable(self):
+        if not jax.config.jax_enable_x64:
+            pytest.skip("requires JAX_ENABLE_X64=1")
+        import warnings
+        cx = self._cross()
+        ell = np.logspace(2, 3.3, 6)
+        zg = np.linspace(0.1, 0.4, 5)
+        nz = np.exp(-0.5 * ((zg - 0.2) / 0.05) ** 2)
+        eps = 1e-4
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+
+            def clf(s8):
+                return cx.angular_cl_gX(ell, zg, nz, dict(_THETA_EH, sigma8=s8), _hod())
+            g = jax.jacfwd(clf)(0.8111)
+            fd = (clf(0.8111 + eps) - clf(0.8111 - eps)) / (2 * eps)
+        assert jnp.all(jnp.isfinite(g)) and jnp.any(jnp.abs(g) > 0)
+        np.testing.assert_allclose(np.asarray(g), np.asarray(fd), rtol=2e-3)
