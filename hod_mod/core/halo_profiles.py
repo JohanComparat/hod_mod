@@ -402,11 +402,17 @@ def satellite_nfw_uk(
     x       = r_nodes / r_s_sat[:, None]                  # (NM, n_r)
     rho_nfw = 1.0 / (x * (1.0 + x)**2)                   # (NM, n_r), ρ_s cancels
 
-    weight = jnp.ones_like(r_nodes)
-    if float(f_cut) > 0.0:
-        weight = weight * (1.0 - jnp.exp(-r_nodes / (float(f_cut) * r_vir[:, None])))
-    if float(gamma) > 0.0:
-        weight = weight * (r_nodes / r_vir[:, None]) ** float(gamma)
+    # Extensions B/C written branchlessly so f_cut/gamma may be **traced**
+    # (differentiable backend), while staying numerically identical to the
+    # former concrete `if float(...)>0` guards: each factor is exactly 1 at its
+    # default (f_cut=0 / gamma=0).  The `jnp.where` on f_cut keeps its gradient
+    # finite at 0 (the extension is only meaningful for f_cut>0, opted into by
+    # passing it); gamma needs no guard — (r/r_vir)^0 = 1 with correct gradient.
+    f_cut = jnp.asarray(f_cut, dtype=float)
+    gamma = jnp.asarray(gamma, dtype=float)
+    r_cut = jnp.maximum(f_cut, 1e-12) * r_vir[:, None]
+    cut   = jnp.where(f_cut > 0.0, -jnp.expm1(-r_nodes / r_cut), 1.0)
+    weight = cut * (r_nodes / r_vir[:, None]) ** gamma
 
     integrand = rho_nfw * weight * r_nodes**2             # (NM, n_r)
     norm      = jnp.sum(w_eff * integrand, axis=1)        # (NM,)
@@ -613,6 +619,44 @@ def concentration_dutton14_jax(m_h: jnp.ndarray, z: float) -> jnp.ndarray:
     return 10.0 ** (a + b * (jnp.log10(m_h) - 12.0))
 
 
+def mdef_delta_rho(mdef: str, z: float, theta_cosmo: dict) -> tuple[float, float]:
+    """Return (delta, rho_ref) for a spherical-overdensity mass definition.
+
+    rho_ref is the comoving reference density [(Msun/h)/(Mpc/h)³] such that
+    r_delta = (3 M / (4π delta rho_ref))^{1/3} gives the comoving halo radius.
+
+    Supported definitions
+    ---------------------
+    '200m' — 200× comoving mean matter density (z-independent in h-units).
+    '200c' — 200× comoving critical density at z (Ω_m + Ω_Λ/(1+z)³ × ρ_crit0).
+    'vir'  — virial overdensity vs critical (Bryan & Norman 1998).
+
+    ``theta_cosmo['Omega_m']`` may be a traced JAX value — no float() cast —
+    so gradients w.r.t. cosmology flow through (delta, rho_ref).
+    """
+    omega_m = theta_cosmo["Omega_m"]
+    omega_l = 1.0 - omega_m  # flat ΛCDM
+
+    if mdef == "200m":
+        return 200.0, omega_m * _RHO_CRIT0
+
+    # comoving critical density: ρ_crit_proper(z)/(1+z)³ = ρ_crit0 E²(z)/(1+z)³
+    ez2 = omega_m * (1.0 + z) ** 3 + omega_l
+    rho_crit_comoving = _RHO_CRIT0 * ez2 / (1.0 + z) ** 3
+
+    if mdef == "200c":
+        return 200.0, rho_crit_comoving
+
+    if mdef == "vir":
+        # Bryan & Norman 1998, Eq. 6 — overdensity w.r.t. critical for flat ΛCDM
+        omega_m_z = omega_m * (1.0 + z) ** 3 / ez2
+        x = omega_m_z - 1.0
+        delta_vir = 18.0 * np.pi ** 2 + 82.0 * x - 39.0 * x ** 2
+        return delta_vir, rho_crit_comoving
+
+    raise ValueError(f"Unknown mdef '{mdef}'. Supported: '200m', '200c', 'vir'.")
+
+
 class HaloProfile:
     """Concentration–mass relation and NFW profile parameters.
 
@@ -663,38 +707,9 @@ class HaloProfile:
     def _mdef_delta_rho(self, z: float, theta_cosmo: dict) -> tuple[float, float]:
         """Return (delta, rho_ref) for the mass definition in comoving h-units.
 
-        rho_ref is the comoving reference density [(Msun/h)/(Mpc/h)³] such that
-        r_delta = (3 M / (4π delta rho_ref))^{1/3} gives the comoving halo radius.
-
-        Supported definitions
-        ---------------------
-        '200m' — 200× comoving mean matter density (z-independent in h-units).
-        '200c' — 200× comoving critical density at z (Ω_m + Ω_Λ/(1+z)³ × ρ_crit0).
-        'vir'  — virial overdensity vs critical (Bryan & Norman 1998).
+        Delegates to the module-level :func:`mdef_delta_rho`.
         """
-        omega_m = float(theta_cosmo["Omega_m"])
-        omega_l = 1.0 - omega_m  # flat ΛCDM
-
-        if self._mdef == "200m":
-            return 200.0, omega_m * _RHO_CRIT0
-
-        # comoving critical density: ρ_crit_proper(z)/(1+z)³ = ρ_crit0 E²(z)/(1+z)³
-        ez2 = omega_m * (1.0 + z) ** 3 + omega_l
-        rho_crit_comoving = _RHO_CRIT0 * ez2 / (1.0 + z) ** 3
-
-        if self._mdef == "200c":
-            return 200.0, rho_crit_comoving
-
-        if self._mdef == "vir":
-            # Bryan & Norman 1998, Eq. 6 — overdensity w.r.t. critical for flat ΛCDM
-            omega_m_z = omega_m * (1.0 + z) ** 3 / ez2
-            x = omega_m_z - 1.0
-            delta_vir = 18.0 * np.pi ** 2 + 82.0 * x - 39.0 * x ** 2
-            return float(delta_vir), rho_crit_comoving
-
-        raise ValueError(
-            f"Unknown mdef '{self._mdef}'. Supported: '200m', '200c', 'vir'."
-        )
+        return mdef_delta_rho(self._mdef, z, theta_cosmo)
 
     def concentration(self, m_h: jnp.ndarray, z: float) -> jnp.ndarray:
         """Concentration parameter c(M, z) from the chosen c-M relation."""
