@@ -3,6 +3,7 @@
 wiring into HaloModelCrossSpectra."""
 
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -17,6 +18,10 @@ from hod_mod.agn.duty_cycle import (
 )
 
 _THETA = LinearPowerSpectrum.default_cosmology()
+
+# Committed ZM15 MAP params so these tests run in CI, where the production
+# results dir (HOD_MOD_RESULTS) is absent — see tests/data/zm15_map_result.json.
+_ZM15_FIX = str(Path(__file__).parent / "data" / "zm15_map_result.json")
 
 
 # ---------------------------------------------------------------------------
@@ -95,13 +100,13 @@ def agn(tmp_path_factory):
     compute_w_agn_kernel(sample="S1", theta_cosmo=_THETA, n_z=16, n_lx=300,
                          out_path=str(out))
     return DutyCycleAGNModel(sample="S1", theta_cosmo=_THETA, log10DC=-2.0,
-                       w_agn_path=str(out))
+                       w_agn_path=str(out), zm15_map_json=_ZM15_FIX)
 
 
 class TestOccupation:
 
     def test_loads_13_zm15_params(self):
-        p = load_zm15_map_params()
+        p = load_zm15_map_params(_ZM15_FIX)
         assert len(p) == 13
         assert {"lg_m1h", "fc", "alpha_sat"} <= set(p)
 
@@ -168,7 +173,8 @@ class TestOccupation:
         # cutoff strictly reduces the occupation at high mass
         agn_no = DutyCycleAGNModel(sample="S1", theta_cosmo=_THETA,
                                    apply_high_mass_cutoff=False,
-                                   w_agn_path=agn._w_agn_path)
+                                   w_agn_path=agn._w_agn_path,
+                                   zm15_map_json=_ZM15_FIX)
         _, ns_no = agn_no.nc_ns_agn(np.array([14.2, 15.0]))
         _, ns_cut = agn.nc_ns_agn(np.array([14.2, 15.0]))
         assert ns_no[0] > 0 and ns_no[1] > 0
