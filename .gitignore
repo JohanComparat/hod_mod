@@ -67,3 +67,6 @@ coverage.xml
 __MACOSX/
 oarsub/logs/
 hod_mod/data/xray_bands/
+
+# Local-only DAHU data-staging helper (contains machine-specific ssh/paths)
+oarsub/rsync_data_to_dahu.sh

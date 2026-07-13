@@ -182,6 +182,37 @@ class PowellAGNModel:
         den = np.trapezoid(dndlog * n_cen, self.log10m)
         return float(num / max(den, 1e-300))
 
+    def agn_bias_of_lx(self, log10lx, band="soft"):
+        """Large-scale halo bias of AGN *at* luminosity L_X (differential), at ``z_mean``.
+
+        .. math::
+            b(L_X) = \\frac{\\int b(M)\\,p(L_X|M)\\,\\frac{dn}{d\\log M}\\,dM}
+                          {\\int p(L_X|M)\\,\\frac{dn}{d\\log M}\\,dM}
+
+        The ERDF normalisation (``log10_ferdf``) cancels between numerator and
+        denominator, so this depends only on the M_BH–M_*/ERDF *shape* and the HMF.
+        Redshift is controlled by the instance (``self.z_mean``); to predict at
+        another redshift build a fresh model at that z.
+
+        Parameters
+        ----------
+        log10lx : array-like
+            Luminosities to evaluate [log10 erg/s].
+        band : {"soft", "hard"}
+            Band of the *input* luminosities.  The internal grid is hard
+            (2–10 keV); ``"soft"`` (0.5–2 keV) inputs are shifted by
+            ``-log10(k_h2s)`` onto the hard grid before interpolation.
+        """
+        p = self._p_lx_given_m()                              # (NM, Nlx), hard grid
+        dndlog, bias = self._dndm_bias()                      # (NM,), (NM,)
+        num = np.trapezoid(dndlog[:, None] * bias[:, None] * p, self.log10m, axis=0)
+        den = np.trapezoid(dndlog[:, None] * p,                self.log10m, axis=0)
+        b_of_lx = num / np.maximum(den, 1e-300)               # (Nlx,) on self.loglx
+        ll = np.asarray(log10lx, dtype=float)
+        if band == "soft":
+            ll = ll - np.log10(self.k_h2s)                    # soft -> hard
+        return np.interp(ll, self.loglx, b_of_lx, left=b_of_lx[0], right=b_of_lx[-1])
+
     def median_host_logmhalo(self, z=None):
         n_cen, _ = self._occ_and_mean_lx()
         dndlog, _ = self._dndm_bias()
