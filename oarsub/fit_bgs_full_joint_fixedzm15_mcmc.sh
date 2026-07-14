@@ -51,9 +51,11 @@ cd "${REPO}"
 mkdir -p oarsub/logs "${OUT_DIR}"
 echo "host=$(hostname) job=${OAR_JOB_ID:-local} cores=${NCORES} start=$(date -Is)"
 
-# Run MAP first (seeds walkers), then MCMC — a single --mode both job.
+# MCMC only — resumes from ${OUT_DIR}/chain.h5 (emcee HDF backend) and seeds a
+# fresh chain from ${OUT_DIR}/map_result.json if present.  No MAP re-run, so an
+# idempotent/besteffort re-submit continues exactly where it left off.
 python -m hod_mod.scripts.fitting.fit_bgs_full_joint \
-    --mode both \
+    --mode mcmc \
     --n-walkers 48 --n-burnin 500 --n-steps 2000 \
     --out-dir "${OUT_DIR}"
 
