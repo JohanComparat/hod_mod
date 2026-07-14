@@ -102,7 +102,7 @@ class JointFull:
                               "xlf", "agn_bias"),
                  rp_min_wp=0.5, rp_min_esd=2.0, f_sys=0.05,
                  hmf_backend="tinker08", ngal_frac_err=0.05, verbose=True):
-        self.sample = sample
+        self.sample_name = sample
         self.free_zm15 = bool(free_zm15)
         self.obs = set(observables)
         self.rp_min_wp = rp_min_wp
@@ -175,18 +175,18 @@ class JointFull:
     def _load_galaxy_data(self):
         self.data_gal = {}
         if "wp" in self.obs or "ngal" in self.obs:
-            d = load_wp_data(self.sample, rp_min=self.rp_min_wp)
+            d = load_wp_data(self.sample_name, rp_min=self.rp_min_wp)
             self.data_gal["wp"] = dict(rp=d["rp"], wp=d["wp"],
                                        err=np.sqrt(np.diag(d["cov"])), pi_max=d["pi_max"])
         if "ngal" in self.obs:
-            smf = load_smf_data(self.sample)   # (Mpc/h)^-3 dex^-1
+            smf = load_smf_data(self.sample_name)   # (Mpc/h)^-3 dex^-1
             ngal = float(np.trapezoid(smf["phi"], smf["log10mstar"]))
             self.data_gal["ngal"] = dict(value=ngal, err=self.ngal_frac_err * ngal,
                                          grid=smf["log10mstar"])
         if "esd" in self.obs:
             self.data_gal["esd"] = {}
             for sv in ("DES", "HSC", "KIDS"):
-                e = load_esd_data(self.sample, sv)
+                e = load_esd_data(self.sample_name, sv)
                 m = e["rp"] > self.rp_min_esd
                 self.data_gal["esd"][sv] = dict(rp=e["rp"][m], ds=e["delta_sigma"][m],
                                                 err=e["delta_sigma_err"][m])
@@ -202,7 +202,7 @@ class JointFull:
             self.data_agn["bias"] = load_agn_bias_compilation()
 
     def _load_xray_broad_data(self):
-        d = _load_xray_broad(self.sample)
+        d = _load_xray_broad(self.sample_name)
         self.data_xray_broad = dict(theta_as=d["theta_arcsec"], wtheta=d["wtheta"],
                                     err=np.sqrt(d["wtheta_err"] ** 2 +
                                                 (self.f_sys * np.abs(d["wtheta"])) ** 2))
@@ -233,12 +233,6 @@ class JointFull:
                 init = float(np.clip(xb_x0[i], bnd8[i, 0] + 1e-6, bnd8[i, 1] - 1e-6))
                 add(pn, float(bnd8[i, 0]), float(bnd8[i, 1]), init,
                     float(mu8[i]), float(sig8[i]))
-        if "xray_broad" in self.obs:
-            # The reconstructed per-band data are each normalised near the broad
-            # amplitude, so the band-sum is ~N_band× the zenodo broad (measured 15.5×).
-            # A free log10 amplitude lets the zenodo broad contribute its θ-shape
-            # without clashing with the band normalisation.  Seed at log10(1/15.5).
-            add("log10_A_broad", -3.0, 3.0, float(np.log10(1.0 / 15.5)))
         if {"xlf", "agn_bias"} & self.obs:
             for pn in _AGN_NAMES:
                 l, h, init = _AGN_PARAMS[pn]
@@ -370,10 +364,12 @@ class JointFull:
             chi2 += XB._chi2_sample(p, self._S)
         if "xray_broad" in self.obs and hasattr(self, "data_xray_broad"):
             gas, agn = XB._components_bands(p, self._S)         # (Nb, Nth) on band grid
-            broad_shape = np.sum(gas + agn, axis=0)             # band-sum θ-shape
+            # The broad band is the AVERAGE of the single bands (each reconstructed
+            # band is normalised near the broad amplitude, so their mean — not sum —
+            # reproduces the broad 0.5–2 keV w(θ)).  A genuine absolute constraint.
+            broad_model = np.mean(gas + agn, axis=0)
             d = self.data_xray_broad
-            a_broad = 10.0 ** v.get("log10_A_broad", 0.0)       # free relative amplitude
-            broad_at = a_broad * np.interp(d["theta_as"], self._S["th_as"], broad_shape)
+            broad_at = np.interp(d["theta_as"], self._S["th_as"], broad_model)
             chi2 += float(np.sum(((broad_at - d["wtheta"]) / d["err"]) ** 2))
         return float(chi2)
 
