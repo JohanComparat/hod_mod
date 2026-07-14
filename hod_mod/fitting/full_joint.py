@@ -379,6 +379,57 @@ class JointFull:
                     xray=self._chi2_xray(dec["v"]),
                     agn=self._chi2_agn(dec["v"]))
 
+    # ------------------------------------------------------ model for plots
+    def predict(self, theta) -> dict:
+        """Model curves for every active observable at ``theta``, aligned to the
+        data abscissae — for best-fit / posterior-median overlays.
+
+        Mirrors the ``_chi2_*`` methods so plotted curves are exactly what the
+        likelihood sees.  Galaxy/AGN entries align to ``self.data_gal`` /
+        ``self.data_agn``; the ``xray_bands`` entry carries the full ``(Nb, Ntheta)``
+        gas / AGN / total on ``self._S['th_as']`` and its data ``wtheta``/``err``/``mask``.
+        """
+        dec = self._decode(theta); v = dec["v"]; zm15 = dec["zm15"]
+        out = {}
+        gal = self._predict_galaxy(self._hod_params(zm15))
+        if "ngal" in self.obs:
+            out["ngal"] = float(gal["ngal"])
+        if "wp" in self.obs:
+            out["wp"] = np.asarray(gal["wp"], float)
+        if "esd" in self.obs:
+            pm = 10.0 ** v["log10_M_star_cen"] if "log10_M_star_cen" in v else 0.0
+            out["esd"] = {}
+            for sv, d in self.data_gal["esd"].items():
+                ds_pm = pm / (np.pi * (d["rp"] * 1e6) ** 2) if pm else 0.0
+                out["esd"][sv] = np.asarray(gal["esd"][sv], float) + ds_pm
+        if "xlf" in self.obs:
+            out["xlf"] = {}
+            for z in self.XLF_Z:
+                pw = self._powell_at(z); self._apply_agn_params(pw, v)
+                grid, phi = pw.xlf(band="hard")
+                phi_phys = np.asarray(phi) * _H ** 3
+                d = self.data_agn["xlf"][z]
+                out["xlf"][z] = np.interp(d["log10lx"], grid, phi_phys,
+                                          left=1e-30, right=1e-30)
+        if "agn_bias" in self.obs:
+            d = self.data_agn["bias"]
+            model = np.empty(np.shape(d["bias"]), float)
+            for zu in np.unique(np.round(d["z"], 3)):
+                pw = self._powell_at(float(zu)); self._apply_agn_params(pw, v)
+                sel = np.round(d["z"], 3) == zu
+                model[sel] = pw.agn_bias_of_lx(d["log10lx_soft"][sel], band="soft")
+            out["agn_bias"] = model
+        if {"xray_bands", "xray_broad"} & self.obs:
+            p = np.array([v[pn] for pn in self._xb_params])
+            gas, agn = XB._components_bands(p, self._S)
+            out["xray_bands"] = dict(th_as=self._S["th_as"], gas=gas, agn=agn,
+                                     total=gas + agn, wtheta=self._S["wtheta"],
+                                     err=self._S["err"], mask=self._S["mask"])
+            if "xray_broad" in self.obs and hasattr(self, "data_xray_broad"):
+                out["xray_broad"] = np.interp(self.data_xray_broad["theta_as"],
+                                              self._S["th_as"], np.mean(gas + agn, axis=0))
+        return out
+
     # --------------------------------------------------------- probability
     def log_prior(self, theta) -> float:
         theta = np.asarray(theta, float)

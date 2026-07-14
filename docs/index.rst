@@ -73,6 +73,7 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    bgs_ls10_wp_survey
    bgs_comparat2025_mstar10_joint_fit
    bgs_zm15_joint_mcmc
+   bgs_full_joint
    timing_joint_model
 
 .. toctree::
