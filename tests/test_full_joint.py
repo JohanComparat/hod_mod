@@ -96,6 +96,15 @@ def test_sample_smoke(tmp_path):
     # resume: a second call continues the SAME backend and runs the remaining steps
     r2 = J.sample(tmp_path, n_walkers=12, n_burnin=2, n_steps=6)
     assert np.isfinite(r2["acceptance"])
+    # predict() + the plotter figure builders run end-to-end (feed the doc-page figures)
+    from hod_mod.scripts.fitting import plot_bgs_full_joint as P
+    theta_med = np.median(r2["flat"], axis=0)
+    pred = J.predict(theta_med)
+    assert pred["wp"].shape == J.data_gal["wp"]["wp"].shape and np.all(np.isfinite(pred["wp"]))
+    assert all(np.all(np.isfinite(v)) for v in pred["xlf"].values())
+    P.fig_corner(r2["flat"], J.names, theta_med, tmp_path / "corner.png")
+    P.fig_observables(J, None, pred, tmp_path / "obs.png")
+    assert (tmp_path / "corner.png").exists() and (tmp_path / "obs.png").exists()
     # a stale/incompatible seed (wrong length) must be ignored, not broadcast-crash
     # (regression for the 15-vs-14 map_result.json mismatch)
     d2 = tmp_path / "mismatch"
