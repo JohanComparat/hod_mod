@@ -96,3 +96,8 @@ def test_sample_smoke(tmp_path):
     # resume: a second call continues the SAME backend and runs the remaining steps
     r2 = J.sample(tmp_path, n_walkers=12, n_burnin=2, n_steps=6)
     assert np.isfinite(r2["acceptance"])
+    # a stale/incompatible seed (wrong length) must be ignored, not broadcast-crash
+    # (regression for the 15-vs-14 map_result.json mismatch)
+    d2 = tmp_path / "mismatch"
+    r3 = J.sample(d2, n_walkers=12, n_burnin=2, n_steps=3, x_start=np.zeros(J.ndim + 1))
+    assert (d2 / "chain.h5").exists() and np.isfinite(r3["acceptance"])

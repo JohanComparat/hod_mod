@@ -435,17 +435,28 @@ class JointFull:
         import emcee
         out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
         x0 = np.asarray(x_start if x_start is not None else self.x0, float)
+        if x0.shape != (self.ndim,):
+            # A stale/incompatible seed (e.g. a MAP saved with a different param
+            # set) must not seed the walkers -> fall back to the fiducial x0.
+            print(f"[sample] x_start size {x0.size} != model ndim {self.ndim}; "
+                  f"ignoring it and seeding from the fiducial x0", flush=True)
+            x0 = self.x0.copy()
         nw = max(n_walkers, 2 * self.ndim + 2)
         rng = np.random.default_rng(42)
         scale = np.where(np.isfinite(self.pri_sig), self.pri_sig, 0.05 * (self.hi - self.lo))
-        p0 = x0[None, :] + 1e-3 * scale[None, :] * rng.standard_normal((nw, self.ndim))
-        p0 = np.clip(p0, self.lo + 1e-6, self.hi - 1e-6)
         backend = emcee.backends.HDFBackend(str(out / "chain.h5"))
         try:
             resumed = backend.iteration > 0
         except (AttributeError, OSError, KeyError):
             resumed = False
+        if resumed and backend.shape[1] != self.ndim:
+            # An existing chain of a different dimensionality can't be continued.
+            print(f"[sample] existing chain.h5 has ndim {backend.shape[1]} != "
+                  f"{self.ndim}; starting a fresh chain", flush=True)
+            resumed = False
         if not resumed:
+            p0 = x0[None, :] + 1e-3 * scale[None, :] * rng.standard_normal((nw, self.ndim))
+            p0 = np.clip(p0, self.lo + 1e-6, self.hi - 1e-6)
             backend.reset(nw, self.ndim)
             start = p0
         else:
