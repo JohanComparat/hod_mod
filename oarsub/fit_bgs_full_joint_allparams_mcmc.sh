@@ -45,12 +45,17 @@ cd "${REPO}"
 mkdir -p oarsub/logs "${OUT_DIR}"
 echo "host=$(hostname) job=${OAR_JOB_ID:-local} cores=${NCORES} start=$(date -Is)"
 
-# MCMC only — resumes from ${OUT_DIR}/chain.h5 (emcee HDF backend) and seeds a
-# fresh chain from ${OUT_DIR}/map_result.json if present.  No MAP re-run, so an
-# idempotent/besteffort re-submit continues exactly where it left off.  (For a
-# cold start, run the MAP once locally with --mode map and rsync map_result.json.)
+# Skip the MAP if it is already done: if map_result.json exists in OUT_DIR run
+# MCMC only (resumes chain.h5); otherwise run the MAP first (--mode both) to seed
+# the walkers.  So a first submit does MAP+MCMC and every idempotent/besteffort
+# re-submit continues from the chain without ever redoing the MAP.
+if [ -f "${OUT_DIR}/map_result.json" ]; then
+    MODE=mcmc; echo "[job] map_result.json present -> MCMC only (resume)"
+else
+    MODE=both; echo "[job] no map_result.json -> MAP then MCMC"
+fi
 python -m hod_mod.scripts.fitting.fit_bgs_full_joint \
-    --free-zm15 --mode mcmc \
+    --free-zm15 --mode "${MODE}" \
     --n-walkers 64 --n-burnin 1000 --n-steps 3000 \
     --out-dir "${OUT_DIR}"
 
