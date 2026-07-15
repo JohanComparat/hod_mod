@@ -87,7 +87,8 @@ def LX_of_M(log10_m500c, ez, lx_norm, lx_slope, boost=1.0):
 # 8 free params: LX-M(2) + kT-M(2) + shape(2) + AGN duty cycle + gas metallicity.
 # Metallicity is a param so the "free_metal" candidate can vary it; the relation
 # params always carry their informative Gaussian priors (limited-extent freedom).
-_PARAMS   = ["lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max", "log10DC", "z_metal"]
+_PARAMS   = ["lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max", "log10DC",
+             "z_metal", "agn_gamma"]
 _BOOST_LX  = float(np.exp(0.5 * (np.log(10.0) * 0.3) ** 2))   # log-normal mean boost
 _LOG10DC_LO, _LOG10DC_HI = B._LOG10DC_LO, B._LOG10DC_HI
 _Z_FID = 0.3                                                  # fiducial gas metallicity [Z_sun]
@@ -104,11 +105,13 @@ def _apply_candidate(cand, dc_fix=-1.8):
     """Configure the priors/bounds for a candidate; returns the output subdir name."""
     global _MU8, _SIG8, _BND8
     inf = np.inf
-    mu  = np.array([44.7, 1.61, 0.4, 0.6, 0.0, 0.0, 0.0, _Z_FID])
-    sig = np.array([0.3, 0.3, 0.2, 0.15, inf, inf, inf, 0.005])   # base: DC flat, Z fixed
+    # 9th param agn_gamma: AGN/continuum photon index, free with a Gaussian prior
+    # around 1.8 so the continuum (not hot gas) can absorb a flat band spectrum.
+    mu  = np.array([44.7, 1.61, 0.4, 0.6, 0.0, 0.0, 0.0, _Z_FID, _GAMMA_AGN])
+    sig = np.array([0.3, 0.3, 0.2, 0.15, inf, inf, inf, 0.005, 0.3])   # base: DC flat, Z fixed
     bnd = np.array([[43.2, 46.2], [0.6, 2.6], [-0.9, 1.7], [0.1, 1.3],
                     [_P2_GRID[0], _P2_GRID[-1]], [_RMAX_GRID[0], _RMAX_GRID[-1]],
-                    [_LOG10DC_LO, _LOG10DC_HI], [0.05, 1.0]])
+                    [_LOG10DC_LO, _LOG10DC_HI], [0.05, 1.0], [1.2, 2.6]])
     if cand == "agn_fixed":          # fix AGN duty cycle to the Phase-A broad-band value
         mu[6] = dc_fix; sig[6] = 0.02; bnd[6] = [dc_fix - 0.1, dc_fix + 0.1]
     elif cand == "free_metal":       # free the gas metallicity (flat in [0.05, 1.0])
@@ -309,7 +312,8 @@ def _components_bands(p, S):
     """ARF-weighted gas and AGN (Nb, Ntheta)."""
     G = S["G_interp"]([[p[4], p[5]]])[0].reshape(S["nth"], -1)   # (Ntheta, NM)
     gas = S["c_total"] * (_weight_bands(p, S) @ G.T)             # (Nb, Ntheta)
-    agn = 10.0 ** p[6] * S["c_obs_total"] * (S["fb"][:, None] * S["agn_dc1"][None, :])
+    fb = _agn_band_fractions(gamma=p[8]) if len(p) > 8 else S["fb"]   # free AGN photon index
+    agn = 10.0 ** p[6] * S["c_obs_total"] * (fb[:, None] * S["agn_dc1"][None, :])
     return S["arf"][:, None] * gas, S["arf"][:, None] * agn
 
 
@@ -348,7 +352,7 @@ def _anchor(samples, anchor_sample):
     relation params + mid shape, free (A_gas, A_AGN) lsq over the band data -> the
     A_gas that reproduces it defines c_total (density_norm≡1)."""
     S = samples[anchor_sample]
-    pc = np.array([_MU8[0], _MU8[1], _MU8[2], _MU8[3], 0.6, 4.0, -1.5, _Z_FID])
+    pc = np.array([_MU8[0], _MU8[1], _MU8[2], _MU8[3], 0.6, 4.0, -1.5, _Z_FID, _GAMMA_AGN])
     St = dict(S); St["c_total"] = 1.0
     gas1, _ = _components_bands(pc, St)                # c_total=1
     agn1 = St["arf"][:, None] * St["c_obs_total"] * (St["fb"][:, None] * St["agn_dc1"][None, :])
