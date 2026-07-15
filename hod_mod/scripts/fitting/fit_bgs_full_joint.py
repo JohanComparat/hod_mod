@@ -39,6 +39,21 @@ def _parse_args(argv=None):
     p.add_argument("--mode", choices=["map", "mcmc", "both"], default="map")
     p.add_argument("--rp-min-wp", type=float, default=0.5)
     p.add_argument("--rp-min-esd", type=float, default=2.0)
+    p.add_argument("--esd-surveys", nargs="+", default=["DES", "HSC", "KIDS"],
+                   help="which ESD lensing surveys to fit (default all three)")
+    p.add_argument("--esd-rp-max", type=float, default=float("inf"),
+                   help="upper rp cut [Mpc/h] on the ESD data (default no cut)")
+    p.add_argument("--xlf-z", nargs="+", type=float, default=[0.1, 0.4],
+                   help="XLF redshift slices to fit (default 0.1 0.4)")
+    p.add_argument("--xlf-lx-min", type=float, default=float("-inf"),
+                   help="lower log10 L_X cut on the XLF data (default no cut)")
+    p.add_argument("--agn-bias-refs", nargs="+", default=None,
+                   help="restrict the AGN halo-bias compilation to these references "
+                        "(e.g. Comparat23 Krumpe15); default keeps all")
+    p.add_argument("--kt-prior-sig", nargs=2, type=float, default=None,
+                   metavar=("SIG_NORM", "SIG_SLOPE"),
+                   help="tighten the kt_norm / kt_slope Gaussian prior widths (default "
+                        "0.2 0.15) to keep kT-M near the cluster scaling, e.g. 0.10 0.06")
     p.add_argument("--f-sys", type=float, default=0.05)
     p.add_argument("--hmf", default="tinker08")
     p.add_argument("--n-walkers", type=int, default=48)
@@ -55,9 +70,21 @@ def main(argv=None):
                           else "bgs_full_joint_fixedzm15"))
     out.mkdir(parents=True, exist_ok=True)
 
+    # Persist the exact data selection so the plotter can rebuild an identical model.
+    json.dump(dict(sample=a.sample, free_zm15=a.free_zm15, observables=list(a.observables),
+                   rp_min_wp=a.rp_min_wp, rp_min_esd=a.rp_min_esd,
+                   esd_surveys=list(a.esd_surveys), esd_rp_max=a.esd_rp_max,
+                   xlf_z=list(a.xlf_z), xlf_lx_min=a.xlf_lx_min,
+                   agn_bias_refs=(list(a.agn_bias_refs) if a.agn_bias_refs else None),
+                   kt_prior_sig=(list(a.kt_prior_sig) if a.kt_prior_sig else None),
+                   f_sys=a.f_sys, hmf=a.hmf),
+              open(out / "fit_config.json", "w"), indent=2)
+
     J = JointFull(sample=a.sample, free_zm15=a.free_zm15, observables=a.observables,
                   rp_min_wp=a.rp_min_wp, rp_min_esd=a.rp_min_esd, f_sys=a.f_sys,
-                  hmf_backend=a.hmf)
+                  hmf_backend=a.hmf, esd_surveys=a.esd_surveys, esd_rp_max=a.esd_rp_max,
+                  xlf_z=a.xlf_z, xlf_lx_min=a.xlf_lx_min, agn_bias_refs=a.agn_bias_refs,
+                  kt_prior_sig=a.kt_prior_sig)
     print(f"[fit] ndim={J.ndim}  n_data={J.n_data()}  free_zm15={a.free_zm15}", flush=True)
     print(f"[fit] free params: {J.names}", flush=True)
 
