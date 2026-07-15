@@ -253,7 +253,7 @@ class JointFull:
             # In-bounds start: the band-fit's canonical seed.  _MU8 carries 0.0
             # placeholders for the flat-prior shape/DC params (p2, r_max, log10DC),
             # which are OUTSIDE their bounds — never use _MU8 as x0 for those.
-            xb_x0 = [44.7, 1.61, 0.40, 0.60, 0.6, 4.0, -1.5, 0.30]
+            xb_x0 = [44.7, 1.61, 0.40, 0.60, 0.6, 4.0, -1.5, 0.30, 1.8]
             for i, pn in enumerate(self._xb_params):
                 init = float(np.clip(xb_x0[i], bnd8[i, 0] + 1e-6, bnd8[i, 1] - 1e-6))
                 add(pn, float(bnd8[i, 0]), float(bnd8[i, 1]), init,
