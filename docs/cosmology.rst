@@ -79,6 +79,42 @@ Linear growth is encoded as :math:`P(k,z) = D^2(z) P(k,0)` with the growth facto
    D(z) = \frac{5\Omega_m}{2} H(z) / H_0
    \int_z^\infty \frac{(1+z')}{[H(z')/H_0]^3}\,dz'.
 
+.. note::
+
+   **Tracking a differentiable emulated P(k): jaxmapse / jaxace.**
+   EH98 is used here specifically because it is analytic and therefore
+   JAX-traceable — CAMB is not — which is what the Fisher forecast needs.
+   The `CosmologicalEmulators <https://github.com/CosmologicalEmulators>`_
+   group publishes JAX/Flax ports of its emulators that share this
+   differentiability while adding Boltzmann-code accuracy:
+
+   * `jaxmapse <https://github.com/CosmologicalEmulators/jaxmapse>`_ — a
+     differentiable **matter** power-spectrum emulator, the natural drop-in
+     replacement for the EH98 shape used by
+     :class:`~hod_mod.forecast.pk_eisenstein_hu.EisensteinHu98PkLinear`.
+     *Status (2026-07-15): pre-release stub — 1 commit, no release, no
+     README. Not usable yet; revisit once it has a tagged release + a
+     validation notebook.*
+   * `jaxace <https://github.com/CosmologicalEmulators/jaxace>`_ (v0.6.1,
+     Jun 2026) — the mature JAX base package: differentiable background
+     cosmology (``w0waCDMCosmology.E_z / r_z / D_z``) plus the Flax
+     emulator loader that ``jaxmapse`` builds on.
+
+   **Evaluation (2026-07-15).** ``jaxace`` v0.6.1 was benchmarked against
+   this repo's :mod:`hod_mod.core.distances` and ``growth_factor`` on a
+   flat :math:`w_0w_a`\ CDM fiducial (Planck-2018, massless :math:`\nu`).
+   The two independent implementations agree to **< 0.05 % on values**
+   (:math:`E(z)` 4e-4, :math:`\chi(z)` 2e-4, :math:`D(z)/D(0)` 1e-4) and
+   their autodiff gradients agree to **< 0.04 %** (:math:`d\chi/dw_0`
+   matched to 3.5e-4). This validates the in-repo layer and confirms
+   ``jaxace`` is a gradient-compatible alternative. Two integration
+   caveats: (i) the Julia originals (``Mapse.jl``, ``Effort.jl`` …) are
+   *not* usable — reaching them from Python breaks the JAX autodiff chain;
+   (ii) ``jaxace`` is parameterised by *physical* densities
+   (:math:`\omega_b=\Omega_b h^2`, :math:`\omega_c=\Omega_c h^2`) whereas
+   :mod:`hod_mod.core.distances` takes :math:`(\Omega_m, h)` independently,
+   so any adoption needs a parameter-mapping shim.
+
 .. automodule:: hod_mod.core.power_spectrum
    :members:
    :undoc-members:
