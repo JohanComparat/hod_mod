@@ -102,8 +102,10 @@ def test_sample_smoke(tmp_path):
     pred = J.predict(theta_med)
     assert pred["wp"].shape == J.data_gal["wp"]["wp"].shape and np.all(np.isfinite(pred["wp"]))
     assert all(np.all(np.isfinite(v)) for v in pred["xlf"].values())
+    comp = J.predict_components(theta_med)
+    assert set(comp["wp"]) >= {"1h", "2h", "total"} and np.all(np.isfinite(comp["wp"]["1h"]))
     P.fig_corner(r2["flat"], J.names, theta_med, tmp_path / "corner.png")
-    P.fig_observables(J, None, pred, tmp_path / "obs.png")
+    P.fig_observables(J, None, pred, comp, tmp_path / "obs.png")
     assert (tmp_path / "corner.png").exists() and (tmp_path / "obs.png").exists()
     # a stale/incompatible seed (wrong length) must be ignored, not broadcast-crash
     # (regression for the 15-vs-14 map_result.json mismatch)

@@ -77,12 +77,22 @@ def load_roster26_xlf(z: float) -> tuple[np.ndarray, np.ndarray]:
     return arr[:, 0], arr[:, 1]
 
 
-def load_agn_bias_compilation() -> dict:
-    """AGN large-scale halo bias vs soft (0.5–2 keV) luminosity compilation."""
+def load_agn_bias_compilation(refs=None) -> dict:
+    """AGN large-scale halo bias vs soft (0.5–2 keV) luminosity compilation.
+
+    The file columns are ``redshift, LX0.5-2keV, bias, bias_err, Ref``.  If
+    ``refs`` is given (e.g. ``("Comparat23", "Krumpe15")``) only rows from those
+    references are kept; ``None`` keeps all.
+    """
     p = data_root() / "erosita" / "observations" / "AGN_bias_halo_compilation.txt"
-    arr = np.genfromtxt(p, delimiter=",", comments="#", usecols=(0, 1, 2, 3))
-    arr = np.atleast_2d(arr)
-    arr = arr[np.isfinite(arr).all(axis=1)]
+    arr = np.atleast_2d(np.genfromtxt(p, delimiter=",", comments="#", usecols=(0, 1, 2, 3)))
+    ref = np.atleast_1d(np.char.strip(
+        np.genfromtxt(p, delimiter=",", comments="#", usecols=(4,), dtype=str).astype(str)))
+    keep = np.isfinite(arr).all(axis=1)
+    if refs is not None:
+        want = {str(r).strip() for r in refs}
+        keep = keep & np.array([r in want for r in ref])
+    arr = arr[keep]
     return dict(z=arr[:, 0], log10lx_soft=arr[:, 1], bias=arr[:, 2], bias_err=arr[:, 3])
 
 
@@ -101,12 +111,21 @@ class JointFull:
                  observables=("ngal", "wp", "esd", "xray_bands", "xray_broad",
                               "xlf", "agn_bias"),
                  rp_min_wp=0.5, rp_min_esd=2.0, f_sys=0.05,
-                 hmf_backend="tinker08", ngal_frac_err=0.05, verbose=True):
+                 hmf_backend="tinker08", ngal_frac_err=0.05, verbose=True,
+                 esd_surveys=("DES", "HSC", "KIDS"), esd_rp_max=np.inf,
+                 xlf_z=(0.1, 0.4), xlf_lx_min=-np.inf, agn_bias_refs=None,
+                 kt_prior_sig=None):
         self.sample_name = sample
         self.free_zm15 = bool(free_zm15)
         self.obs = set(observables)
         self.rp_min_wp = rp_min_wp
         self.rp_min_esd = rp_min_esd
+        self.esd_surveys = tuple(esd_surveys)
+        self.esd_rp_max = float(esd_rp_max)
+        self.xlf_z = tuple(float(z) for z in xlf_z)
+        self.xlf_lx_min = float(xlf_lx_min)
+        self.agn_bias_refs = tuple(agn_bias_refs) if agn_bias_refs is not None else None
+        self.kt_prior_sig = tuple(kt_prior_sig) if kt_prior_sig is not None else None
         self.f_sys = f_sys
         self.ngal_frac_err = ngal_frac_err
         self.z = float(SAMPLES[sample]["zmean"])
@@ -185,9 +204,9 @@ class JointFull:
                                          grid=smf["log10mstar"])
         if "esd" in self.obs:
             self.data_gal["esd"] = {}
-            for sv in ("DES", "HSC", "KIDS"):
+            for sv in self.esd_surveys:
                 e = load_esd_data(self.sample_name, sv)
-                m = e["rp"] > self.rp_min_esd
+                m = (e["rp"] > self.rp_min_esd) & (e["rp"] < self.esd_rp_max)
                 self.data_gal["esd"][sv] = dict(rp=e["rp"][m], ds=e["delta_sigma"][m],
                                                 err=e["delta_sigma_err"][m])
 
@@ -195,11 +214,13 @@ class JointFull:
         self.data_agn = {}
         if "xlf" in self.obs:
             self.data_agn["xlf"] = {}
-            for z in self.XLF_Z:
+            for z in self.xlf_z:
                 lx, phi = load_roster26_xlf(z)
-                self.data_agn["xlf"][z] = dict(log10lx=lx, phi=phi, err=self.XLF_FRAC_ERR * phi)
+                m = np.asarray(lx) > self.xlf_lx_min
+                self.data_agn["xlf"][z] = dict(log10lx=lx[m], phi=phi[m],
+                                               err=self.XLF_FRAC_ERR * phi[m])
         if "agn_bias" in self.obs:
-            self.data_agn["bias"] = load_agn_bias_compilation()
+            self.data_agn["bias"] = load_agn_bias_compilation(refs=self.agn_bias_refs)
 
     def _load_xray_broad_data(self):
         d = _load_xray_broad(self.sample_name)
@@ -224,7 +245,11 @@ class JointFull:
             n, l, h, mu, sig = _POINT_MASS
             add(n, l, h, mu, mu, sig)
         if {"xray_bands", "xray_broad"} & self.obs:
-            mu8, sig8, bnd8 = XB._MU8, XB._SIG8, XB._BND8
+            mu8, sig8, bnd8 = XB._MU8, np.array(XB._SIG8, float), XB._BND8
+            if self.kt_prior_sig is not None:
+                # tighten the kt_norm (idx 2) / kt_slope (idx 3) Gaussian priors so
+                # the kT-M relation cannot extrapolate far from the cluster scaling
+                sig8[2], sig8[3] = float(self.kt_prior_sig[0]), float(self.kt_prior_sig[1])
             # In-bounds start: the band-fit's canonical seed.  _MU8 carries 0.0
             # placeholders for the flat-prior shape/DC params (p2, r_max, log10DC),
             # which are OUTSIDE their bounds — never use _MU8 as x0 for those.
@@ -339,7 +364,7 @@ class JointFull:
     def _chi2_agn(self, v) -> float:
         chi2 = 0.0
         if "xlf" in self.obs:
-            for z in self.XLF_Z:
+            for z in self.xlf_z:
                 pw = self._powell_at(z); self._apply_agn_params(pw, v)
                 grid, phi = pw.xlf(band="hard")
                 phi_phys = np.asarray(phi) * _H ** 3
@@ -404,7 +429,7 @@ class JointFull:
                 out["esd"][sv] = np.asarray(gal["esd"][sv], float) + ds_pm
         if "xlf" in self.obs:
             out["xlf"] = {}
-            for z in self.XLF_Z:
+            for z in self.xlf_z:
                 pw = self._powell_at(z); self._apply_agn_params(pw, v)
                 grid, phi = pw.xlf(band="hard")
                 phi_phys = np.asarray(phi) * _H ** 3
@@ -428,6 +453,44 @@ class JointFull:
             if "xray_broad" in self.obs and hasattr(self, "data_xray_broad"):
                 out["xray_broad"] = np.interp(self.data_xray_broad["theta_as"],
                                               self._S["th_as"], np.mean(gas + agn, axis=0))
+        return out
+
+    def predict_components(self, theta) -> dict:
+        """Per-observable component decomposition for the plots: ``wp`` and ESD
+        split into 1-halo / 2-halo (ESD also carries the central point mass), and
+        the X-ray cross split into hot-gas / AGN.  In fixed-ZM15 mode the galaxy
+        terms are theta-independent (only the ESD point mass moves)."""
+        dec = self._decode(theta); v = dec["v"]; zm15 = dec["zm15"]
+        hp = self._hod_params(zm15)
+        out = {}
+        if "wp" in self.obs:
+            d = self.data_gal["wp"]
+            c = self.fhmp.wp_components(d["rp"], pi_max=d["pi_max"], z=self.z,
+                                        theta_cosmo=_THETA_COSMO, hod_params=hp)
+            out["wp"] = {k: np.asarray(c[k], float) for k in ("1h", "2h", "total")}
+        if "esd" in self.obs:
+            pm = 10.0 ** v["log10_M_star_cen"] if "log10_M_star_cen" in v else 0.0
+            out["esd"] = {}
+            for sv, d in self.data_gal["esd"].items():
+                c = self.fhmp.delta_sigma_components(d["rp"], z=self.z,
+                                                     theta_cosmo=_THETA_COSMO, hod_params=hp)
+                ds_pm = (pm / (np.pi * (d["rp"] * 1e6) ** 2)) if pm else np.zeros_like(d["rp"])
+                out["esd"][sv] = dict(one_h=np.asarray(c["1h"], float),
+                                      two_h=np.asarray(c["2h"], float),
+                                      point_mass=np.asarray(ds_pm, float),
+                                      total=np.asarray(c["total"], float) + np.asarray(ds_pm, float))
+        if {"xray_bands", "xray_broad"} & self.obs:
+            p = np.array([v[pn] for pn in self._xb_params])
+            gas, agn = XB._components_bands(p, self._S)
+            out["xray"] = dict(th_as=self._S["th_as"], gas=gas, agn=agn, total=gas + agn,
+                               wtheta=self._S["wtheta"], err=self._S["err"], mask=self._S["mask"])
+            if hasattr(self, "data_xray_broad"):
+                th = self._S["th_as"]; d = self.data_xray_broad
+                out["xray_broad"] = dict(
+                    theta_as=d["theta_as"], wtheta=d["wtheta"], err=d["err"],
+                    gas=np.interp(d["theta_as"], th, np.mean(gas, axis=0)),
+                    agn=np.interp(d["theta_as"], th, np.mean(agn, axis=0)),
+                    total=np.interp(d["theta_as"], th, np.mean(gas + agn, axis=0)))
         return out
 
     # --------------------------------------------------------- probability

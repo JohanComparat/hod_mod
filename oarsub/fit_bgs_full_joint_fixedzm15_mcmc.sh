@@ -60,8 +60,16 @@ if [ -f "${OUT_DIR}/map_result.json" ]; then
 else
     MODE=both; echo "[job] no map_result.json -> MAP then MCMC"
 fi
+# Data selection (iteration 2): only ESD HSC on 2<rp<8, XLF z=0.1 with LX>41,
+# AGN bias from Comparat23+Krumpe15 only; keep the broad + 15 narrow X-ray bands.
+# NOTE: this changes the likelihood, so clear an OUT_DIR from an earlier selection
+# (rm map_result.json chain.h5) before the first submit of this configuration.
 python -m hod_mod.scripts.fitting.fit_bgs_full_joint \
     --mode "${MODE}" \
+    --esd-surveys HSC --esd-rp-max 8.0 \
+    --xlf-z 0.1 --xlf-lx-min 41.0 \
+    --agn-bias-refs Comparat23 Krumpe15 \
+    --kt-prior-sig 0.10 0.06 \
     --n-walkers 48 --n-burnin 500 --n-steps 2000 \
     --out-dir "${OUT_DIR}"
 
