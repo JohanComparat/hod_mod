@@ -135,15 +135,20 @@ All clustering HOD classes subclass `HODBase` (ABC) and implement `nc_ns()` and
 ## Gas profiles and cross-correlations
 
 `hod_mod` predicts galaxy × gas cross-correlations using parametric electron
-pressure and density profiles embedded in the same halo model framework.
+pressure and density profiles embedded in the same halo model framework. By
+default a **single DPM gas model** (Oppenheimer+2025) drives *both* observables:
+its electron pressure `P` feeds the tSZ Compton-y signal *and* the X-ray
+temperature `T = P/n_e`, while its electron density `n_e` feeds the soft-X-ray
+emission — so the X-ray and SZ predictions share the same DPM gas parameters.
 
 **Gas profile classes** (`hod_mod.gas`):
 
 | Class | Physical profile | Reference |
 |---|---|---|
-| `PressureProfileA10` | electron pressure P_e(r\|M,z) → tSZ Compton-y | [Arnaud et al. 2010](https://arxiv.org/abs/0910.1234) |
+| `PressureProfileDPM` (model=1,2,3) | electron pressure P_e(r\|M,z) → tSZ Compton-y **(default)** | [Oppenheimer et al. 2025](https://arxiv.org/abs/2505.14782) |
 | `GasDensityDPM` (model=1,2,3) | electron density n_e(r\|M,z) → soft X-ray ε | [Oppenheimer et al. 2025](https://arxiv.org/abs/2505.14782) |
-| `m200_to_m500c` | NFW bisection: M₂₀₀ → M₅₀₀c, R₅₀₀c | — |
+| `PressureProfileA10` / `PressureProfileBattaglia12` | alternative tSZ pressure profiles (A10 default option; B12 for the GODMAX cross-check) | [Arnaud+2010](https://arxiv.org/abs/0910.1234) / [Battaglia+2012](https://arxiv.org/abs/1109.3711) |
+| `m200_to_m500c` | NFW bisection: M₂₀₀ → M₅₀₀c, R₅₀₀c (for the M500c-based A10 profile) | — |
 
 **Cross-spectrum observables** (`hod_mod.observables.cross_spectra`):
 
@@ -157,16 +162,42 @@ pressure and density profiles embedded in the same halo model framework.
 | `angular_cl_gX` | C_ℓ^{g,X} via Limber approximation | (Mpc/h) cm⁻⁶ |
 
 ```python
-from hod_mod.gas import PressureProfileA10, GasDensityDPM
+import numpy as np
+import jax.numpy as jnp
+from hod_mod import (
+    LinearPowerSpectrum, make_hmf, HaloProfile, MoreHODModel, FullHaloModelPrediction,
+)
+from hod_mod.gas import PressureProfileDPM, GasDensityDPM
 from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 
-pp    = PressureProfileA10(r_max_over_r500c=5.0, n_gl=200)   # Arnaud+2010
-dp    = GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=200) # Oppenheimer+2025
+# Assemble the halo model (identical construction to the Quick-start block below).
+pk_lin = LinearPowerSpectrum()
+theta  = pk_lin.default_cosmology()
+hmf    = make_hmf("tinker08", pk_func=pk_lin.pk_linear)
+hp     = HaloProfile(dict(flat=True, H0=67.36, Om0=0.31, Ob0=0.0493, sigma8=0.811, ns=0.965),
+                     cm_relation="diemer19")
+hod    = MoreHODModel(hmf, hmf.bias)
+fhmp   = FullHaloModelPrediction(pk_lin, hod, hp, profile="nfw")
+
+# One DPM gas model → both observables.  Passing the same DPM model as the
+# pressure and density profiles couples X-ray and SZ: the tSZ pressure P and
+# the X-ray temperature T = P/n_e come from `pp`, the X-ray emission from `dp`.
+pp    = PressureProfileDPM(model=2, r_max_over_r200=3.0, n_gl=200)  # Oppenheimer+2025
+dp    = GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=200)        # Oppenheimer+2025
 cross = HaloModelCrossSpectra(fhmp, pressure_profile=pp, density_profile=dp)
 
-sigma_y = cross.projected_gy(rp, z=0.5, theta_cosmo=theta, hod_params=params)
-cl_gy   = cross.angular_cl_gy(ell, z_arr, nz_g, theta, params)
-wgX     = cross.projected_gX(rp, z=0.5, theta_cosmo=theta, hod_params=params)
+rp     = jnp.logspace(-1, 1.5, 20)
+params = MoreHODModel.default_params()
+ell    = np.logspace(2, 4, 20)
+z_arr  = np.linspace(0.1, 0.9, 16)
+nz_g   = np.exp(-0.5 * ((z_arr - 0.5) / 0.15) ** 2)   # example galaxy n(z)
+
+sigma_y = cross.projected_gy(rp, z=0.5, theta_cosmo=theta, hod_params=params)   # stacked tSZ Σ_y(r_p)
+cl_gy   = cross.angular_cl_gy(ell, z_arr, nz_g, theta, params)                  # tSZ C_ℓ^{g,y}
+wgX     = cross.projected_gX(rp, z=0.5, theta_cosmo=theta, hod_params=params)   # stacked X-ray w_gX(r_p)
+
+# `PressureProfileA10` (Arnaud+2010) and `PressureProfileBattaglia12` remain
+# drop-in alternatives for the `pressure_profile` slot.
 ```
 
 Benchmark data for [Comparat et al. 2025](https://arxiv.org/abs/2503.19796)
@@ -195,15 +226,20 @@ stacked-cluster model:
 | Regime | Method | Observable |
 |---|---|---|
 | Weak | `kappa`, `gamma_t` | convergence κ, tangential shear / ΔΣ (mis-centering + Tinker10 2-halo) |
-| Strong | `einstein_radius` | θ_E (implicit-function-theorem `jax.grad`) |
-| Strong | `magnification`, `tangential_shear`, `radial_critical_radius` | μ, critical curves |
+| Strong | `einstein_radius` | (R_E [Mpc/h], θ_E [arcsec]) via implicit-function-theorem `jax.grad` |
+| Strong | `magnification`, `critical_curves` | μ(R); tangential + radial critical radii |
 
 ```python
+import jax.numpy as jnp
+from hod_mod import LinearPowerSpectrum
 from hod_mod.observables.lensing import ClusterLensingPrediction
 
-clp     = ClusterLensingPrediction(profile="bmo", cm_relation="duffy08")
-gamma   = clp.gamma_t(rp, m_h=1e14, z=0.3, z_s=1.0, theta_cosmo=theta)  # ΔΣ / shear
-theta_E = clp.einstein_radius(m_h=1e15, z=0.3, z_s=2.0, theta_cosmo=theta)
+theta = LinearPowerSpectrum().default_cosmology()
+rp    = jnp.logspace(-1, 1.5, 20)
+
+clp        = ClusterLensingPrediction(profile="bmo", cm_relation="duffy08")
+gamma      = clp.gamma_t(rp, m_h=1e14, z=0.3, z_s=1.0, theta_cosmo=theta)      # ΔΣ / tangential shear
+R_E, th_E  = clp.einstein_radius(m_h=1e15, z=0.3, z_s=2.0, theta_cosmo=theta)  # (Mpc/h, arcsec)
 ```
 
 The full pipeline reproduces the reference fftlog ΔΣ to ~1% max / 0.04% median.
@@ -271,8 +307,9 @@ blackjax NUTS (`run_nuts`). Two differentiable backends are available:
   `ForwardModel(galaxy_nz=(z_grid, nz))`).
 - **Production, full fidelity** — `FullHaloModelPrediction(pk_backend="eh98_jax")`
   (built via `hod_mod.observables.make_differentiable_prediction`) plus
-  `HaloModelCrossSpectra`, assembled through `ProductionMultiProbeModel`, give
-  the real production amplitudes. Each observable is validated against central
+  `HaloModelCrossSpectra`, assembled through `ProductionMultiProbeModel`
+  (`hod_mod.fitting.jax_inference`, fed by `MultiProbeGaussianLikelihood.synthetic_production`),
+  give the real production amplitudes. Each observable is validated against central
   finite differences:
 
   | Observable | Path | `jacfwd` vs FD |
@@ -288,6 +325,7 @@ blackjax NUTS (`run_nuts`). Two differentiable backends are available:
   clustering to ~2%.
 
 ```python
+import numpy as np
 from hod_mod.forecast.forward_jax import ForwardModel
 from hod_mod.fitting.jax_inference import (
     MultiProbeGaussianLikelihood, run_map_jax, run_nuts)
@@ -297,6 +335,7 @@ which = ["wp", "ds", "cl_gy", "cl_gX", "xlf"]     # galaxies + SZ + X-ray + AGN
 free  = ["Omega_m", "sigma8", "lg_m1h", "lg_m0star"]
 
 like, x_true = MultiProbeGaussianLikelihood.synthetic(fm, which, free, rel_err=0.05)
+x0   = x_true + 0.1 * np.abs(x_true)   # perturbed start away from the truth
 res  = run_map_jax(like, x0)      # scipy L-BFGS-B driven by the JAX gradient
 post = run_nuts(like, res["x"])   # blackjax NUTS (pip install hod-mod[inference])
 ```
@@ -323,6 +362,8 @@ sensitivity study reports parameter-freedom robustness (31 vs 111 params).
 | tier-3 (102 params) | `run_tier3_forecast.py` | radio/IR intensity maps, band LFs, tSZ/HI autos, cluster counts |
 | tier-4 (111 params) | `run_tier4_forecast.py` | morphology split, BH-bulge coupling |
 
+The tier drivers live in `hod_mod/scripts/forecasts/` (run from the repo root).
+
 See [docs/sensitivity_fisher.rst](docs/sensitivity_fisher.rst),
 [docs/tier2_forecast.rst](docs/tier2_forecast.rst),
 [docs/tier3_forecast.rst](docs/tier3_forecast.rst),
@@ -336,7 +377,7 @@ Run any script from the repository root:
 
 | Paper | Script | Observable |
 |---|---|---|
-| [More et al. 2015](https://arxiv.org/abs/1407.1856) | `run_benchmark.py --model more2015` | w_p(r_p) BOSS CMASS |
+| [More et al. 2015](https://arxiv.org/abs/1407.1856) | `run_benchmark.py --model more2015_logM11_12` | w_p(r_p) BOSS CMASS |
 | [Lange et al. 2025](https://arxiv.org/abs/2512.15962) | `run_benchmark.py --model lange2025_bgs3_bwpd_hsc` | w_p + ΔΣ DESI BGS |
 | [Arnaud et al. 2010](https://arxiv.org/abs/0910.1234) | `validate_arnaud2010.py` | A10 pressure profile |
 | [Oppenheimer et al. 2025](https://arxiv.org/abs/2505.14782) | `validate_oppenheimer2025.py` | DPM density profile |
@@ -348,7 +389,7 @@ Run clustering/lensing benchmarks:
 
 ```bash
 # from repo root
-python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015 --plot
+python hod_mod/scripts/benchmarks/run_benchmark.py --model more2015_logM11_12 --plot
 python hod_mod/scripts/benchmarks/run_all_benchmarks.py --plot
 ```
 
