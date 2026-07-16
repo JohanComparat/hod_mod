@@ -24,7 +24,7 @@ set -euo pipefail
 
 REPO="${HOME}/software/hod_mod"
 CONDA_ENV="hod_mod"
-OUT_DIR="${HOME}/data/hod_mod_results/bgs_full_joint_allparams"
+OUT_DIR="${HOME}/data/hod_mod_results/bgs_full_joint_allparams_v0.3"  # v0.3 Hankel re-run (0.2.3 kept)
 
 export HOD_MOD_DATA_DIR="${HOME}/data/hod_mod_data"
 export HOD_MOD_RESULTS="${HOME}/data/hod_mod_results"

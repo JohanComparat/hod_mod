@@ -8,6 +8,48 @@ the job name, **project (mandatory)**, resources and log files.
 Docs: <https://gricad-doc.univ-grenoble-alpes.fr/hpc/joblaunch/job_management/>
 and <https://gricad-doc.univ-grenoble-alpes.fr/hpc/description/>.
 
+## v0.3 re-run campaign (array jobs)
+
+The v0.3.0 Hankel fix in `_pk_to_xi` moves every real-space observable
+(`w_p` ≤ 19 %, `ΔΣ` ≤ 20 %, `Σ_y` ~16 %, `w_θ` cross), so **every fit and figure
+built at ≤ 0.2.3 must be re-run.** Instead of one script per job, the campaign
+uses **OAR array jobs**: a single generic wrapper `run_job.sh` plus one param
+file per family (`params/*.txt`), each line a full `python -m ...` command that
+`run_job.sh` `eval`s (so `$DATA_BGS` / `$RESULTS` expand portably). All fits
+write to `*_v0.3` out-dirs, leaving the 0.2.3 results for a before/after diff.
+
+**Precondition:** the cluster repo must be at the v0.3 commit (`git pull`), or the
+jobs re-run the *old* transform. Edit the config block in `run_job.sh` for your
+account first.
+
+| Family | Param file / script | Sizing | Notes |
+| --- | --- | --- | --- |
+| A. benchmarks (MAP) | `params/benchmarks_map.txt` | `core=8, 2 h` | Guo18/19, Leauthaud/vanUitert/ZM15 ΔΣ, all Lange25 |
+| A. benchmarks (MCMC) | `params/benchmarks_mcmc.txt` | `core=8, 8 h` | More2015 ×3, Kravtsov, Zheng, ZM15 + 7 multisample bins |
+| B. production joint fits | `params/production_mcmc.txt` | `core=16, 24 h`, resumable | bgs_zm15_joint, thresh, comparat2025 |
+| C. Comparat2025 X-ray | `fit_comparat2025_*.sh` (×5) | 4–18 h | unchanged, re-pointed to `_v0.3` |
+| D. forecasts | `params/forecasts.txt` | `core=16, 24 h` | tier2/3/4, stage4, sensitivity, benchmark_map_mcmc |
+| B. full-joint | `fit_bgs_full_joint_*_mcmc.sh` (×2) | see script | re-pointed to `_v0.3` |
+
+Submit a family (smoke-test with `--devel` first) via the helper:
+
+```bash
+./oarsub/submit_campaign.sh your-oar-project benchmarks_map --devel   # 1-line smoke
+./oarsub/submit_campaign.sh your-oar-project benchmarks_map
+./oarsub/submit_campaign.sh your-oar-project all                      # everything
+```
+
+or by hand:
+
+```bash
+oarsub --project your-oar-project -l /nodes=1/core=8,walltime=02:00:00 \
+       --array-param-file oarsub/params/benchmarks_map.txt -S ./oarsub/run_job.sh
+```
+
+When the chains land, sync the `_v0.3` out-dirs back and regenerate every figure
+with `./oarsub/collect_and_plot.sh`; then update the χ²/dof, best-fit params and
+the AUM-agreement line in the affected `docs/*.rst` pages.
+
 ## Which machine?
 
 | Cluster | Hardware | Use for |
