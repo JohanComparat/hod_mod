@@ -15,7 +15,7 @@
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 RES="${HOD_MOD_RESULTS:?set HOD_MOD_RESULTS}"
-VTAG="${VTAG:-v0.3}"
+VTAG="${VTAG:-v0.31}"   # keep in sync with _campaign_env.sh / submit_campaign.sh
 
 miss=0
 ok()   { printf "  \033[32m OK \033[0m %-52s %s\n" "$1" "$2"; }
@@ -40,6 +40,7 @@ echo
 echo "-- production galaxy joint fits (param file: production_mcmc.txt) --"
 check_dir "bgs_zm15_joint_wp_ngal_${VTAG}"      "production_mcmc family not finished/synced"
 check_dir "bgs_full_joint_fixedzm15_${VTAG}"    "full_joint family not finished/synced"
+check_dir "bgs_full_joint_allparams_${VTAG}"    "full_joint family not finished/synced"
 check_dir "bgs_comparat2025_${VTAG}"            "production_mcmc family not finished/synced"
 check_dir "bgs_zm15_thresh_joint_${VTAG}"       "production_mcmc family not finished/synced"
 

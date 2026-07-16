@@ -56,6 +56,11 @@ fi
 # This is derived from VTAG rather than left to the caller because OAR does not
 # propagate the submitting shell's environment to the node — an
 # `HOD_MOD_PK_BACKEND=camb oarsub ...` would be silently dropped.
+#
+# SCOPE: the pin reaches Families A-C only (they route through
+# default_pk_linear()).  Family D forecasts build ForwardModel, which selects
+# its P(k) correction via driver flags (real CAMB is not JAX-traceable), so a
+# v0.3 Family-D re-run still uses the emulator regardless of this variable.
 if [ -z "${HOD_MOD_PK_BACKEND:-}" ]; then
     case "${VTAG}" in
         v0.3) export HOD_MOD_PK_BACKEND=camb ;;        # Hankel fix, CAMB P(k)

@@ -21,6 +21,8 @@ dependencies:
   - ipython
   # Utilities
   - tqdm
+  # OS-correct results/cache directories (hod_mod.paths.results_root/cache_root)
+  - platformdirs
   # JAX ecosystem
   - jax
   - jaxlib
@@ -47,6 +49,9 @@ dependencies:
     - colossus
     # MCMC sampling
     - emcee
+    # Gradient-based NUTS sampling (fitting.jax_inference.run_nuts and
+    # hod_mod/scripts/forecasts/run_forecast_nuts.py)
+    - blackjax
     # On-demand Zenodo data fetcher (benchmark data + curated results)
     - pooch
     # Non-linear P(k) emulator — Aletheia (Sanchez 2025, arXiv:2511.13826)

@@ -2,7 +2,77 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.3.1] — 2026-07-16
+
+**Behaviour-changing release — the default linear P(k) moves CAMB → CosmoPower-JAX.**
+Every number built on the linear P(k) shifts: ~+2.5% in P(k) amplitude, ~+1.3% in σ8.
+Results computed with 0.3.0 are superseded; pin the old physics with
+`HOD_MOD_PK_BACKEND=camb`. (By the 0.3.0 semver argument below this would deserve a
+minor bump; 0.3.1 is kept because the release is unpublished and the `v0.31` campaign
+result trees already carry the tag.)
+
+### Default P(k) backend: CosmoPower-JAX
+
+- **New `hod_mod.forecast.pk_cosmopower.CosmoPowerJaxPkLinear`** — differentiable
+  CAMB-accuracy linear P(k) emulator (<0.1% shape agreement vs CAMB over the
+  training box, validated in `hod_mod/forecast/tests/test_pk_cosmopower.py`),
+  with bundled network weights so compute nodes need no runtime download.
+- **New `hod_mod.core.power_spectrum.default_pk_linear()`** — the package-wide
+  linear-P(k) factory. Backend selected by `HOD_MOD_PK_BACKEND`:
+  `cosmopower` (default) or `camb`. There is deliberately **no silent fallback**:
+  a missing `cosmopower-jax` raises, so the science never depends on which
+  packages happen to be installed. `cosmopower-jax` is a core dependency.
+- **All fitting/prediction entry points now route through `default_pk_linear()`**
+  — the campaign scripts (`fit_comparat2025`, `fit_bgs_zm15_joint`,
+  `fit_joint_lsdr10`, `fit_xray_joint_bands`, benchmark fitters, full joint) and,
+  in this release's audit pass, every remaining standalone script that previously
+  constructed `LinearPowerSpectrum()` directly.
+- **`ForwardModel(pk_correction="cosmopower")` is the forecast default.** Note the
+  forecast stack selects its P(k) correction via driver flags, not the env var
+  (real CAMB is not JAX-traceable), so `HOD_MOD_PK_BACKEND` affects the fitting
+  families only.
+- Paths that stay on CAMB **by design**: `forecast/pk_camb_ratio.py` (builds the
+  CAMB/EH98 ratio table for the `camb_linear` Fisher correction),
+  `core/nonlinear.py` (HMcode non-linear P(k)), `fitting/config.py` (σ8 helper).
+
+### X-ray band fitting on native DPM parameters
+
+- **New `hod_mod.fitting.dpm_bands`** — per-band DPM emissivity decomposition,
+  re-basing the energy-band transfer onto native DPM gas parameters.
+- **New `hod_mod.fitting.dpm_priors`** — priors back-propagated onto the native
+  DPM parameterisation via JAX autodiff.
+- **`scripts/fitting/fit_xray_joint_bands.py`** — multi-band joint w(θ) fit driver
+  consuming both (per-mass transfer grids, AGN Γ free as 9th band parameter).
+
+### tSZ Σ_y at MCMC speed + SZ leg of the joint fit
+
+- **New `hod_mod.fitting.sz_transfer`** — exact per-halo-mass Σ_y(r_p) transfer
+  kernel (~3e-6 relative agreement with `projected_gy`, asserted in
+  `tests/test_sz_transfer.py`); the DPM pressure amplitude/mass-slope
+  `(P_0.3, β_P)` rescale analytically, making them free at MCMC speed.
+- **SZ Σ_y leg wired into `fit_xray_joint_bands.py`** (opt-in `--sz`): stacked
+  Compton-y profiles digitized from Das et al. 2023 (`data/das_2023/`, r in
+  R200 units, per stellar-mass bin) enter the per-sample likelihood through the
+  same DPM pressure parameters that set the X-ray temperature — one gas model,
+  two observables.
+
+### Forecast posterior beyond Fisher
+
+- **New `hod_mod/scripts/forecasts/run_forecast_nuts.py`** — full NUTS posterior
+  of the forecast forward model (blackjax, `--compare-fisher` validation loop).
+
+### HPC re-run campaign infrastructure (`oarsub/`)
+
+- **Versioned per-campaign result trees** (`VTAG=v0.3`/`v0.31`):
+  `_campaign_env.sh` resolves the tag, exports `HOD_MOD_RESULTS`,
+  `HOD_MOD_DATA_DIR`, `HOD_MOD_SUMSTAT` and pins `HOD_MOD_PK_BACKEND`
+  per campaign (v0.3 = Hankel fix on CAMB; v0.31 = + CosmoPower default),
+  and seeds fixed reference inputs into each tree.
+- **`submit_campaign.sh`** (family A–D OAR array jobs, `--devel` smoke mode),
+  **`pull_results.sh`** (ProxyJump-safe rsync back), **`campaign_status.sh`**
+  (preflight audit), **`collect_and_plot.sh`** (docs figure refresh).
+
+### Validation & data
 
 - **GODMAX independent SZ cross-check.** Added an independent-code validation of
   the thermal-SZ machinery against [GODMAX](https://github.com/shivampcosmo/GODMAX)
@@ -22,10 +92,10 @@ All notable changes to this project will be documented in this file.
     NumPy build); `hod_mod/scripts/validate_godmax.py` overlays + reports residuals;
     `tests/test_godmax_comparison.py` adds self-contained machinery checks plus
     skipif reference assertions. New docs page `docs/godmax_cross_check.rst`.
+- **`data/das_2023/`** — digitized Das et al. 2023 stacked Compton-y profiles
+  (Fig. 5 and Fig. B1 stellar-mass bins) for the SZ leg above.
 
-## [0.3.1] — 2026-07-16
-
-**Documentation/data patch — no change to any computed number.**
+### Documentation & data repairs
 
 - **Restored `data/more2015_boss_cmass/wp_cmass_z052.csv`**, deleted in `ecb561c`
   but still referenced by `README.md`, `configs/hod_fit_more2015_cmass.yml`,

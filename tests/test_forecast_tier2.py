@@ -19,6 +19,10 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
+# ForwardModel builds the default CosmoPower P(k) emulator unconditionally;
+# without the package these tests would error at fixture time, not skip.
+pytest.importorskip("cosmopower_jax")
+
 
 _TINY = dict(n_k=48, n_m=48, n_gl=16, n_z=3, n_z_shear=3)
 

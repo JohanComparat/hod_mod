@@ -56,6 +56,13 @@ if has_files "$RES/bgs_full_joint_fixedzm15_${VTAG}"; then
         --out-dir "$RES/bgs_full_joint_fixedzm15_${VTAG}" --docs
 else echo "   .. skip bgs_full_joint_fixedzm15_${VTAG} (no output)"; fi
 
+# --free-zm15 switches the plotter to the bgs_full_joint_allparams__* figure
+# prefix, so this cannot clobber the fixedzm15 figures above.
+if has_files "$RES/bgs_full_joint_allparams_${VTAG}"; then
+    $PY -m hod_mod.scripts.fitting.plot_bgs_full_joint --free-zm15 \
+        --out-dir "$RES/bgs_full_joint_allparams_${VTAG}" --docs
+else echo "   .. skip bgs_full_joint_allparams_${VTAG} (no output)"; fi
+
 #   bgs_comparat2025 (fit_joint_lsdr10) figures are written by the fit itself
 #   (--no-plot was NOT passed); copy them if the fit put them in the run dir:
 find "$RES/bgs_comparat2025_${VTAG}" -maxdepth 1 -name '*.png' -exec cp -f {} "$IMG/" \; 2>/dev/null || true
