@@ -26,6 +26,8 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
+# deliberately tracked: reference source of the 0.2.2 halo-lensing port
+!notebooks/halo_lensing.ipynb
 
 # Docs build output
 docs/_build/

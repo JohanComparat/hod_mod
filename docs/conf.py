@@ -2,13 +2,16 @@
 
 import os
 import sys
+import tomllib
 
 sys.path.insert(0, os.path.abspath(".."))
 
 project = 'hod_mod'
 author = "Johan Comparat"
-copyright = "2025, Johan Comparat"
-release = '0.0.1'
+copyright = "2025-2026, Johan Comparat"
+with open(os.path.join(os.path.dirname(__file__), "..", "pyproject.toml"), "rb") as _f:
+    release = tomllib.load(_f)["project"]["version"]
+version = ".".join(release.split(".")[:2])
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -38,6 +41,7 @@ autodoc_mock_imports = [
     "CEmulator",
     "aemulusnu_hmf",
     "soxs",
+    "cosmopower_jax",
 ]
 
 napoleon_google_docstring = False
@@ -81,13 +85,6 @@ html_theme_options = {
     "sticky_navigation": True,
     "titles_only": False,
 }
-
-rst_prolog = """
-.. warning::
-
-   This documentation is under construction. Content may be incomplete or subject to change.
-
-"""
 
 mathjax3_config = {
     "tex": {
