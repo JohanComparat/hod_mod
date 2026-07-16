@@ -27,8 +27,8 @@ _PLUMBING = {
     "beta_sat": "wp", "bcut": "wp", "beta_cut": "wp", "alpha_sat": "wp",
     "beta_b": "ds", "log10_M_eta": "ds", "beta_eta": "ds",
     "alpha_in_gas": "cl_gX", "alpha_tr_gas": "cl_gX",
-    "p0_pressure": "cl_gy", "c500_pressure": "cl_gy", "gamma_pressure": "cl_gy",
-    "alpha_pressure": "cl_gy", "beta_out_pressure": "cl_gy",
+    "p03_pressure": "cl_gy", "c_dpm_pressure": "cl_gy", "alpha_in_pressure": "cl_gy",
+    "alpha_tr_pressure": "cl_gy", "alpha_out_pressure": "cl_gy",
     "agn_rho": "xlf", "agn_sig_mstar": "xlf",
 }
 _OBS = ("wp", "ds", "cl_gX", "cl_gy", "xlf")
@@ -77,9 +77,9 @@ def test_promoted_fiducials_equal_constants():
         "log10_M_eta": FJ._FIXED_BARYON["log10_M_eta"],
         "beta_eta": FJ._FIXED_BARYON["beta_eta"],
         "alpha_in_gas": FJ._ALPHA_IN_GAS, "alpha_tr_gas": FJ._ALPHA_TR_GAS,
-        "p0_pressure": FJ._A10["P0"], "c500_pressure": FJ._A10["c500"],
-        "gamma_pressure": FJ._A10["gamma"], "alpha_pressure": FJ._A10["alpha"],
-        "beta_out_pressure": FJ._A10["beta"],
+        "p03_pressure": FJ._DPM_P2["P03"], "c_dpm_pressure": FJ._DPM_P2["c_dpm"],
+        "alpha_in_pressure": FJ._DPM_P2["alpha_in"], "alpha_tr_pressure": FJ._DPM_P2["alpha_tr"],
+        "alpha_out_pressure": FJ._DPM_P2["alpha_out"],
         "agn_rho": 0.0, "agn_sig_mstar": FJ._SIG_MSTAR_XLF,
     }
     for n, v in expected.items():
@@ -99,15 +99,20 @@ def test_promoted_params_are_plumbed(jac):
         assert np.abs(col).max() > 1e-8 * ref, f"{name} not plumbed into {obs}"
 
 
-def test_p0_pressure_is_pure_tsz_amplitude(jac, fid):
-    """C_gy ∝ P0 exactly: dlnC/dlnP0 = 1; and P0 touches nothing else."""
+def test_p03_pressure_is_pure_tsz_amplitude(jac, fid):
+    """C_gy ∝ P_0.3 exactly: dlnC/dlnP_0.3 = 1; and P_0.3 touches nothing else.
+
+    In the forecast the DPM pressure params drive only the tSZ leg — the X-ray
+    temperature is still the phenomenological kT–M relation (kt_norm/kt_slope),
+    so the pressure amplitude remains a pure-tSZ parameter.
+    """
     from hod_mod.forecast.forward_jax import _IDX
     d0, J, sel = jac
-    i = _IDX["p0_pressure"]
+    i = _IDX["p03_pressure"]
     gy = sel["cl_gy"]
     np.testing.assert_allclose(J[gy, i] * float(fid[i]), d0[gy], rtol=1e-8)
     for obs in ("wp", "ds", "cl_gX", "xlf"):
-        assert np.abs(J[sel[obs], i]).max() == 0.0, f"p0_pressure leaks into {obs}"
+        assert np.abs(J[sel[obs], i]).max() == 0.0, f"p03_pressure leaks into {obs}"
 
 
 def test_theta_eff_identity_at_fiducial(model, fid):

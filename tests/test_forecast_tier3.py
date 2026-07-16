@@ -177,12 +177,12 @@ def test_agn_cross_spectra(model, fid):
 
 
 def test_cl_yy_p0_identity(model, fid):
-    """d ln C_yy / d p0_pressure = 2/P0 exactly (the amplitude enters the
+    """d ln C_yy / d p03_pressure = 2/P_0.3 exactly (the amplitude enters the
     pressure squared)."""
     from hod_mod.forecast.forward_jax import _IDX
     g = jax.jacfwd(lambda t: jnp.log(model.predict(t, ["cl_yy"])["cl_yy"]))(fid)
-    np.testing.assert_allclose(np.asarray(g[:, _IDX["p0_pressure"]]),
-                               2.0 / float(fid[_IDX["p0_pressure"]]), rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(g[:, _IDX["p03_pressure"]]),
+                               2.0 / float(fid[_IDX["p03_pressure"]]), rtol=1e-6)
 
 
 def test_cl_hihi_m0_identity(model, fid):

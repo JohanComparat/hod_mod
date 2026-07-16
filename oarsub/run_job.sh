@@ -40,7 +40,9 @@ set -euo pipefail
 # --- user configuration (edit for your GRICAD account) ----------------------
 REPO="${HOME}/software/hod_mod"                        # repo location on the cluster
 CONDA_ENV="hod_mod"                                    # conda/mamba env name
-export HOD_MOD_RESULTS="${HOD_MOD_RESULTS:-${HOME}/data/hod_mod_results}"
+
+# --- campaign version (VTAG + HOD_MOD_RESULTS) ------------------------------
+source "$(dirname "${BASH_SOURCE[0]}")/_campaign_env.sh"
 export HOD_MOD_DATA_DIR="${HOD_MOD_DATA_DIR:-${HOME}/data/hod_mod_data}"
 export HOD_MOD_SUMSTAT="${HOD_MOD_SUMSTAT:-${HOME}/software/sum_stat/data}"
 # convenience shortcuts referenced by the param files ------------------------
@@ -76,6 +78,13 @@ mkdir -p oarsub/logs "${HOD_MOD_RESULTS}"
 
 CMD="$*"
 echo "host=$(hostname)  job=${OAR_JOB_ID:-local}  array=${OAR_ARRAY_INDEX:-0}  cores=${NCORES}  start=$(date -Is)"
+echo "vtag=${VTAG}  results=${HOD_MOD_RESULTS}"
+# Record which linear P(k) actually produced these numbers: the default moved
+# from CAMB to the CosmoPower-JAX emulator, which shifts P(k) by ~+2.5% in
+# amplitude (~+1.3% in sigma8), so "which backend ran" is provenance, not
+# trivia.  Under `set -e` this also fails the job immediately (rather than deep
+# inside the fit) if cosmopower-jax is missing from the cluster env.
+echo "pk_backend=$(python -c 'from hod_mod.core.power_spectrum import default_pk_linear; print(type(default_pk_linear()).__name__)')"
 echo "cmd> ${CMD}"
 
 # The param line references $DATA_BGS / $RESULTS (defined above), so eval it.

@@ -652,6 +652,9 @@ class FullHaloModelPrediction:
         if pk_backend not in ("camb", "eh98_jax"):
             raise ValueError(
                 f"pk_backend must be 'camb' or 'eh98_jax', got {pk_backend!r}")
+        # 'eh98_jax' selects the *differentiable* code path, not a specific
+        # spectrum: any JAX-traceable P(k) qualifies (EH98 or the CosmoPower-JAX
+        # emulator — see _validate_eh98_backend).
         self._pk_lin = pk_lin
         self._hod = hod
         self._halo_profile = halo_profile
@@ -690,14 +693,18 @@ class FullHaloModelPrediction:
         :func:`make_differentiable_prediction` to wire these correctly.
         """
         from hod_mod.forecast.pk_eisenstein_hu import EisensteinHu98PkLinear
+        from hod_mod.forecast.pk_cosmopower import CosmoPowerJaxPkLinear
         from hod_mod.core.halo_mass_function import HaloMassFunction
         from hod_mod.core.concentration import ConcentrationModel
 
-        if not isinstance(self._pk_lin, EisensteinHu98PkLinear):
+        # Either JAX-traceable spectrum is acceptable: the analytic EH98 or the
+        # CosmoPower-JAX emulator (the default, CAMB-accurate to <0.1%).
+        if not isinstance(self._pk_lin, (EisensteinHu98PkLinear,
+                                         CosmoPowerJaxPkLinear)):
             raise TypeError(
-                "pk_backend='eh98_jax' requires an EisensteinHu98PkLinear "
-                "P(k) (CAMB is not JAX-traceable); "
-                "use make_differentiable_prediction().")
+                "pk_backend='eh98_jax' requires a JAX-traceable P(k) — an "
+                "EisensteinHu98PkLinear or CosmoPowerJaxPkLinear (CAMB is not "
+                "JAX-traceable); use make_differentiable_prediction().")
         if not isinstance(self._hod._hmf, HaloMassFunction):
             raise TypeError(
                 "pk_backend='eh98_jax' requires an analytic JAX HMF "

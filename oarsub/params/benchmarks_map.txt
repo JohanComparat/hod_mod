@@ -21,13 +21,13 @@ python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg1_bwpd_h
 python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg2_bwpd_wp --plot
 python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg2_bwpd_esd --plot
 python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg2_bwpd_hsc --plot
-python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_des --plot
-python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs3_des --plot
-python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg1_des --plot
-python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_hsc --plot
-python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs3_hsc --plot
-python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg1_hsc --plot
-python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg2_hsc --plot
-python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_wp --plot
-python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_ds_des --plot
-python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_ds_hsc --plot
+# BROKEN(no config): python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_des --plot
+# BROKEN(no config): python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs3_des --plot
+# BROKEN(no config): python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg1_des --plot
+# BROKEN(no config): python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_hsc --plot
+# BROKEN(no config): python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs3_hsc --plot
+# BROKEN(no config): python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg1_hsc --plot
+# BROKEN(no config): python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg2_hsc --plot
+# BROKEN(no config): python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_wp --plot
+# BROKEN(no config): python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_ds_des --plot
+# BROKEN(no config): python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_ds_hsc --plot

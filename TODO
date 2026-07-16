@@ -1,12 +1,29 @@
-TODO : 
+mamba activate hod_mod
+pip install cosmopower-jax          # or: mamba env update -f environment.yml
+python -c "from hod_mod.core.power_spectrum import default_pk_linear; print(type(default_pk_linear()).__name__)"
+# expect: CosmoPowerJaxPkLinear
 
-The full hod_mod suite never ran to completion — I killed it myself. I launched it with timeout 3000 (50 min), and it died at 23% at 22:19. When I reported "still running (large; at ~11%)", it had in fact already been dead for hours. My "3 pytest procs" check was matching its own grep, so it looked alive when nothing was.
 
-That matters because the suite is the only thing that would confirm the transform fix hasn't broken something outside the subsets I tested directly. The subsets that did pass — AUM 13/13, cross_spectra 13/13, data_io 26/26, public_api 11/11 — are the ones most likely to catch a regression, but they aren't the whole picture: _pk_to_xi also feeds xi_r, w_theta, xi_cg, wp_bias_ratio, sigma_2h, intrinsic alignments and the forecast forward model, and none of those have been exercised since the change.
 
-It's relaunched now without a timeout (machine is free, 42G RAM), and I'll report the result. Expect ~3–4h based on the 23%-in-50min rate.
 
-Everything else from my last summary stands. The overnight run genuinely did finish: 9/9 samples, no failures, all per-sample physics checks passing, with the two findings worth carrying forward — the y–M* trend is only detected above M*≈11 (4.3σ and 8.6σ), and the errors are map/cosmic-variance limited rather than shot-noise limited, so more galaxies below M*≈11 won't help.
+
+
+#
+# edit the config block in oarsub/run_job.sh for your account, then:
+./oarsub/submit_campaign.sh pr-orphans benchmarks_map --devel   # 30-min smoke first
+./oarsub/submit_campaign.sh pr-orphans all
+
+rsync -avhz --progress \
+  'comparaj@dahu:/home/comparaj/data/hod_mod_results/{benchmarks,fits,bgs_*_v0.3,tier2_forecast,tier3_forecast,tier4_forecast,stage4_forecast,sensitivity_fisher}' \
+  /home/comparat/data/hod_mod_results/
+
+# or 
+oarsub/pull_results.sh
+
+HOD_MOD_RESULTS=/home/comparat/data/hod_mod_results PY=/home/comparat/mamba/envs/hod_mod/bin/python \
+  ./oarsub/collect_and_plot.sh
+git -C /home/comparat/software/hod_mod status docs/_images   # review the figure diff
+
 
 
 

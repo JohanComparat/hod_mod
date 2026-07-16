@@ -356,8 +356,8 @@ class HamAGNModel:
 
         # -- Power spectrum / HMF
         if pk_lin is None:
-            from hod_mod.core.power_spectrum import LinearPowerSpectrum
-            pk_lin = LinearPowerSpectrum()
+            from hod_mod.core.power_spectrum import default_pk_linear
+            pk_lin = default_pk_linear()
         if hmf is not None:
             self._hmf = hmf
         else:

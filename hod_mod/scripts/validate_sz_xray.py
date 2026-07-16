@@ -1,8 +1,13 @@
 """Validation figures for galaxy × tSZ and galaxy × soft X-ray cross-correlations.
 
+Both the tSZ (Compton-y) and soft-X-ray legs are driven by ONE DPM Model 2 gas
+model: the electron pressure P feeds the tSZ signal *and* the X-ray temperature
+T = P/n_e, while the electron density n_e feeds the X-ray emission — so the two
+observables share the DPM gas parameters (Oppenheimer+2025).
+
 Produces seven panels:
 
-1. A10 pressure profile P_e(r/R₅₀₀) for 3 halo masses at z=0.3
+1. DPM electron pressure profile P_e(r/R₂₀₀) for 3 halo masses at z=0.3
 2. Pressure profile FT ỹ(k|M) vs k for same 3 masses
 3. P_{g,y}(k) decomposition: 1h + 2h + total
 4. P_{g,X}(k) decomposition: 1h + 2h + total  (DPM Model 2)
@@ -12,8 +17,7 @@ Produces seven panels:
 
 References
 ----------
-Arnaud+2010 : arXiv:0910.1234 (A10 pressure profile)
-Oppenheimer+2025 : arXiv:2505.14782 (DPM density profile)
+Oppenheimer+2025 : arXiv:2505.14782 (DPM gas model — pressure + density + Z)
 Amodeo+2021 : arXiv:2009.05557 (galaxy × tSZ stacking benchmark)
 Comparat+2025 : arXiv:2503.19796 (galaxy × soft X-ray benchmark)
 
@@ -30,7 +34,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from hod_mod.gas import PressureProfileA10, GasDensityDPM
+from hod_mod.gas import PressureProfileDPM, GasDensityDPM
 from hod_mod.core.power_spectrum import LinearPowerSpectrum
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
@@ -76,37 +80,36 @@ def _build_prediction():
     hp     = HaloProfile(_COLOSSUS, cm_relation="diemer19")
     hod    = MoreHODModel(hmf, hmf.bias)
     fhmp   = FullHaloModelPrediction(pk_lin, hod, hp)
-    pp     = PressureProfileA10(r_max_over_r500c=5.0, n_gl=150)
+    # One DPM gas model drives BOTH legs: the tSZ pressure P and the X-ray
+    # temperature T = P/n_e derive from the same PressureProfileDPM object,
+    # while GasDensityDPM(model=2) supplies n_e for X-ray emission (and the
+    # T = P/n_e denominator).  A10 / Battaglia12 remain selectable alternatives.
+    pp     = PressureProfileDPM(model=2, r_max_over_r200=3.0, n_gl=150)
     dp     = GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=150)
     cross  = HaloModelCrossSpectra(fhmp, pressure_profile=pp, density_profile=dp)
     return fhmp, cross
 
 
 # ---------------------------------------------------------------------------
-# Figure 1: A10 pressure profile P_e(r/R₅₀₀)
+# Figure 1: DPM electron pressure profile P_e(r/R₂₀₀)
 # ---------------------------------------------------------------------------
 
 def fig_pressure_profile():
-    print("Figure 1: Arnaud+2010 pressure profile ...")
-    pp   = PressureProfileA10()
-    x    = np.logspace(-1.5, 0.8, 200)   # r / R₅₀₀
-
-    ez2        = _OM * (1.0 + _Z)**3 + (1.0 - _OM)
-    rho_crit_z = _RHO_CRIT0 * ez2 / (1.0 + _Z)**3
-
-    from hod_mod.gas import m200_to_m500c
-    m500_arr, r500_arr = m200_to_m500c(_MASS_ARR, _C200_ARR, _R200_ARR, rho_crit_z)
+    print("Figure 1: DPM (Oppenheimer+2025) pressure profile ...")
+    pp   = PressureProfileDPM(model=2)
+    x    = np.logspace(-1.5, 0.5, 200)   # r / R₂₀₀ (DPM is natively M200-based)
 
     fig, ax = plt.subplots(figsize=(6, 4))
-    for i, (m200, r200, m500, r500) in enumerate(zip(_MASS_ARR, _R200_ARR, m500_arr, r500_arr)):
-        pe = pp._p3d(x, float(m500), _Z, _H, _OM)
+    for i, (m200, r200) in enumerate(zip(_MASS_ARR, _R200_ARR)):
+        r_mpc = x * float(r200)
+        pe    = np.asarray(pp._pressure_3d(r_mpc, float(m200), float(r200), _Z, _OM))
         ax.loglog(x, pe, color=_COLORS[i], label=_MASS_LABELS[i])
 
-    ax.set_xlabel(r"$r / R_{500c}$")
+    ax.set_xlabel(r"$r / R_{200}$")
     ax.set_ylabel(r"$P_e$ [keV cm$^{-3}$]")
-    ax.set_title("Arnaud+2010 pressure profile (arXiv:0910.1234 Table 1)")
+    ax.set_title("DPM Model 2 pressure profile (Oppenheimer+2025, arXiv:2505.14782)")
     ax.legend()
-    ax.set_xlim(0.03, 6)
+    ax.set_xlim(0.03, 3)
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     out = _FIG_DIR / "sz_01_pressure_profile.pdf"
@@ -121,15 +124,10 @@ def fig_pressure_profile():
 
 def fig_pressure_uk():
     print("Figure 2: Pressure profile Fourier transform ỹ(k|M) ...")
-    pp   = PressureProfileA10(r_max_over_r500c=5.0, n_gl=150)
+    pp   = PressureProfileDPM(model=2, r_max_over_r200=3.0, n_gl=150)
     k    = np.logspace(-2, 1, 80)
 
-    ez2        = _OM * (1.0 + _Z)**3 + (1.0 - _OM)
-    rho_crit_z = _RHO_CRIT0 * ez2 / (1.0 + _Z)**3
-    from hod_mod.gas import m200_to_m500c
-    m500_arr, r500_arr = m200_to_m500c(_MASS_ARR, _C200_ARR, _R200_ARR, rho_crit_z)
-
-    uk = pp.pressure_uk(k, _MASS_ARR, _R200_ARR, _C200_ARR, _Z, _THETA)   # (Nk, NM)
+    uk = pp.pressure_uk(k, _MASS_ARR, _R200_ARR, _Z, _THETA)   # (Nk, NM)
 
     fig, ax = plt.subplots(figsize=(6, 4))
     for i in range(3):
@@ -137,7 +135,7 @@ def fig_pressure_uk():
 
     ax.set_xlabel(r"$k$ [$h$/Mpc]")
     ax.set_ylabel(r"$\tilde{y}(k|M)$ [$({\rm Mpc}/h)^2$]")
-    ax.set_title(r"A10 pressure profile FT $\tilde{y}(k|M,z=0.3)$")
+    ax.set_title(r"DPM pressure profile FT $\tilde{y}(k|M,z=0.3)$")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -168,7 +166,7 @@ def fig_pgy_decomposition(cross):
 
     ax.set_xlabel(r"$k$ [$h$/Mpc]")
     ax.set_ylabel(r"$P(k)$ [$({\rm Mpc}/h)^2$]")
-    ax.set_title(rf"Galaxy $\times$ tSZ power spectrum ($z={_Z}$, A10 pressure)")
+    ax.set_title(rf"Galaxy $\times$ tSZ power spectrum ($z={_Z}$, DPM Model 2 pressure)")
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3)
     ax.set_xlim(1e-2, 20)
@@ -222,7 +220,7 @@ def fig_projected_gy(cross):
     ax.loglog(rp, np.maximum(sigma_y, 1e-30), "k-", lw=2, label=r"$\Sigma_y(r_p)$")
     ax.set_xlabel(r"$r_p$ [Mpc/$h$]")
     ax.set_ylabel(r"$\Sigma_y(r_p)$ [dimensionless Compton-$y$]")
-    ax.set_title(rf"Projected galaxy $\times$ tSZ ($z={_Z}$, A10 pressure)")
+    ax.set_title(rf"Projected galaxy $\times$ tSZ ($z={_Z}$, DPM Model 2 pressure)")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
