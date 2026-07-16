@@ -48,12 +48,29 @@ def _ogata_table(N: int = 512, h: float = 0.005):
     """Compute Ogata 2005 DE quadrature nodes x_n and combined weights.
 
     Returns (x, w) where w_n = π sin(x_n) ψ'(hn) x_n so that
-    ξ(r) = h * Σ w_n P(x_n/r) / (2π²r³).
+    ξ(r) = Σ w_n P(x_n/r) / (2π²r³).
+
+    Notes
+    -----
+    The nodes are ``x_n = (π/h) ψ(hn)`` with ``ψ(u) = u tanh(π sinh(u)/2)``, which is what makes
+    this an Ogata double-exponential rule: as n grows ψ(hn) → hn, so x_n → πn — the zeros of
+    sin — and the weights ``∝ sin(x_n)`` die double-exponentially.  That is the entire point of
+    the scheme, and it is what lets 512 nodes reach x ≈ 1608.
+
+    Until 2026-07 this computed ``x = π (hn) tanh(...)``, i.e. ``π ψ(hn)`` — a factor 1/h = 200
+    too small — with a compensating ``h`` prefactor in :func:`_pk_to_xi`.  The two errors cancelled
+    in normalisation, leaving not an Ogata rule but a plain trapezoid truncated at x ≈ π h N =
+    8.04.  The weights never decayed and the sum simply stopped.  It was accurate only when
+    P(x/r) had already decayed by x = 8; on a real P_gm it was ~12% off (23% at r = 1 Mpc/h,
+    where the required k is fully tabulated, so this was not an extrapolation effect), and on a
+    real P_gy ~16% off, reaching the wrong *sign* once ξ(r) became small.  Verified against
+    ``mcfit``'s independent FFTLog and against an exact analytic transform pair; see
+    ``TestOgataHankelAnalytic``.
     """
     n = np.arange(1, N + 1, dtype=np.float64)
     t = h * n
     s = np.pi * np.sinh(t)
-    x = np.pi * t * np.tanh(s / 2)   # nodes x_n = π ψ(hn), ψ(u)=u tanh(πsinh(u)/2)
+    x = np.pi * n * np.tanh(s / 2)   # x_n = (π/h) ψ(hn), ψ(u) = u tanh(π sinh(u)/2)
     denom = 1.0 + np.cosh(s)
     dpsi = np.where(denom > 1e-100,
                     (np.pi * t * np.cosh(t) + np.sinh(s)) / denom, 0.0)
@@ -80,10 +97,9 @@ def _pk_to_xi(
         \\xi(r) = \\frac{1}{2\\pi^2} \\int_0^\\infty k^2 P(k)
                   \\frac{\\sin(kr)}{kr}\\,\\mathrm{d}k
 
-    P(k) is supplied as a log-log interpolation table (log_k, log_pk).
-    Values outside the supplied k range are clamped to the boundary (nearest
-    P(k) value), so accuracy degrades for r ≲ 0.1 Mpc/h if P(k) is only
-    tabulated to k ≲ 100 h/Mpc.
+    P(k) is supplied as a log-log interpolation table (log_k, log_pk).  Below the table k is
+    clamped to P(k_min); above it the last decade's power law is continued (see Notes), because
+    the quadrature reaches k = x_max/r ≈ 1608/r and so runs far past any realistic k_max.
 
     Parameters
     ----------
@@ -97,20 +113,49 @@ def _pk_to_xi(
 
     Accuracy
     --------
-    Power-law P(k) ∝ k^n → ξ(r) ∝ r^(-n-3) slope recovered to < 5% for
-    n ∈ [-2, -0.5], r ∈ [0.1, 10] Mpc/h (512-node Ogata table, 2026-04-23).
-    Absolute accuracy degrades for r ≲ 0.1 Mpc/h if P(k) is not tabulated
-    to k ≳ 100 h/Mpc.
+    Agrees with ``mcfit``'s FFTLog — an independent algorithm — to 0.20% on a real P_gm and
+    0.03% on a real P_gy over r ∈ [0.05, 50] Mpc/h, and reproduces an exact analytic transform
+    pair to <1e-4 (2026-07).
+
+    Notes
+    -----
+    **High-k extrapolation is not cosmetic here.**  The rule samples k = x_n/r out to
+    x_max ≈ 1608, so at r = 0.01 it asks for k ≈ 1.6e5 h/Mpc — three orders past a typical
+    k_max = 200.  Holding P(k) *constant* out there (the old ``right=log_pk[-1]``) injects an
+    unbounded spurious contribution; continuing the measured power-law slope instead lets the
+    integrand die as it physically must.  The slope is capped at −3 so a noisy or rising last
+    decade cannot produce a divergent tail.
+
+    Two caveats worth knowing:
+
+    * at r ≲ 0.1 Mpc/h, ξ(r) genuinely depends on P(k) beyond any tabulated k_max, so the answer
+      there reflects this extrapolation *assumption*, not just the quadrature.  Tabulate P(k)
+      further if small r matters.
+    * this replaced a rule that was silently a truncated trapezoid; predictions of wp and ΔΣ
+      changed by up to ~19% and ~20% respectively when it was fixed (2026-07).  Results produced
+      before that are superseded.
 
     Timing
     ------
     ~ 590 µs / call  (JIT-compiled, N=50 radii, CPU x86-64, 2026-04-23).
     """
+    # Power-law continuation above the table, from the last decade of the tabulated slope.
+    # Guarded: a table whose tail is floored to a constant (or to -inf, which happens when a
+    # caller's float64 floor underflows on cast to float32) would give (-inf) - (-inf) = NaN and
+    # poison every radius. Fall back to a steep decay in that case.
+    _d_lp = log_pk[-1] - log_pk[-8]
+    _d_lk = log_k[-1] - log_k[-8]
+    slope_hi = jnp.where(jnp.isfinite(_d_lp) & (_d_lk > 0), _d_lp / jnp.where(_d_lk > 0, _d_lk, 1.0), -3.0)
+    slope_hi = jnp.minimum(jnp.where(jnp.isfinite(slope_hi), slope_hi, -3.0), -3.0)
+
     def _one(r_i):
         log_k_n = jnp.log(_OG_X) - jnp.log(r_i)
         log_pk_n = jnp.interp(log_k_n, log_k, log_pk,
                                left=log_pk[0], right=log_pk[-1])
-        return _OG_H * jnp.sum(_OG_W * jnp.exp(log_pk_n)) / (2.0 * jnp.pi**2 * r_i**3)
+        log_pk_n = jnp.where(log_k_n > log_k[-1],
+                             log_pk[-1] + slope_hi * (log_k_n - log_k[-1]),
+                             log_pk_n)
+        return jnp.sum(_OG_W * jnp.exp(log_pk_n)) / (2.0 * jnp.pi**2 * r_i**3)
 
     return jax.vmap(_one)(r)
 

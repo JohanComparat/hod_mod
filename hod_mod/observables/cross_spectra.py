@@ -82,6 +82,68 @@ def psf_window_ell(ell_arr: np.ndarray, fwhm_arcsec: float = 30.0) -> np.ndarray
     return jnp.exp(-0.5 * ell ** 2 * sigma_rad ** 2)
 
 
+def cap_filter(
+    profile: np.ndarray,
+    theta_arr: np.ndarray,
+    theta_d: np.ndarray | float,
+) -> np.ndarray:
+    """Compensated aperture photometry (CAP): a disk minus an equal-area ring.
+
+    .. math::
+
+        Y(\\theta) = 2\\pi \\int_0^{\\theta} \\Sigma(\\theta')\\,\\theta'\\,\\mathrm{d}\\theta'
+        \\qquad
+        T_{\\rm AP}(\\theta_d) = 2\\,Y(\\theta_d) - Y(\\sqrt{2}\\,\\theta_d)
+
+    Parameters
+    ----------
+    profile : (Nt,) radial profile Σ(θ), any units
+    theta_arr : (Nt,) angular radii, increasing, same units as ``theta_d``.
+        Must extend to at least √2·max(θ_d), and sample the profile well inside the beam
+        scale — the inner integrand carries most of the signal.
+    theta_d : float or (Nd,) disk radii at which to evaluate the filter
+
+    Returns
+    -------
+    T_AP : scalar or (Nd,) in units of ``profile`` × ``theta_arr``²
+
+    Notes
+    -----
+    The ring [θ_d, √2 θ_d] has exactly the disk's area, which is what makes the filter
+    *compensated*: a spatially flat component contributes equally to the disk and the ring and
+    cancels identically.  That is the whole point of the filter — it is why a stacked CAP is
+    insensitive to the mean level of the map (primary CMB, monopole, a constant foreground).
+
+    Returns the **integrated** T_AP (profile × solid angle), not a mean y.  This is the
+    convention Schaan et al. 2021 (PRD 103, 063513) Eqs. (10)–(11) plot in their Figs. 7–9, and
+    the one the tuto_stage stacking notebook's ``ap_of`` implements.  Dividing by the disk area
+    would give the mean — do not do that silently when comparing to their figures.
+
+    The profile is assumed to vanish outside ``theta_arr``; a profile still rising at the outer
+    edge will bias T_AP low.
+    """
+    theta = np.asarray(theta_arr, dtype=float)
+    prof = np.asarray(profile, dtype=float)
+    if theta.shape != prof.shape:
+        raise ValueError(f"profile shape {prof.shape} does not match theta_arr {theta.shape}")
+    if np.any(np.diff(theta) <= 0):
+        raise ValueError("theta_arr must be strictly increasing")
+
+    td = np.atleast_1d(np.asarray(theta_d, dtype=float))
+    if td.max() * np.sqrt(2.0) > theta.max() * (1.0 + 1e-9):
+        raise ValueError(
+            f"theta_arr reaches {theta.max():.4g} but the CAP at theta_d={td.max():.4g} needs "
+            f"the profile out to sqrt(2)*theta_d = {td.max() * np.sqrt(2.0):.4g}"
+        )
+
+    from scipy.integrate import cumulative_trapezoid
+
+    y_cum = 2.0 * np.pi * cumulative_trapezoid(theta * prof, theta, initial=0.0)
+    y_of = lambda t: np.interp(t, theta, y_cum)   # noqa: E731
+    out = 2.0 * y_of(td) - y_of(np.sqrt(2.0) * td)
+    return out if np.ndim(theta_d) else float(out[0])
+
+
 def psf_king_profile(
     theta_arcsec: np.ndarray,
     theta_c_arcsec: float = 8.64,
@@ -491,6 +553,66 @@ class HaloModelCrossSpectra:
             "b_eff":       b_eff,
         }
 
+    def _pk_tables_yy(
+        self,
+        z: float,
+        theta_cosmo: dict,
+        hod_params: dict,
+    ) -> dict:
+        """Compute the tSZ auto-power P_{y,y}(k) via the halo model.
+
+        No galaxy occupation enters — this is a pure pressure-field auto-power:
+
+        .. math::
+
+            P_{y,y}^{\\rm 1h}(k) = \\int \\frac{\\mathrm{d}n}{\\mathrm{d}M}
+                \\tilde{y}(k|M,z)^2 \\, \\mathrm{d}M
+
+            P_{y,y}^{\\rm 2h}(k) = P_{\\rm lin}(k)
+                \\left[\\int \\frac{\\mathrm{d}n}{\\mathrm{d}M}\\,b(M)\\,
+                \\tilde{y}(k|M,z)\\,\\mathrm{d}M\\right]^2
+
+        with ỹ(k|M,z) in (Mpc/h)², so P_{y,y} has units (Mpc/h) and the Limber
+        projection :meth:`angular_cl_yy` yields a dimensionless C_ℓ^{yy}.
+
+        ``hod_params`` is only used to seed the halo-table cache (HMF, bias,
+        ỹ(k|M)); the y-field carries no HOD dependence.
+
+        Returns
+        -------
+        dict with keys: log_k, log_pyy, log_pyy_1h, log_pyy_2h
+        """
+        sc = self._get_static_cache(z, theta_cosmo, hod_params)
+        m_np   = sc["m_np"]
+        dndm   = sc["dndm_np"]
+        bias   = sc["bias_np"]
+        pk_lin = sc["pk_lin"]
+
+        y_uk = self._pressure_uk_cached(z, theta_cosmo, sc)   # (Nk, NM) [(Mpc/h)²]
+
+        m_jnp    = jnp.asarray(m_np)
+        dndm_j   = jnp.asarray(dndm)
+        bias_j   = jnp.asarray(bias)
+        pk_lin_j = jnp.asarray(pk_lin)
+        y_uk_j   = jnp.asarray(y_uk)
+
+        # 1-halo y×y: integral over ỹ²
+        P_yy_1h = jnp.trapezoid(dndm_j[None, :] * y_uk_j ** 2, m_jnp, axis=1)   # (Nk,)
+
+        # 2-halo y×y: P_lin × (∫ dndm b ỹ)²
+        I_y = jnp.trapezoid(dndm_j[None, :] * bias_j[None, :] * y_uk_j, m_jnp, axis=1)
+        P_yy_2h = pk_lin_j * I_y ** 2
+
+        P_yy = P_yy_1h + P_yy_2h
+
+        log_k = jnp.log(jnp.asarray(sc["k_np"]))
+        return {
+            "log_k":      log_k,
+            "log_pyy":    jnp.log(jnp.maximum(P_yy,    1e-40)),
+            "log_pyy_1h": jnp.log(jnp.maximum(P_yy_1h, 1e-40)),
+            "log_pyy_2h": jnp.log(jnp.maximum(P_yy_2h, 1e-40)),
+        }
+
     def _pk_tables_gX(
         self,
         z: float,
@@ -839,31 +961,191 @@ class HaloModelCrossSpectra:
         z: float,
         theta_cosmo: dict,
         hod_params: dict,
+        beam_fwhm_arcmin: float | None = None,
     ) -> np.ndarray:
         """Projected galaxy × y signal Σ_y(r_p) [dimensionless Compton-y].
 
-        Computes the Abel projection of P_{g,y}(k):
+        Abel-projects P_{g,y}(k) via :func:`_pk_to_wp` (a j₀ Hankel to ξ(r) followed by a
+        line-of-sight integral), which is equivalent to
 
         .. math::
 
-            \\Sigma_y(r_p) = \\frac{1}{2\\pi^2}
-            \\int_0^\\infty k\\,P_{g,y}(k)\\,J_0(k r_p)\\,dk
+            \\Sigma_y(r_p) = \\frac{1}{2\\pi}
+            \\int_0^\\infty k\\,P_{g,y}(k)\\,J_0(k r_p)\\,\\mathrm{d}k
 
         Parameters
         ----------
         rp_arr : (NR,) projected separations [Mpc/h]
         z, theta_cosmo, hod_params : as for ``_pk_tables_gy``
+        beam_fwhm_arcmin : float | None
+            If given, convolve with a Gaussian beam of this FWHM [arcmin], so the prediction
+            matches a measurement made on a beam-convolved map (ACT DR6 NILC: 1.6).  ``None``
+            returns the unbeamed profile.
 
         Returns
         -------
         sigma_y : (NR,) [dimensionless]
+
+        Notes
+        -----
+        The beam is a **transverse** convolution — it smears on the sky, never along the line of
+        sight — yet it is applied here as an *isotropic* window B(|k|χ) on the 3D power spectrum
+        before the projection.  That is exact, not an approximation, and the reason is the
+        projection-slice theorem: the line-of-sight integral in :func:`_pk_to_wp` evaluates the
+        3D power at k_z = 0, where |k| = k_⊥, so the isotropic window reduces to the transverse
+        one exactly where it is sampled.  The apparent line-of-sight smearing integrates away —
+        convolving along π and then integrating over π is a no-op for a normalised kernel.
+
+        Checked numerically against a direct transverse-only 2D Hankel transform of
+        P·B: agreement to 0.08% for a 1.6' beam and 0.2% for 5' (see
+        ``test_beam_matches_direct_transverse_convolution``).  This is why no separate
+        transform is needed and :func:`_pk_to_wp` is left untouched.
+
+        The angular scale maps to comoving k via ℓ = k χ(z) — the plain Limber relation, not the
+        extended (ℓ+0.5)/χ used in :meth:`angular_cl_gy`.  The +0.5 corrects a line-of-sight
+        projection kernel; here the map is at a single z and only the transverse plane matters.
+
+        The projection underneath (:func:`_pk_to_wp` → :func:`~hod_mod.observables.clustering._pk_to_xi`)
+        was corrected in 2026-07: it had been a trapezoid truncated at k·r ≈ 8 rather than an
+        Ogata rule, which biased Σ_y by ~16% and produced a spurious deficit at r_p ≫ σ_beam.
+        It now agrees with ``mcfit``'s and ``hankl``'s independent FFTLog implementations to
+        0.04% and 0.26% respectively on a real P_gy.  Predictions made before that are superseded.
         """
         tables = self._pk_tables_gy(z, theta_cosmo, hod_params)
+        log_pgy = tables["log_pgy"]
+        if beam_fwhm_arcmin is not None:
+            log_pgy = log_pgy + _safe_log(
+                self._beam_window_k(tables["log_k"], z, theta_cosmo, beam_fwhm_arcmin)
+            )
         return _pk_to_wp(
             np.asarray(rp_arr),
             tables["log_k"],
-            tables["log_pgy"],
+            log_pgy,
         )
+
+    @staticmethod
+    def _beam_window_k(log_k, z, theta_cosmo: dict, beam_fwhm_arcmin: float):
+        """Gaussian beam window B(ℓ = k χ(z)) evaluated on the model's k grid.
+
+        Reuses :func:`psf_window_ell` rather than re-deriving a Gaussian B_ℓ.
+
+        Parameters
+        ----------
+        log_k : (Nk,) log(k [h/Mpc])
+        z : float
+        theta_cosmo : dict
+        beam_fwhm_arcmin : float
+
+        Returns
+        -------
+        B_k : (Nk,) dimensionless, in [0, 1]
+        """
+        from hod_mod.core.distances import comoving_distance
+
+        # χ stays in jnp (no float()) so the beam is differentiable w.r.t. cosmology on the
+        # eh98 backend, matching angular_cl_gy.
+        h = theta_cosmo["h"]
+        chi = comoving_distance(jnp.asarray(z), h, theta_cosmo["Omega_m"]) * h   # [Mpc/h]
+        ell = jnp.exp(jnp.asarray(log_k)) * chi
+        return psf_window_ell(ell, beam_fwhm_arcmin * 60.0)
+
+    def sigma_y_theta(
+        self,
+        theta_arcmin: np.ndarray,
+        z: float,
+        theta_cosmo: dict,
+        hod_params: dict,
+        beam_fwhm_arcmin: float | None = None,
+    ) -> np.ndarray:
+        """Σ_y on an **angular** grid, for feeding :func:`cap_filter`.
+
+        Evaluates :meth:`projected_gy` at r_p = θ·χ(z), so callers comparing against an
+        aperture-photometry measurement do not re-derive the angle↔comoving conversion (and do
+        not accidentally use the angular diameter distance, which is wrong here: r_p is
+        comoving, so the conversion is χ = D_M, not D_A).
+
+        Parameters
+        ----------
+        theta_arcmin : (Nt,) angular radii [arcmin]
+        z, theta_cosmo, hod_params : as for :meth:`projected_gy`
+        beam_fwhm_arcmin : float | None
+
+        Returns
+        -------
+        sigma_y : (Nt,) [dimensionless]
+        """
+        from hod_mod.core.distances import comoving_distance
+
+        h = theta_cosmo["h"]
+        chi = float(comoving_distance(np.asarray([float(z)]), h, theta_cosmo["Omega_m"])[0]) * h
+        rp = np.deg2rad(np.asarray(theta_arcmin, dtype=float) / 60.0) * chi
+        return self.projected_gy(rp, z, theta_cosmo, hod_params, beam_fwhm_arcmin)
+
+    def projected_gy_nz(
+        self,
+        rp_arr: np.ndarray,
+        z_arr: np.ndarray,
+        nz_g: np.ndarray,
+        theta_cosmo: dict,
+        hod_params: dict,
+        beam_fwhm_arcmin: float | None = None,
+    ) -> np.ndarray:
+        """Σ_y(r_p) averaged over a galaxy redshift distribution.
+
+        .. math::
+
+            \\Sigma_y(r_p) = \\sum_z n(z)\\,\\Sigma_y(r_p \\,|\\, z)
+
+        with n(z) normalised to unit sum.
+
+        Parameters
+        ----------
+        rp_arr : (NR,) projected comoving separations [Mpc/h]
+        z_arr : (Nz,) redshifts
+        nz_g : (Nz,) galaxy redshift distribution; normalised internally
+        theta_cosmo, hod_params : as for ``_pk_tables_gy``
+        beam_fwhm_arcmin : float | None
+            Beam FWHM [arcmin], applied at each z with that z's own χ.
+
+        Returns
+        -------
+        sigma_y : (NR,) [dimensionless]
+
+        Notes
+        -----
+        Use this when the beam matters and the sample spans a wide redshift range: a fixed
+        angular beam maps to a comoving scale through χ(z), so its size varies across the
+        stack — for the LS10 BGS samples, σ_beam runs from 0.04 Mpc/h at z=0.067 to 0.15 at
+        z=0.26.  Averaging fixed-z profiles also captures the evolution of the profile itself,
+        which :meth:`projected_gy` at a single z_eff does not.
+
+        **What this does not fix.**  A stacking measurement bins each galaxy into comoving r_p
+        using *its own* D_M(z), which is not the same operation as averaging model profiles
+        evaluated at fixed z.  This narrows the single-z approximation; it does not remove it.
+        The residual is expected to be small when n(z) is narrow, but it is a real modelling
+        choice and worth quantifying against the measurement rather than assuming.
+
+        **Cost.**  Each n(z) node with non-zero weight triggers a full halo-model evaluation, so
+        this is ``len(z_arr)`` times the cost of :meth:`projected_gy`.  Feed it a *coarsened*
+        n(z) — a handful of nodes spanning the distribution — not the ~40 raw histogram bins
+        ``sum_stat`` writes, which would be minutes per call and is far finer than the beam's
+        dependence on z warrants.
+        """
+        z_arr = np.asarray(z_arr, dtype=float)
+        w = np.asarray(nz_g, dtype=float)
+        if w.shape != z_arr.shape:
+            raise ValueError(f"nz_g shape {w.shape} does not match z_arr shape {z_arr.shape}")
+        total = w.sum()
+        if not np.isfinite(total) or total <= 0:
+            raise ValueError("nz_g must be finite and sum to a positive value")
+        w = w / total
+        keep = w > 0.0   # skip empty n(z) bins: each costs a full halo-model evaluation
+        out = np.zeros(len(np.asarray(rp_arr)), dtype=float)
+        for zi, wi in zip(z_arr[keep], w[keep]):
+            out += wi * np.asarray(
+                self.projected_gy(rp_arr, float(zi), theta_cosmo, hod_params, beam_fwhm_arcmin)
+            )
+        return out
 
     def projected_gX(
         self,
@@ -979,6 +1261,170 @@ class HaloModelCrossSpectra:
         elif psf_king_theta_c_arcsec is not None:
             cl_gy = cl_gy * psf_king_window_ell(ell_j, psf_king_theta_c_arcsec, psf_king_alpha)
         return cl_gy
+
+    def angular_cl_yy(
+        self,
+        ell_arr: np.ndarray,
+        z_arr: np.ndarray,
+        theta_cosmo: dict,
+        hod_params: dict,
+        beam_fwhm_arcmin: float | None = None,
+    ) -> np.ndarray:
+        """tSZ auto angular power spectrum C_ℓ^{yy} via the Limber approximation.
+
+        The Compton-y field is a line-of-sight integral with a unit window, so
+
+        .. math::
+
+            C_\\ell^{yy} = \\int_0^{\\chi_{\\max}} \\frac{\\mathrm{d}\\chi}{\\chi^2}
+            \\, P_{y,y}\\!\\left(k=\\frac{\\ell+\\tfrac{1}{2}}{\\chi}, z(\\chi)\\right)
+
+        Unlike :meth:`angular_cl_gy` there is *no* n(z) weight — the y-field spans
+        the whole redshift range, so ``z_arr`` should cover the tSZ support
+        (typically ``0 < z ≲ 4``) and sets the χ integration grid.
+
+        Parameters
+        ----------
+        ell_arr : (Nell,) angular multipoles
+        z_arr : (Nz,) redshift grid for the LOS integral (must start near 0)
+        theta_cosmo : cosmological parameters
+        hod_params : only seeds the halo-table cache (HMF/bias/ỹ)
+        beam_fwhm_arcmin : float | None
+            If given, multiply by the Gaussian beam window B_ℓ² for a beam of
+            this FWHM (the y-map beam enters twice in an auto-spectrum).
+
+        Returns
+        -------
+        cl_yy : (Nell,) dimensionless
+        """
+        from hod_mod.core.distances import comoving_distance
+
+        z_arr = np.asarray(z_arr, dtype=float)
+        ell_j = jnp.asarray(ell_arr, dtype=float)
+
+        h       = theta_cosmo["h"]
+        omega_m = theta_cosmo["Omega_m"]
+        chi_z_j = comoving_distance(jnp.asarray(z_arr), h, omega_m) * h   # (Nz,) [Mpc/h]
+
+        raw = [self._pk_tables_yy(zi, theta_cosmo, hod_params) for zi in z_arr]
+        log_pyy_stack = jnp.stack([jnp.asarray(t["log_pyy"]) for t in raw])   # (Nz, Nk)
+        log_k_j = jnp.asarray(raw[0]["log_k"])
+
+        k_lim = jnp.log(jnp.maximum((ell_j[:, None] + 0.5) / chi_z_j[None, :], 1e-4))
+
+        def _interp_one(lkq, lpt):
+            return jnp.exp(jnp.interp(lkq, log_k_j, lpt))
+
+        _interp_z    = jax.vmap(_interp_one, in_axes=(0, 0))
+        _interp_ellz = jax.vmap(_interp_z,   in_axes=(0, None))
+
+        pyy_mat   = _interp_ellz(k_lim, log_pyy_stack)                    # (Nell, Nz)
+        integrand = pyy_mat / chi_z_j[None, :] ** 2
+        cl_yy     = jnp.trapezoid(integrand, chi_z_j, axis=1)
+
+        if beam_fwhm_arcmin is not None:
+            b_ell = psf_window_ell(ell_j, beam_fwhm_arcmin * 60.0)        # arcmin→arcsec
+            cl_yy = cl_yy * b_ell ** 2
+        return cl_yy
+
+    def _convergence_kernel(self, z_arr, nz_source, theta_cosmo):
+        """Lensing efficiency (convergence) kernel W_κ(χ) on the z_arr grid.
+
+        .. math::
+
+            W_\\kappa(\\chi) = \\frac{3}{2}\\,\\Omega_m
+                \\left(\\frac{H_0}{c}\\right)^2 (1+z)\\,\\chi\\,g(\\chi),
+            \\quad g(\\chi) = \\int_\\chi^{\\chi_H}
+                n_s(\\chi_s)\\,\\frac{\\chi_s - \\chi}{\\chi_s}\\,\\mathrm{d}\\chi_s
+
+        with χ in Mpc/h so that ``H_0/c = 1/2997.92458`` (Mpc/h)⁻¹ (the h cancels)
+        and n_s normalised to ∫ n_s dz = 1.  Returns W_κ in (Mpc/h)⁻¹.
+        """
+        from hod_mod.core.distances import comoving_distance
+
+        z_arr    = np.asarray(z_arr, dtype=float)
+        nz_source = np.asarray(nz_source, dtype=float)
+        h        = theta_cosmo["h"]
+        omega_m  = theta_cosmo["Omega_m"]
+        chi_j    = comoving_distance(jnp.asarray(z_arr), h, omega_m) * h   # (Nz,) [Mpc/h]
+        z_j      = jnp.asarray(z_arr)
+
+        nz_j = jnp.asarray(nz_source) / jnp.trapezoid(jnp.asarray(nz_source), z_j)
+        # g(χ_i) = ∫ n_s(z_s) max(0, (χ_s − χ_i)/χ_s) dz_s   (lens in front of source)
+        frac = jnp.clip((chi_j[None, :] - chi_j[:, None]) / chi_j[None, :], 0.0, None)
+        g_j  = jnp.trapezoid(nz_j[None, :] * frac, z_j, axis=1)            # (Nz,) dimensionless
+
+        c_over_h0 = 2997.92458    # c/H0 in Mpc/h (H0/c = 1/c_over_h0)
+        return 1.5 * omega_m / c_over_h0 ** 2 * (1.0 + z_j) * chi_j * g_j  # (Nz,) [(Mpc/h)⁻¹]
+
+    def angular_cl_ky(
+        self,
+        ell_arr: np.ndarray,
+        z_arr: np.ndarray,
+        nz_source: np.ndarray,
+        theta_cosmo: dict,
+        hod_params: dict,
+        beam_fwhm_arcmin: float | None = None,
+    ) -> np.ndarray:
+        """Convergence × tSZ angular power spectrum C_ℓ^{κy} via Limber.
+
+        The lensing convergence traces the matter field, so this projects the
+        matter × y cross-power ``P_{m,y}`` (from :meth:`_pk_tables_gy`) through
+        the convergence kernel :meth:`_convergence_kernel`:
+
+        .. math::
+
+            C_\\ell^{\\kappa y} = \\int_0^{\\chi_{\\max}}
+            \\frac{\\mathrm{d}\\chi}{\\chi^2}\\, W_\\kappa(\\chi)\\,
+            P_{m,y}\\!\\left(k=\\frac{\\ell+\\tfrac{1}{2}}{\\chi}, z(\\chi)\\right)
+
+        (the y-window is unity).  This is GODMAX's headline shear × tSZ observable.
+
+        Parameters
+        ----------
+        ell_arr : (Nell,) angular multipoles
+        z_arr : (Nz,) redshift grid for the LOS integral (must start near 0 and
+            extend beyond the source distribution)
+        nz_source : (Nz,) source dN/dz for the shear sample (normalised internally)
+        theta_cosmo, hod_params : cosmology; hod_params only seeds the halo cache
+        beam_fwhm_arcmin : float | None
+            If given, multiply by the Gaussian beam window B_ℓ (the y-map beam,
+            once, in the cross-spectrum).
+
+        Returns
+        -------
+        cl_ky : (Nell,) dimensionless
+        """
+        from hod_mod.core.distances import comoving_distance
+
+        z_arr = np.asarray(z_arr, dtype=float)
+        ell_j = jnp.asarray(ell_arr, dtype=float)
+
+        h       = theta_cosmo["h"]
+        omega_m = theta_cosmo["Omega_m"]
+        chi_z_j = comoving_distance(jnp.asarray(z_arr), h, omega_m) * h   # (Nz,) [Mpc/h]
+
+        w_kappa = self._convergence_kernel(z_arr, nz_source, theta_cosmo)  # (Nz,) [(Mpc/h)⁻¹]
+
+        raw = [self._pk_tables_gy(zi, theta_cosmo, hod_params) for zi in z_arr]
+        log_pmy_stack = jnp.stack([jnp.asarray(t["log_pmy"]) for t in raw])   # (Nz, Nk)
+        log_k_j = jnp.asarray(raw[0]["log_k"])
+
+        k_lim = jnp.log(jnp.maximum((ell_j[:, None] + 0.5) / chi_z_j[None, :], 1e-4))
+
+        def _interp_one(lkq, lpt):
+            return jnp.exp(jnp.interp(lkq, log_k_j, lpt))
+
+        _interp_z    = jax.vmap(_interp_one, in_axes=(0, 0))
+        _interp_ellz = jax.vmap(_interp_z,   in_axes=(0, None))
+
+        pmy_mat   = _interp_ellz(k_lim, log_pmy_stack)                    # (Nell, Nz)
+        integrand = w_kappa[None, :] * pmy_mat / chi_z_j[None, :] ** 2
+        cl_ky     = jnp.trapezoid(integrand, chi_z_j, axis=1)
+
+        if beam_fwhm_arcmin is not None:
+            cl_ky = cl_ky * psf_window_ell(ell_j, beam_fwhm_arcmin * 60.0)
+        return cl_ky
 
     def emissivity_xuk_per_z(self, z_arr, theta_cosmo, hod_params):
         """Precompute the per-z raw emissivity FT X̃(k|M)/Λ_ref for the emulator.
