@@ -52,7 +52,7 @@ from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import minimize, lsq_linear
 
 from hod_mod import paths
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.core.distances import hubble_e, comoving_distance
@@ -360,7 +360,10 @@ def _precompute(sample, hmf_backend):
         print(f"  [{sample}] cached transfer stale -> rebuild", flush=True)
 
     th = F._THETA_COSMO
-    pk = LinearPowerSpectrum(); hmf = make_hmf(hmf_backend, pk_func=pk.pk_linear)
+    # default_pk_linear(), not LinearPowerSpectrum(): full_joint.py drives this via
+    # XB._precompute() while building its galaxy sector from default_pk_linear(), so
+    # hard-coding CAMB here would mix two different P(k) inside one likelihood.
+    pk = default_pk_linear(); hmf = make_hmf(hmf_backend, pk_func=pk.pk_linear)
     colo = dict(flat=True, H0=th["h"] * 100.0, Om0=th["Omega_m"], Ob0=th["Omega_b"],
                 sigma8=0.811, ns=th["n_s"])
     hp = HaloProfile(colo, cm_relation="diemer19")

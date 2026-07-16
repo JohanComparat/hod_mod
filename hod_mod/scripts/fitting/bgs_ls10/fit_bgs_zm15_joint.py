@@ -316,13 +316,13 @@ def load_bins(data_dir: str, surveys: list[str], rp_min: float, rp_max: float,
 
 def build_predictor(hmf_backend: str):
     """Construct a ZuMandelbaum15HODModel FullHaloModelPrediction (mirrors WpFitter)."""
-    from hod_mod.core.power_spectrum import LinearPowerSpectrum
+    from hod_mod.core.power_spectrum import default_pk_linear
     from hod_mod.core.halo_mass_function import make_hmf
     from hod_mod.core.halo_profiles import HaloProfile
     from hod_mod.observables.clustering import FullHaloModelPrediction
     from hod_mod.connection.hod import ZuMandelbaum15HODModel
 
-    pk          = LinearPowerSpectrum()
+    pk          = default_pk_linear()
     theta_cosmo = pk.default_cosmology()
     hmf         = make_hmf(hmf_backend, pk_func=pk.pk_linear)
     hod         = ZuMandelbaum15HODModel(hmf)   # _SINGLE_ARG_INIT = True
