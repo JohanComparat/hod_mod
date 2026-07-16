@@ -70,6 +70,32 @@ fi
 export ZM15_JSON="${ZM15_JSON:-${HOD_MOD_RESULTS_BASE}/bgs_zm15_joint_wp_ngal/map_result.json}"
 export VTAG HOD_MOD_RESULTS_BASE
 
+# --- seed the versioned tree with fixed reference inputs ---------------------
+# A versioned tree starts EMPTY, but several consumers resolve *reference*
+# inputs through results_root() — which now points at that empty tree:
+#
+#   fitting/full_joint.py::load_zm15_median()
+#       results_root()/bgs_zm15_joint_wp_ngal/posterior_summary.json
+#   agn/duty_cycle.py::_ZM15_MAP_JSON            (module level, at import)
+#       results_root()/bgs_zm15_joint_wp_ngal/map_result.json
+#   scripts/fitting/fit_comparat2025.py::_DEFAULT_ZM15_JSON   (ditto)
+#
+# These are June-2026 products, not campaign outputs, so they must resolve to
+# the base tree.  Symlinking them into the versioned tree fixes every consumer
+# at once without patching results_root() call sites (the alternative — passing
+# an explicit path everywhere — only works where a CLI flag exists; duty_cycle
+# and full_joint have none).  Symlink, not copy: one 6.7 MB source of truth.
+REFERENCE_INPUTS="${REFERENCE_INPUTS:-bgs_zm15_joint_wp_ngal}"
+if [ "${HOD_MOD_RESULTS}" != "${HOD_MOD_RESULTS_BASE}" ]; then
+    mkdir -p "${HOD_MOD_RESULTS}"
+    for _ref in ${REFERENCE_INPUTS}; do
+        if [ -e "${HOD_MOD_RESULTS_BASE}/${_ref}" ] && [ ! -e "${HOD_MOD_RESULTS}/${_ref}" ]; then
+            ln -sfn "${HOD_MOD_RESULTS_BASE}/${_ref}" "${HOD_MOD_RESULTS}/${_ref}"
+            echo "[campaign_env] seeded reference input: ${HOD_MOD_RESULTS}/${_ref} -> base"
+        fi
+    done
+fi
+
 # Fail before the job burns a slot: in v0.3 the missing reference surfaced only
 # after the fit had started and created its out-dir, which is why 5 empty
 # `fits/comparat2025_fixedZM15_*_v0.3/` dirs were left behind (an empty dir is
