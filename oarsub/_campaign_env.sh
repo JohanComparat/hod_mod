@@ -25,6 +25,27 @@
 
 VTAG="${VTAG:-v0.31}"
 
+# --- read-data root ----------------------------------------------------------
+# Must be exported by EVERY submission path, not just run_job.sh: without it
+# hod_mod.paths.data_root() silently falls back to the in-repo hod_mod/data/,
+# which has no zenodo/ or xray_bands/.  That is precisely how the Family C
+# presets failed a second time -- once past the ZM15 guard they died on
+#   FileNotFoundError: Zenodo data not found:
+#     <repo>/hod_mod/data/zenodo/LSDR10_GALxEVT/.../..._GALxEVT_wtheta.fits
+# because the 5 standalone scripts never exported it (run_job.sh and the
+# full_joint scripts did).  Same failure mode as the unexported HOD_MOD_RESULTS.
+export HOD_MOD_DATA_DIR="${HOD_MOD_DATA_DIR:-${HOME}/data/hod_mod_data}"
+export HOD_MOD_SUMSTAT="${HOD_MOD_SUMSTAT:-${HOME}/software/sum_stat/data}"
+
+# Fail loudly rather than let data_root() fall back to the repo and surface as a
+# confusing "file not found" deep inside a fit.
+if [ ! -d "${HOD_MOD_DATA_DIR}" ]; then
+    echo "FATAL: HOD_MOD_DATA_DIR does not exist: ${HOD_MOD_DATA_DIR}" >&2
+    echo "       hod_mod.paths.data_root() would silently fall back to the" >&2
+    echo "       in-repo hod_mod/data/, which lacks zenodo/ and xray_bands/." >&2
+    exit 2
+fi
+
 # Pin the linear P(k) to the backend that campaign was RUN with, so a re-run
 # lands on the same physics as its siblings.  The default moved CAMB ->
 # CosmoPower emulator, which shifts P(k) ~+2.5% in amplitude (~+1.3% sigma8);
