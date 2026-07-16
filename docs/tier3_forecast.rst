@@ -45,6 +45,12 @@ The extended sample grid
   ``skipped_cells``).  AGN clustering samples extend to z = 1.9
   (``agn_z_centers``).
 
+.. figure:: _images/tier3_forecast__cell_grid.png
+   :width: 98%
+
+   Fiducial galaxy density and total signal-to-noise over the extended
+   (z, M*) grid — 260 SF/Q-split cells to z = 2, M* ≥ 10⁹.
+
 The twelve SED calibrations
 ---------------------------
 
@@ -157,6 +163,18 @@ Madau–Dickinson measurement [MadauDickinson2014]_ at 12 % per shell.
   tracer against the baryon-split matter field), directly weighing the
   L_X-selected host haloes.
 
+.. figure:: _images/tier3_forecast__agn_sector.png
+   :width: 98%
+
+   AGN clustering per L_X bin with its pair-count errors, and the AGN-sector
+   parameter constraints, now extending to z = 1.9.
+
+.. figure:: _images/tier3_forecast__band_spectroscopy.png
+   :width: 85%
+
+   What the six X-ray energy bands buy: spectral-parameter constraints with
+   and without the band spectra.
+
 Survey noise
 ------------
 
@@ -169,6 +187,12 @@ a physical T_sys/confusion model is the documented upgrade).  Band LFs get
 :class:`~hod_mod.forecast.noise.BandLFSurvey` footprints with νL_ν flux
 limits; the AGN crosses build their Knox noise from the fiducial AGN auto
 (``cl_aa_fiducial``) plus shot noise.
+
+.. figure:: _images/tier3_forecast__noise_budget.png
+   :width: 98%
+
+   Relative errors for a representative mid-z cell and its shell, including
+   the new radio/IR map and band-LF noise recipes.
 
 Parallel execution
 ------------------
@@ -272,6 +296,36 @@ determinant at the two finer scale cuts) report as unconstrained/NaN
 where the 90-parameter run still resolved them.  The principled fix
 (floor eigenvalues at unity in prior-scaled space instead of dropping
 them) is noted for the tier-4 analysis.
+
+.. figure:: _images/tier3_forecast__cosmo_constraints.png
+   :width: 70%
+
+   :math:`\Omega_m`–:math:`\sigma_8` with all 102 parameters free vs
+   astrophysics pinned.
+
+.. figure:: _images/tier3_forecast__astro_sectors.png
+   :width: 85%
+
+   Per-parameter posterior-to-prior ratios by sector; dots show the
+   cosmology-pinned case.
+
+.. figure:: _images/tier3_forecast__zevolution.png
+   :width: 98%
+
+   The redshift-evolution slopes and the reconstructed SHMR pivot-mass
+   evolution band over the extended z < 2 range.
+
+.. figure:: _images/tier3_forecast__probe_attribution.png
+   :width: 85%
+
+   Cumulative probe build-up — the radio/IR maps and the band LFs deliver
+   the two largest single gains.
+
+.. figure:: _images/tier3_forecast__degeneracies.png
+   :width: 85%
+
+   The strongest degeneracies that *survive* the full 102-parameter data
+   combination.
 
 Verification
 ------------

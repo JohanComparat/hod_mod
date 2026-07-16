@@ -1,0 +1,107 @@
+HPC re-run campaigns (OAR / GRICAD)
+====================================
+
+Every production number in these docs — fit posteriors, benchmark χ²/dof,
+forecast ellipses, the figures under ``docs/_images/`` — is regenerated in
+batch as an **OAR array-job campaign** on the GRICAD ``dahu`` cluster, driven
+from the `oarsub/ <https://github.com/JohanComparat/hod_mod/tree/main/oarsub>`_
+directory.  This page documents the campaign machinery; cluster-account
+specifics (projects, tokens, monitoring) live in ``oarsub/README.md``.
+
+Why campaigns
+-------------
+
+Two behaviour-changing releases forced full re-runs:
+
+* **v0.3** — the 0.3.0 Hankel-transform fix in ``_pk_to_xi`` moved every
+  real-space observable (:math:`w_p` ≤ 19 %, :math:`\Delta\Sigma` ≤ 20 %,
+  :math:`\Sigma_y` ~16 %), superseding all ≤ 0.2.3 results.
+* **v0.31** — 0.3.1 swapped the default linear P(k) from CAMB to the
+  CosmoPower-JAX emulator (~+2.5 % in P(k) amplitude, ≈1.3 % in
+  :math:`\sigma_8`; see :doc:`cosmology`).
+
+Because ~47 job lines write through :func:`hod_mod.paths.results_root`, each
+campaign gets its **own versioned results tree** (``…/hod_mod_results`` for
+v0.3, ``…/hod_mod_results_v0.31`` for v0.31) so campaigns never overwrite each
+other and a before/after diff is always possible.  Keeping the two trees also
+isolates the P(k) swap: v0.3 vs v0.31 differ *only* in the backend.
+
+Anatomy
+-------
+
+``oarsub/_campaign_env.sh``
+   Sourced by every job and helper.  Resolves ``VTAG`` (default ``v0.31``),
+   derives and exports ``HOD_MOD_RESULTS`` (the versioned tree),
+   ``HOD_MOD_DATA_DIR``, ``HOD_MOD_SUMSTAT``, and pins ``HOD_MOD_PK_BACKEND``
+   per campaign (``v0.3 → camb``, otherwise ``cosmopower``).  It also seeds
+   each fresh tree with the fixed *reference inputs* (e.g. the ZM15 MAP used
+   by ``--fix-zm15``) that are inputs to the campaign, not outputs of it.
+
+   .. note::
+
+      The backend pin reaches **Families A–C only** (they route through
+      :func:`~hod_mod.core.power_spectrum.default_pk_linear`).  Family-D
+      forecasts build ``ForwardModel``, which selects its P(k) correction via
+      driver flags (real CAMB is not JAX-traceable), so a ``v0.3`` Family-D
+      re-run still uses the emulator regardless of the variable.
+
+``oarsub/run_job.sh`` + ``oarsub/params/*.txt``
+   The generic OAR array-job wrapper and one param file per family; each line
+   is a complete ``python -m …`` command that the wrapper ``eval``\ s on the
+   node with the campaign environment in place.
+
+``oarsub/submit_campaign.sh``
+   One-command family submission, with ``--devel`` running just the first
+   param line on the 30-minute dev partition as an end-to-end smoke test:
+
+   .. code-block:: bash
+
+      ./oarsub/submit_campaign.sh your-oar-project benchmarks_map --devel  # smoke
+      ./oarsub/submit_campaign.sh your-oar-project all                     # everything
+      VTAG=v0.3 ./oarsub/submit_campaign.sh your-oar-project production    # pinned re-run
+
+   ============================  ==========================================  =========================
+   Family                        What                                        Sizing (per array line)
+   ============================  ==========================================  =========================
+   A ``benchmarks_map``          literature benchmarks, MAP                  8 cores, 2 h
+   A ``benchmarks_mcmc``         literature benchmarks, MCMC                 8 cores, 8 h
+   B ``production``              BGS ZM15 / thresh / lsdr10 joint MCMC       16 cores, 24 h, resumable
+   B ``full_joint``              BGS full-model joint (fixedzm15+allparams)  dedicated scripts
+   C ``comparat2025``            Comparat+2025 X-ray w_θ MAP presets (×5)    16 cores, 4–18 h
+   D ``forecasts``               tier2/3/4, stage4, sensitivity, MAP+MCMC    16 cores, 24 h
+   ============================  ==========================================  =========================
+
+Lifecycle
+---------
+
+.. code-block:: bash
+
+   # on dahu (repo at the campaign commit, data staged):
+   ./oarsub/submit_campaign.sh <PROJECT> <family> --devel   # 1-line smoke
+   ./oarsub/submit_campaign.sh <PROJECT> <family>           # real submission
+   oarstat -u $USER                                         # monitor
+
+   # from the workstation, when the chains land:
+   ./oarsub/pull_results.sh --go          # rsync the versioned trees back
+   ./oarsub/campaign_status.sh            # preflight: every out-dir present?
+   ./oarsub/collect_and_plot.sh           # refresh docs/_images/ figures
+
+``campaign_status.sh`` audits the pulled tree *before* plotting —
+``collect_and_plot.sh`` runs under ``set -euo pipefail`` and would abort
+half-way (leaving ``docs/_images/`` partially refreshed) on a single missing
+out-dir.  All four helpers agree on the same default ``VTAG``; override with
+``VTAG=v0.3 …`` to operate on the CAMB-era tree.
+
+VTAG semantics
+--------------
+
+=========  ==============================  ===========================  =============================
+VTAG       Physics                         ``HOD_MOD_PK_BACKEND`` pin   Results tree
+=========  ==============================  ===========================  =============================
+``v0.3``   Hankel fix, CAMB P(k)           ``camb``                     ``…/hod_mod_results``
+``v0.31``  + CosmoPower-JAX default P(k)   ``cosmopower``               ``…/hod_mod_results_v0.31``
+=========  ==============================  ===========================  =============================
+
+The pin is derived from ``VTAG`` *inside the job* rather than exported by the
+caller because OAR does not propagate the submitting shell's environment to
+the node — an ``HOD_MOD_PK_BACKEND=camb oarsub …`` would be silently dropped.

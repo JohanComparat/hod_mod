@@ -110,7 +110,7 @@ def figure_of_merit(cov, i, j):
 
 
 def top_degeneracies(corr, names, k=6):
-    """Return the k parameter pairs with the largest |correlation|."""
+    """Return the k parameter pairs with the largest ``|correlation|``."""
     n = corr.shape[0]
     pairs = []
     for a in range(n):

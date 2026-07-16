@@ -85,6 +85,7 @@ and your machine's layout is set once in `~/.bashrc`.
 | `HOD_MOD_RESULTS` | `results_root()` | generated outputs (chains, figures) — **never** in the repo | `~/.local/share/hod_mod/results` |
 | `HOD_MOD_CACHE` | `cache_root()` | JAX/XLA compilation caches | OS user-cache dir |
 | `HOD_MOD_DATA_DOI` | — | pin a specific Zenodo version (default: pinned in code) | concept DOI |
+| `HOD_MOD_PK_BACKEND` | `default_pk_linear()` | linear-P(k) backend: `cosmopower` or `camb` | `cosmopower` |
 
 Recommended `~/.bashrc` setup:
 
@@ -99,6 +100,32 @@ export HOD_MOD_RESULTS="$HOME/data/hod_mod_results"
 from hod_mod.paths import repo_root, data_root, sum_stat_root, results_root
 print(repo_root(), data_root(), sum_stat_root(), results_root())
 ```
+
+## Linear P(k) backends
+
+Since **0.3.1** every fitting/prediction entry point obtains its linear power
+spectrum from `hod_mod.core.power_spectrum.default_pk_linear()`. The default
+backend is the **CosmoPower-JAX** neural emulator (CAMB-accuracy shape to
+<0.1%, JAX-differentiable, millisecond evaluation, networks bundled in the
+wheel — no runtime download); `HOD_MOD_PK_BACKEND=camb` restores the CAMB
+Boltzmann path.
+
+> **Behaviour change.** The emulator is trained massless-ν while the CAMB
+> backend runs with Σm_ν = 0.06 eV, so at fixed A_s the default P(k) is
+> **~2.5% higher in amplitude** (≈1.3% in σ8) than results computed on
+> ≤ 0.3.0. Pin `HOD_MOD_PK_BACKEND=camb` to reproduce those numbers exactly.
+
+```python
+from hod_mod.core.power_spectrum import default_pk_linear
+
+pk = default_pk_linear()                 # CosmoPowerJaxPkLinear (default)
+theta = pk.default_cosmology()           # Planck-2018 dict
+print(type(pk).__name__, pk.pk_linear([0.1], 0.0, theta))
+```
+
+There is deliberately **no silent fallback**: without `cosmopower-jax`
+installed, `default_pk_linear()` raises instead of quietly degrading, so the
+science never depends on which packages happen to be present.
 
 ## Tests
 
@@ -321,8 +348,10 @@ blackjax NUTS (`run_nuts`). Two differentiable backends are available:
   | galaxy × AGN X-ray | `XrayAGNModel` | ~1e-7 |
   | cluster × galaxy `w_p^{cg}` | `ClusterGalaxyCrossCorrelation` | ~7e-7 |
 
-  CAMB stays the default backend; `eh98_jax` is opt-in and reproduces CAMB
-  clustering to ~2%.
+  The package-wide default linear P(k) is the CosmoPower-JAX emulator (see
+  *Linear P(k) backends* above), which is both CAMB-accurate and
+  differentiable; `eh98_jax` remains the dependency-free traceable backend of
+  the forecast surrogate and reproduces CAMB clustering to ~2%.
 
 ```python
 import numpy as np
@@ -363,6 +392,14 @@ sensitivity study reports parameter-freedom robustness (31 vs 111 params).
 | tier-4 (111 params) | `run_tier4_forecast.py` | morphology split, BH-bulge coupling |
 
 The tier drivers live in `hod_mod/scripts/forecasts/` (run from the repo root).
+
+Beyond the Fisher approximation, the same forward model can be sampled with
+gradient NUTS end-to-end (and checked against the Fisher ellipse):
+
+```bash
+JAX_ENABLE_X64=1 JAX_PLATFORMS=cpu \
+  python -m hod_mod.scripts.forecasts.run_forecast_nuts --compare-fisher
+```
 
 See [docs/sensitivity_fisher.rst](docs/sensitivity_fisher.rst),
 [docs/tier2_forecast.rst](docs/tier2_forecast.rst),
@@ -405,6 +442,11 @@ python -m hod_mod.scripts.validate_comparat2025
 ```
 
 Figures are saved to `hod_mod/scripts/figures/`.
+
+Full production re-runs (all fits + benchmarks + forecasts) are batched as OAR
+array-job campaigns on the GRICAD cluster from [oarsub/](oarsub/) — see
+[docs/oarsub_campaign.rst](docs/oarsub_campaign.rst) for the campaign
+anatomy, versioned result trees (`VTAG`), and P(k)-backend pinning.
 
 ## Citation
 

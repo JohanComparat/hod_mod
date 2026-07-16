@@ -35,7 +35,13 @@ Two differentiable backends
   cluster × galaxy ``w_p^{cg}`` ``ClusterGalaxyCrossCorrelation``          ~7e-7
   ============================  =========================================  ===========
 
-  CAMB stays the default backend; ``eh98_jax`` is opt-in and reproduces CAMB
+  Since 0.3.1 the package-wide default linear P(k) is the **CosmoPower-JAX
+  emulator** (:func:`~hod_mod.core.power_spectrum.default_pk_linear`,
+  ``HOD_MOD_PK_BACKEND=cosmopower|camb``) — CAMB-accuracy *and*
+  JAX-differentiable, so the production predictions and the gradient stack
+  finally share one P(k).  The config-driven ``FitConfig``/``WpFitter`` path
+  routes through the same factory; ``eh98_jax`` remains the dependency-free
+  traceable backend of the forecast forward model and reproduces CAMB
   clustering to ~2 %.
 
 Inference
@@ -58,6 +64,11 @@ log-posterior and drives it with gradients:
    like, x_true = MultiProbeGaussianLikelihood.synthetic(fm, which, free, rel_err=0.05)
    res = run_map_jax(like, x0)                 # scipy L-BFGS-B with the JAX gradient
    post = run_nuts(like, res["x"])             # blackjax NUTS (optional dependency)
+
+The end-to-end NUTS driver for the forecast model —
+``python -m hod_mod.scripts.forecasts.run_forecast_nuts`` — wraps exactly this
+loop and validates the sampled posterior against the Fisher ellipse
+(``--compare-fisher``); see :doc:`scripts`.
 
 For the production backend, assemble the real observables with
 :class:`~hod_mod.fitting.jax_inference.ProductionMultiProbeModel` and use

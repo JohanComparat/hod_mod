@@ -312,6 +312,16 @@ Wave 2 — CAMB-quality P(k), winds, main sequence, radio/HI surveys
 The linearized CAMB ratio
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. note::
+
+   **Status (0.3.1):** the "CAMB-quality P(k)" goal is now met by the
+   CosmoPower-JAX emulator (:mod:`hod_mod.forecast.pk_cosmopower`), the
+   package-wide default via
+   :func:`~hod_mod.core.power_spectrum.default_pk_linear` and
+   ``ForwardModel(pk_correction="cosmopower")``.  The ratio table described
+   below remains available as the lighter ``pk_correction="camb_linear"``
+   Fisher correction.
+
 A Fisher forecast needs the spectrum and its **first derivatives** to be
 accurate at the fiducial — nothing more.  That reduces "CAMB-quality P(k)"
 from an emulator problem to eleven CAMB evaluations

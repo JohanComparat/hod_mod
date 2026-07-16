@@ -48,13 +48,42 @@ The dimensionless power spectrum is
 
 For :math:`\Delta^2 \ll 1` the density field is in the linear regime.
 
-**CAMB backend** (default)
+**CosmoPower-JAX emulator backend** (default since 0.3.1)
+
+The production entry point is the factory
+:func:`~hod_mod.core.power_spectrum.default_pk_linear`, which returns a
+:class:`~hod_mod.forecast.pk_cosmopower.CosmoPowerJaxPkLinear` — the
+CosmoPower-JAX neural emulator (`Piras & Spurio Mancini 2023
+<https://arxiv.org/abs/2305.06347>`_).  It reproduces CAMB's P(k) *shape* to
+<0.1% over the training box, is JAX-differentiable, evaluates in milliseconds
+(no 30 s Boltzmann call per cosmology), and ships its trained networks inside
+the wheel, so offline compute nodes need no runtime download.  The backend is
+selected by the ``HOD_MOD_PK_BACKEND`` environment variable
+(``cosmopower`` — default — or ``camb``); there is deliberately **no silent
+fallback** when ``cosmopower-jax`` is missing, so the science can never depend
+on which packages happen to be installed.
+
+.. warning::
+
+   The emulator is trained on **massless neutrinos**, whereas the CAMB backend
+   runs with its default :math:`\Sigma m_\nu = 0.06` eV.  At fixed
+   :math:`A_s` the emulator's P(k) is therefore **~2.5% higher in amplitude**
+   (≈1.3% in :math:`\sigma_8`) than the CAMB path it replaced — a physics
+   difference, not emulator error (the two agree to ~0.06% when CAMB is also
+   run massless).  Results computed on the CAMB default (≤ 0.3.0) are pinned
+   back with ``HOD_MOD_PK_BACKEND=camb``; see :doc:`oarsub_campaign` for how
+   the re-run campaigns handle this.
+
+**CAMB backend** (reference; opt-in via ``HOD_MOD_PK_BACKEND=camb``)
 
 The full Boltzmann code CAMB (`Lewis, Challinor & Lasenby 2000
 <https://arxiv.org/abs/astro-ph/0205436>`_) [Lewis2002]_ is invoked via
 ``LinearPowerSpectrum.pk_linear(k, z, theta)``.  A single CAMB run takes ~30 s; for
 MCMC use the ``CachedPkLinear`` wrapper that interpolates on a pre-computed
-:math:`k`-grid keyed on :math:`(\Omega_m, h, \ln 10^{10}A_s, z)`.
+:math:`k`-grid keyed on :math:`(\Omega_m, h, \ln 10^{10}A_s, z)`.  CAMB remains
+the reference the emulator is validated against
+(``hod_mod/forecast/tests/test_pk_cosmopower.py``) and the engine behind the
+non-linear HMcode spectra and the ``pk_camb_ratio`` Fisher correction table.
 
 **Eisenstein-Hu 1998 fitting formula** (fast)
 
@@ -81,41 +110,35 @@ Linear growth is encoded as :math:`P(k,z) = D^2(z) P(k,0)` with the growth facto
 
 .. note::
 
-   **Tracking a differentiable emulated P(k): jaxmapse / jaxace.**
-   EH98 is used here specifically because it is analytic and therefore
+   **Differentiable emulated P(k): realised in 0.3.1 by CosmoPower-JAX.**
+   EH98 was originally adopted because it is analytic and therefore
    JAX-traceable — CAMB is not — which is what the Fisher forecast needs.
+   That role is now filled at Boltzmann-code accuracy by the default
+   :class:`~hod_mod.forecast.pk_cosmopower.CosmoPowerJaxPkLinear` emulator
+   (above); EH98 remains as the dependency-free pedagogical/fallback path
+   and the base shape of the ``camb_linear`` ratio correction
+   (:mod:`hod_mod.forecast.pk_camb_ratio`).
+
    The `CosmologicalEmulators <https://github.com/CosmologicalEmulators>`_
-   group publishes JAX/Flax ports of its emulators that share this
-   differentiability while adding Boltzmann-code accuracy:
-
-   * `jaxmapse <https://github.com/CosmologicalEmulators/jaxmapse>`_ — a
-     differentiable **matter** power-spectrum emulator, the natural drop-in
-     replacement for the EH98 shape used by
-     :class:`~hod_mod.forecast.pk_eisenstein_hu.EisensteinHu98PkLinear`.
-     *Status (2026-07-15): pre-release stub — 1 commit, no release, no
-     README. Not usable yet; revisit once it has a tagged release + a
-     validation notebook.*
-   * `jaxace <https://github.com/CosmologicalEmulators/jaxace>`_ (v0.6.1,
-     Jun 2026) — the mature JAX base package: differentiable background
-     cosmology (``w0waCDMCosmology.E_z / r_z / D_z``) plus the Flax
-     emulator loader that ``jaxmapse`` builds on.
-
-   **Evaluation (2026-07-15).** ``jaxace`` v0.6.1 was benchmarked against
-   this repo's :mod:`hod_mod.core.distances` and ``growth_factor`` on a
-   flat :math:`w_0w_a`\ CDM fiducial (Planck-2018, massless :math:`\nu`).
-   The two independent implementations agree to **< 0.05 % on values**
-   (:math:`E(z)` 4e-4, :math:`\chi(z)` 2e-4, :math:`D(z)/D(0)` 1e-4) and
-   their autodiff gradients agree to **< 0.04 %** (:math:`d\chi/dw_0`
-   matched to 3.5e-4). This validates the in-repo layer and confirms
-   ``jaxace`` is a gradient-compatible alternative. Two integration
-   caveats: (i) the Julia originals (``Mapse.jl``, ``Effort.jl`` …) are
-   *not* usable — reaching them from Python breaks the JAX autodiff chain;
-   (ii) ``jaxace`` is parameterised by *physical* densities
-   (:math:`\omega_b=\Omega_b h^2`, :math:`\omega_c=\Omega_c h^2`) whereas
-   :mod:`hod_mod.core.distances` takes :math:`(\Omega_m, h)` independently,
-   so any adoption needs a parameter-mapping shim.
+   alternatives were also evaluated (2026-07-15):
+   `jaxmapse <https://github.com/CosmologicalEmulators/jaxmapse>`_ is a
+   pre-release stub (not usable yet), while
+   `jaxace <https://github.com/CosmologicalEmulators/jaxace>`_ v0.6.1
+   remains a useful *independent cross-check* of the in-repo background
+   layer: benchmarked against :mod:`hod_mod.core.distances` and
+   ``growth_factor`` on a flat :math:`w_0w_a`\ CDM fiducial, the two
+   implementations agree to **< 0.05 % on values** (:math:`E(z)` 4e-4,
+   :math:`\chi(z)` 2e-4, :math:`D(z)/D(0)` 1e-4) and **< 0.04 % on autodiff
+   gradients** (:math:`d\chi/dw_0` to 3.5e-4).  Integration caveats if ever
+   adopted: the Julia originals break the JAX autodiff chain, and ``jaxace``
+   is parameterised by physical densities (:math:`\omega_b, \omega_c`)
+   rather than this repo's :math:`(\Omega_m, h)`.
 
 .. automodule:: hod_mod.core.power_spectrum
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.forecast.pk_cosmopower
    :members:
    :undoc-members:
 
