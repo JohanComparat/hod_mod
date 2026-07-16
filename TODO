@@ -1,3 +1,41 @@
+TODO : 
+
+The full hod_mod suite never ran to completion — I killed it myself. I launched it with timeout 3000 (50 min), and it died at 23% at 22:19. When I reported "still running (large; at ~11%)", it had in fact already been dead for hours. My "3 pytest procs" check was matching its own grep, so it looked alive when nothing was.
+
+That matters because the suite is the only thing that would confirm the transform fix hasn't broken something outside the subsets I tested directly. The subsets that did pass — AUM 13/13, cross_spectra 13/13, data_io 26/26, public_api 11/11 — are the ones most likely to catch a regression, but they aren't the whole picture: _pk_to_xi also feeds xi_r, w_theta, xi_cg, wp_bias_ratio, sigma_2h, intrinsic alignments and the forecast forward model, and none of those have been exercised since the change.
+
+It's relaunched now without a timeout (machine is free, 42G RAM), and I'll report the result. Expect ~3–4h based on the 23%-in-50min rate.
+
+Everything else from my last summary stands. The overnight run genuinely did finish: 9/9 samples, no failures, all per-sample physics checks passing, with the two findings worth carrying forward — the y–M* trend is only detected above M*≈11 (4.3σ and 8.6σ), and the errors are map/cosmic-variance limited rather than shot-noise limited, so more galaxies below M*≈11 won't help.
+
+
+
+
+
+
+
+
+oarsub --project pr-orphans -S ./oarsub/fit_bgs_full_joint_fixedzm15_mcmc.sh
+oarsub --project pr-orphans -S ./oarsub/fit_bgs_full_joint_allparams_mcmc.sh
+
+
+
+
+
+
+rsync -avz comparaj@dahu.ciment:data/hod_mod_results/bgs_full_joint_fixedzm15/ ~/data/hod_mod_results/bgs_full_joint_fixedzm15/
+
+ls -l ~/data/hod_mod_results/bgs_full_joint_fixedzm15/     # expect the 4 files above
+JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.plot_bgs_full_joint --docs
+
+Since HOD_MOD_RESULTS points at ~/data/hod_mod_results, the plotter finds the run with no --out-dir needed. --docs overwrites the three docs/_images/bgs_full_joint_fixedzm15__*.png with your production posterior (replacing my representative local-chain figures). It'll also print the MAP/median χ²/dof — worth checking it's near the ~5.6 I saw. Then commit the three regenerated PNGs.
+
+If the all-params (Step 3) job has also finished, pull and plot it the same way with bgs_full_joint_allparams/ and --free-zm15.
+
+
+
+
+
 Update Todos
 
 Fold 90-param production numbers into missing_physics_implementation.rst Results

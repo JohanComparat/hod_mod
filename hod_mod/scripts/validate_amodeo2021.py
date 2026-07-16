@@ -2,9 +2,10 @@
 
 Reference
 ---------
-Amodeo S. et al. 2021, Phys. Rev. D 103, 063514
-arXiv:2009.05557
-ACT × BOSS: Thermal and Kinematic Sunyaev-Zel'dovich effect
+Amodeo S. et al. 2021, Phys. Rev. D 103, 063514, arXiv:2009.05558
+    ACT × BOSS: modelling the gas thermodynamics from tSZ + kSZ.
+Schaan E. et al. 2021, Phys. Rev. D 103, 063513, arXiv:2009.05557
+    The companion *measurement* paper; its Figs. 7-9 hold the stacked CAP profiles.
 
 Measurement
 -----------
@@ -60,7 +61,7 @@ from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.connection.hod import MoreHODModel
 from hod_mod.observables.clustering import FullHaloModelPrediction
-from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
+from hod_mod.observables.cross_spectra import HaloModelCrossSpectra, cap_filter
 
 _HERE    = Path(__file__).parent
 _FIG_DIR = _HERE / "figures"
@@ -132,7 +133,7 @@ def fig_sigma_y_cmass(cross):
     ax.set_xlabel(r"$r_p$ [Mpc/$h$]")
     ax.set_ylabel(r"$\Sigma_y(r_p)$ [dimensionless Compton-$y$]")
     ax.set_title(
-        "Amodeo+2021 (arXiv:2009.05557) — model tSZ stack, CMASS\n"
+        "Amodeo+2021 (arXiv:2009.05558) — model tSZ stack, CMASS\n"
         rf"$z_{{eff}}={_CMASS_Z}$, A10 pressure, More+2015 HOD"
     )
     ax.legend(fontsize=9)
@@ -165,7 +166,7 @@ def fig_sigma_y_lowz(cross):
     ax.set_xlabel(r"$r_p$ [Mpc/$h$]")
     ax.set_ylabel(r"$\Sigma_y(r_p)$ [dimensionless Compton-$y$]")
     ax.set_title(
-        "Amodeo+2021 (arXiv:2009.05557) — model tSZ stack, LOWZ\n"
+        "Amodeo+2021 (arXiv:2009.05558) — model tSZ stack, LOWZ\n"
         rf"$z_{{eff}}={_LOWZ_Z}$, A10 pressure, More+2015-like HOD"
     )
     ax.legend()
@@ -213,6 +214,93 @@ def fig_pgy_decomposition(cross):
 # Model summary
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Instrument response
+# ---------------------------------------------------------------------------
+# Schaan+2021 Fig. 8 -- the tSZ CAP profile this script targets -- is measured from the ACT DR4
+# ILC Compton-y map with deprojected dust, whose beam is 1.6' FWHM.  Their single-frequency
+# stacks (Figs. 7, 9) use f150 (1.4') and f090 (2.1') instead.
+_ACT_ILC_BEAM_ARCMIN = 1.6
+
+# CAP disk radii.  The compensating ring runs to sqrt(2)*theta_d, so the profile has to be
+# evaluated out past sqrt(2)*max(theta_d).
+_THETA_D_ARCMIN = np.arange(1.0, 6.5, 0.5)
+_THETA_GRID     = np.linspace(1e-3, 14.0, 800)
+
+# Digitised data, if anyone has produced it.  Schaan+2021 tabulates only chi2_null / PTE /
+# model-SNR (their Table I); the T_AP profiles exist only in Figs. 7-9, and ThumbStack (their
+# public repo) ships code, not measurements.  So a published-data comparison needs that figure
+# digitised into this CSV -- columns: theta_d_arcmin, T_AP, T_AP_err.
+_DIGITISED_CSV = (
+    Path.home() / "software/sum_stat/literature_measurements/GAS_benchmark"
+    / "cross_correlations/gal_tsz/Schaan2021_tsz/tap_cmass_fig8.csv"
+)
+
+
+def _load_digitised_tap():
+    """Digitised Schaan+2021 Fig. 8 points, or None if the file does not exist."""
+    if not _DIGITISED_CSV.exists():
+        return None
+    d = np.genfromtxt(_DIGITISED_CSV, delimiter=",", names=True)
+    return d["theta_d_arcmin"], d["T_AP"], d["T_AP_err"]
+
+
+def fig_tap_cmass(cross):
+    """Model T_AP(theta_d) for CMASS: beamed and CAP-filtered.
+
+    This is the figure to set against Schaan+2021 Fig. 8.  Two operations stand between
+    Sigma_y(r_p) and what they plot, and both matter:
+
+    * the **beam** -- their y-map is convolved with a 1.6' FWHM beam, so an unbeamed model is
+      a different quantity in the inner apertures;
+    * the **CAP filter** -- they report a compensated disk-minus-ring aperture flux, not the
+      raw profile.  It is what makes their measurement insensitive to the mean map level.
+    """
+    print("Figure 4: T_AP(theta_d) for BOSS CMASS (beamed + CAP) ...")
+
+    prof_raw  = np.asarray(cross.sigma_y_theta(_THETA_GRID, _CMASS_Z, _THETA, _CMASS_HOD))
+    prof_beam = np.asarray(cross.sigma_y_theta(_THETA_GRID, _CMASS_Z, _THETA, _CMASS_HOD,
+                                               beam_fwhm_arcmin=_ACT_ILC_BEAM_ARCMIN))
+    tap_raw  = cap_filter(prof_raw,  _THETA_GRID, _THETA_D_ARCMIN)
+    tap_beam = cap_filter(prof_beam, _THETA_GRID, _THETA_D_ARCMIN)
+
+    fig, ax = plt.subplots(figsize=(6.4, 4.4))
+    ax.plot(_THETA_D_ARCMIN, tap_raw, "C0--", lw=1.5, label="model, unbeamed")
+    ax.plot(_THETA_D_ARCMIN, tap_beam, "C0-", lw=2,
+            label=f"model, {_ACT_ILC_BEAM_ARCMIN}' beam (ACT DR4 ILC)")
+
+    dig = _load_digitised_tap()
+    if dig is not None:
+        td, tap, err = dig
+        ax.errorbar(td, tap, err, fmt="ks", ms=4, capsize=2,
+                    label="Schaan+2021 Fig. 8 (digitised)")
+    else:
+        ax.text(0.03, 0.03,
+                "no digitised data present - model only\n"
+                f"expected at: {_DIGITISED_CSV.name}",
+                transform=ax.transAxes, fontsize=7, color="0.4", va="bottom")
+
+    ax.set_xlabel(r"CAP disk radius $\theta_d$ [arcmin]")
+    ax.set_ylabel(r"$T_{\rm AP}$ [dimensionless $y \times$ sr]")
+    ax.set_title("CMASS: beamed, CAP-filtered model tSZ\n"
+                 "(cf. Schaan+2021 PRD 103 063513, Fig. 8)", fontsize=9)
+    ax.legend(fontsize=7)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    out = _FIG_DIR / "amo21_04_tap_cmass.pdf"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  wrote {out}")
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        supp = tap_beam / np.where(tap_raw != 0, tap_raw, np.nan)
+    print(f"  beam suppresses T_AP by {(1 - supp[0]) * 100:.1f}% at theta_d="
+          f"{_THETA_D_ARCMIN[0]:.1f}' and {(1 - supp[-1]) * 100:.1f}% at "
+          f"{_THETA_D_ARCMIN[-1]:.1f}'")
+    if dig is None:
+        print("  NOTE: no published data points present -- this is the model, not a validation.")
+
+
 def print_model_summary(cross):
     tables = cross._pk_tables_gy(_CMASS_Z, _THETA, _CMASS_HOD)
     print(f"\n--- CMASS halo model summary ---")
@@ -229,7 +317,7 @@ def print_model_summary(cross):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    print("=== Model predictions for Amodeo+2021 (arXiv:2009.05557) ===")
+    print("=== Model predictions for Amodeo+2021 (arXiv:2009.05558) ===")
     print("    ACT DR4 × BOSS CMASS/LOWZ stacked tSZ\n")
     print("Building HaloModelCrossSpectra ...")
     cross, _ = _build_cross()
@@ -238,9 +326,13 @@ if __name__ == "__main__":
     fig_sigma_y_cmass(cross)
     fig_sigma_y_lowz(cross)
     fig_pgy_decomposition(cross)
+    fig_tap_cmass(cross)
     print(f"\nAll figures saved to {_FIG_DIR}/")
     print(
-        "\nNOTE: Data (Amodeo+2021 Fig. 4) is not included in hod_mod.\n"
-        "      Obtain from: https://github.com/EmmanuelSchaan/ThumbStack\n"
-        "      Then load and overplot in the figures above."
+        "\nNOTE: no measured data ships with hod_mod, and none is readily available:\n"
+        "      Schaan+2021 Table I gives only chi2_null / PTE / model-SNR; the T_AP\n"
+        "      profiles exist only in their Figs. 7-9, and ThumbStack is code, not data.\n"
+        f"      To compare, digitise Schaan+2021 Fig. 8 into:\n        {_DIGITISED_CSV}\n"
+        "      (columns: theta_d_arcmin, T_AP, T_AP_err).  fig_tap_cmass picks it up\n"
+        "      automatically.  Carry the ~5% digitisation error in any quoted agreement."
     )

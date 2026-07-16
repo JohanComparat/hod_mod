@@ -161,6 +161,12 @@ in ``hod_mod/connection/hod/``.
    ``HODModel`` in ``hod_mod`` follows Zheng+2007.
    `arXiv:astro-ph/0703457 <https://arxiv.org/abs/astro-ph/0703457>`_
 
+.. [Zehavi2005] Zehavi I. et al. 2005, ApJ 630, 1.
+   SDSS luminosity- and colour-dependent projected correlation functions
+   w_p(r_p); the source of the digitized :math:`M_r<-21` benchmark used in the
+   ``benchmark_observables`` tree (Fig. 8).
+   `arXiv:astro-ph/0408569 <https://arxiv.org/abs/astro-ph/0408569>`_
+
 .. [More2015] More S. et al. 2015, ApJ 806, 2.
    HOD analysis of BOSS CMASS using :math:`w_p + \Delta\Sigma`; introduced the
    incompleteness correction and :math:`\kappa` satellite cut.
@@ -430,13 +436,28 @@ benchmarks for galaxy × tSZ and galaxy × soft X-ray cross-correlations.
    galaxies; 4.5σ measurement of the baryonic mass density in the warm-hot
    intergalactic medium.  Model comparison target for
    ``validate_amodeo2021.py``.
-   `arXiv:2009.05557 <https://arxiv.org/abs/2009.05557>`_
+   `arXiv:2009.05558 <https://arxiv.org/abs/2009.05558>`_
 
 .. [Pandey2025] Pandey S. et al. 2025.
    DES Year 3 × ACT DR6: 21σ detection of the lensing × tSZ cross-correlation
    C_ℓ^{γ,y}; constraints on baryonic feedback at group–cluster scales.
    Model comparison target for ``validate_pandey2025.py``.
    `arXiv:2506.07432 <https://arxiv.org/abs/2506.07432>`_
+
+.. [Battaglia2012] Battaglia N., Bond J.R., Pfrommer C. & Sijacki D. 2012,
+   ApJ 758, 74.  The AGN-feedback generalized-NFW electron pressure profile
+   (Table 1, Δ=200) fit to cosmological simulations — the shared analytic
+   pressure model used by both GODMAX and hod_mod's
+   :class:`~hod_mod.gas.PressureProfileBattaglia12` for the SZ cross-check.
+   `arXiv:1109.3711 <https://arxiv.org/abs/1109.3711>`_
+
+.. [Pandey2024] Pandey S. et al. 2024.
+   GODMAX: Gas thermODynamics and Matter distribution using jAX — a fully
+   differentiable JAX halo model for the joint gas/matter thermodynamics
+   (kSZ, tSZ, weak lensing, X-ray), calibrated on the ANTILLES simulations.
+   The independent code cross-checked in :doc:`godmax_cross_check`.
+   `arXiv:2401.18072 <https://arxiv.org/abs/2401.18072>`_
+   (https://github.com/shivampcosmo/GODMAX)
 
 ----
 
@@ -1128,6 +1149,17 @@ current state of the art per probe.
    KiDS-Legacy cosmic shear (1347 deg², nine bands):
    S8 = 0.815 (+0.016/−0.021) — the current cosmic-shear state of the art.
    `arXiv:2503.19441 <https://arxiv.org/abs/2503.19441>`_
+
+.. [Amon2022] Amon A. et al. 2022, Phys. Rev. D 105, 023514.
+   DES Year 3 cosmic shear (cosmology from ~100M source galaxies):
+   S8 = 0.759 (+0.025/−0.023) — a second wide-area shear anchor beside
+   KiDS-Legacy, ~2.3σ below Planck.
+   `arXiv:2105.13543 <https://arxiv.org/abs/2105.13543>`_
+
+.. [Secco2022] Secco L.F. et al. 2022, Phys. Rev. D 105, 023515.
+   DES Year 3 cosmic shear companion (robustness to modelling uncertainty);
+   the DES Y3 shear two-point data vector and covariance.
+   `arXiv:2105.13544 <https://arxiv.org/abs/2105.13544>`_
 
 .. [Qu2024] Qu F.J. et al. 2024, ApJ 962, 112.
    ACT DR6 CMB-lensing power spectrum: 43σ (2.3 % amplitude), matching
