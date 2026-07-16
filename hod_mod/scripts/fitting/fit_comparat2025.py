@@ -80,7 +80,7 @@ from astropy.cosmology import FlatLambdaCDM
 # --------------------------------------------------------------------------
 # hod_mod imports
 # --------------------------------------------------------------------------
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf, _BACKENDS, _EMULATOR_BACKENDS
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.gas import GasDensityDPM
@@ -490,10 +490,12 @@ class _Infrastructure:
 
     def __init__(self, hmf_backend: str = "csst", agn_model: str = "hod",
                  agn_finc: float = 0.01, **hmf_kwargs):
-        print(f"Building halo model infrastructure (CAMB + HMF[{hmf_backend}] + "
-              f"AGN[{agn_model}]) ...", flush=True)
         t0 = time.time()
-        pk_lin    = LinearPowerSpectrum()
+        pk_lin    = default_pk_linear()
+        # Name the actual backend: the default moved CAMB -> CosmoPower emulator,
+        # which shifts P(k) ~+2.5% in amplitude, so the log must not hard-code it.
+        print(f"Building halo model infrastructure (P(k)[{type(pk_lin).__name__}] + "
+              f"HMF[{hmf_backend}] + AGN[{agn_model}]) ...", flush=True)
         hmf       = make_hmf(hmf_backend, pk_func=pk_lin.pk_linear, **hmf_kwargs)
         hp        = HaloProfile(_COLOSSUS, cm_relation="diemer19")
         bnl       = _make_bnl()                       # beyond-linear halo bias (Mead+2021)
@@ -654,7 +656,7 @@ def _build_shared_components() -> dict:
     """
     print("Building shared halo-model components (CAMB + HAM) ...", flush=True)
     t0 = time.time()
-    pk_lin = LinearPowerSpectrum()
+    pk_lin = default_pk_linear()
     hp     = HaloProfile(_COLOSSUS, cm_relation="diemer19")
     dp     = GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=200)
     bnl    = _make_bnl()

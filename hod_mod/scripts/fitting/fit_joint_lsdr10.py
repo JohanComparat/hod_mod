@@ -69,7 +69,7 @@ from scipy.integrate import trapezoid
 from scipy.optimize import minimize
 from scipy.special import j0
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.gas import GasDensityDPM
@@ -241,9 +241,12 @@ class _Infrastructure:
     """One-time build of the halo model stack."""
 
     def __init__(self):
-        print("Building halo model infrastructure (CAMB + HMF) ...", flush=True)
         t0 = time.time()
-        pk_lin    = LinearPowerSpectrum()
+        pk_lin    = default_pk_linear()
+        # Name the actual backend: the default moved CAMB -> CosmoPower emulator,
+        # which shifts P(k) ~+2.5% in amplitude, so the log must not hard-code it.
+        print(f"Building halo model infrastructure (P(k)[{type(pk_lin).__name__}] "
+              f"+ HMF) ...", flush=True)
         hmf       = make_hmf("csst")
         hp        = HaloProfile(_COLOSSUS, cm_relation="diemer19")
         hod       = MoreHODModel(hmf, hmf.bias)
