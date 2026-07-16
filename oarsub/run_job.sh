@@ -42,6 +42,16 @@ REPO="${HOME}/software/hod_mod"                        # repo location on the cl
 CONDA_ENV="hod_mod"                                    # conda/mamba env name
 
 # --- campaign version (VTAG + HOD_MOD_RESULTS) ------------------------------
+# Optional leading `--vtag <tag>`. OAR does not propagate the submitting shell's
+# environment to the node, so `VTAG=v0.3 oarsub ...` is silently dropped — but it
+# DOES pass -S arguments through, appending the --array-param-file line after
+# them. submit_campaign.sh therefore submits
+#     -S "./oarsub/run_job.sh --vtag v0.3"
+# and OAR runs:  run_job.sh --vtag v0.3 <param line>
+# We consume the flag here so CMD below is just the command to eval.
+if [ "${1:-}" = "--vtag" ]; then
+    VTAG="${2:?--vtag needs a value}"; shift 2
+fi
 source "$(dirname "${BASH_SOURCE[0]}")/_campaign_env.sh"
 export HOD_MOD_DATA_DIR="${HOD_MOD_DATA_DIR:-${HOME}/data/hod_mod_data}"
 export HOD_MOD_SUMSTAT="${HOD_MOD_SUMSTAT:-${HOME}/software/sum_stat/data}"
