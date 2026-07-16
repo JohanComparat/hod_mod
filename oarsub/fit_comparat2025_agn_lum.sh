@@ -27,7 +27,7 @@ set -euo pipefail
 # --- user configuration (edit for your GRICAD account) ----------------------
 REPO="${HOME}/software/hod_mod"                       # repo location on the cluster
 CONDA_ENV="hod_mod"                                   # conda/mamba env name
-OUT_DIR="results/fits/comparat2025_fixedZM15_agn-lum"    # repo-relative
+OUT_DIR="${HOME}/data/hod_mod_results/fits/comparat2025_fixedZM15_agn-lum_v0.3"  # v0.3 re-run
 
 # --- environment ------------------------------------------------------------
 # GRICAD provides conda via /applis; activate the project env.
