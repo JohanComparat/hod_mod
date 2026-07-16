@@ -23,14 +23,22 @@ set -uo pipefail
 
 # --- config (override via env) ----------------------------------------------
 DAHU_USER="${DAHU_USER:-comparaj}"                     # login on dahu
-DAHU_HOST="${DAHU_HOST:-dahu}"                         # ssh alias or FQDN
+DAHU_HOST="${DAHU_HOST:-dahu.ciment}"                         # ssh alias or FQDN
 # BASE roots (un-versioned); the per-VTAG roots are derived from these exactly
 # as _campaign_env.sh derives them on the cluster.
 DAHU_RESULTS_BASE="${DAHU_RESULTS_BASE:-/home/${DAHU_USER}/data/hod_mod_results}"
 LOCAL_RESULTS_BASE="${LOCAL_RESULTS_BASE:-/home/comparat/data/hod_mod_results}"
-# GRICAD bastion for ProxyJump; leave empty if your ~/.ssh/config `dahu` alias
-# already sets ProxyJump, or set to e.g. comparaj@access-gricad.univ-grenoble-alpes.fr
-BASTION="${BASTION:-comparaj@access-gricad.univ-grenoble-alpes.fr}"
+# Extra ProxyJump. EMPTY BY DEFAULT — ~/.ssh/config already routes the cluster:
+#
+#   Host *.ciment
+#     ProxyCommand ssh -q comparaj@access-gricad... "nc -w 60 `basename %h .ciment` %p"
+#
+# That ProxyCommand strips the `.ciment` suffix, so the bastion is asked for the
+# name it knows (`dahu`).  Adding `-J <bastion>` here *overrides* it and hands the
+# bastion the raw `dahu.ciment` instead, which it cannot resolve:
+#   channel 0: open failed: connect failed: Name or service not known
+# Only set BASTION on a host whose ssh config does NOT already route to dahu.
+BASTION="${BASTION:-}"
 
 # --- args --------------------------------------------------------------------
 DRY="--dry-run --stats"
@@ -76,14 +84,20 @@ for vtag in "${VTAGS[@]}"; do
     remote_root="$(root_for "$vtag" "$DAHU_RESULTS_BASE")"
     local_root="$(root_for "$vtag" "$LOCAL_RESULTS_BASE")"
 
-    subdirs=()
-    for s in "${SUBDIR_TMPL[@]}"; do subdirs+=("${s//%V%/$vtag}"); done
-    printf -v _joined '%s,' "${subdirs[@]}"
-    remote="${DAHU_USER}@${DAHU_HOST}:${remote_root}/{${_joined%,}}"
+    # One explicit source per subdir.  NOT a `host:{a,b,c}` brace list: bash does
+    # brace expansion *before* variable expansion, so a list built into a variable
+    # is never expanded — locally or remotely — and rsync receives the literal
+    # string `{a,b,c}` as a single filename ("link_stat ... failed").  rsync
+    # accepts multiple sources sharing one remote host over a single connection.
+    srcs=()
+    for s in "${SUBDIR_TMPL[@]}"; do
+        srcs+=("${DAHU_USER}@${DAHU_HOST}:${remote_root}/${s//%V%/$vtag}")
+    done
 
     echo "=============================================================="
     echo "VTAG $vtag"
-    echo "  src : ${remote}"
+    echo "  src : ${DAHU_USER}@${DAHU_HOST}:${remote_root}/"
+    echo "        {$(printf '%s ' "${SUBDIR_TMPL[@]//%V%/$vtag}")}"
     echo "  dst : ${local_root}/"
     mkdir -p "$local_root"
 
@@ -92,7 +106,7 @@ for vtag in "${VTAGS[@]}"; do
     # exits 23 ("partial transfer due to error") for each missing source.  That
     # must not stop the *other* version from being pulled.
     # shellcheck disable=SC2086
-    rsync -avhz --progress $DRY "${SSH_E[@]}" "${remote}" "${local_root}/"
+    rsync -avhz --progress $DRY "${SSH_E[@]}" "${srcs[@]}" "${local_root}/"
     rc=$?
     case "$rc" in
         0)  echo "  -> OK" ;;
