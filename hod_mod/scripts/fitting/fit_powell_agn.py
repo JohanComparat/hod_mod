@@ -24,7 +24,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 from hod_mod import paths
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.agn.powell import PowellAGNModel
 from hod_mod.agn.ham import _aird15_lade_np, _ueda14_ldde_np
@@ -77,7 +77,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     os.makedirs(_OUT_DIR, exist_ok=True)
 
-    pk = LinearPowerSpectrum(); theta = LinearPowerSpectrum.default_cosmology()
+    pk = default_pk_linear(); theta = LinearPowerSpectrum.default_cosmology()
     hmf = make_hmf("tinker08", pk_func=pk.pk_linear); h = float(theta["h"])
     M = PowellAGNModel(theta, hmf, z_mean=args.z, log10lx_min=42.0)
     lx_d, phi_d, sig_d = _xlf_data(args.xlf, args.z)

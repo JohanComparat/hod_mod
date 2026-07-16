@@ -23,7 +23,7 @@ import numpy as np
 import scipy.optimize as opt
 import jax.numpy as jnp
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
 from hod_mod.paths import results_root
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
@@ -81,7 +81,7 @@ def load_data(data_file):
 # ---------------------------------------------------------------------------
 
 def build_predictors():
-    pk_lin = LinearPowerSpectrum()
+    pk_lin = default_pk_linear()
     hmf    = make_hmf("csst")
     hp     = HaloProfile(_COLOSSUS, cm_relation="diemer19")
     pk_nl  = CachedPkNonlinear(HALOFITSpectrum("mead2020"))
