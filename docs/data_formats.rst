@@ -99,6 +99,52 @@ covariance block:
         n_bins_wp       int
         n_bins_ds       int
 
+``sz/`` — stacked galaxy × Compton-y
+-------------------------------------
+
+Written by ``sum_stat``'s ``measure_joint_sumstat.py --stats SZ`` and read by
+:meth:`~hod_mod.data_io.sum_stat_reader.SumStatReader.sz`.
+
+.. code-block:: text
+
+    sz/{sample_id}/
+      rp_centres        (N,)      float64  — projected COMOVING separation [Mpc]
+      bin_edges         (N+1,)             — comoving bin edges [Mpc]
+      sigma_y           (N,)               — Sigma_y(r_p), dimensionless Compton-y
+      cov               (N, N)             — jackknife covariance [dimensionless^2]
+      z_hist            (Nz,)              — n(z) of the stacked galaxies, sums to 1
+      z_bin_edges       (Nz+1,)            — redshift histogram edges
+      cosmology/        H0, Om0, ...
+      attrs:
+        beam_fwhm_arcmin   float  — y-map beam FWHM (ACT DR6 NILC: 1.6)
+        z_eff_sz           float  — weighted mean redshift of the stack
+        comoving           bool   — True; r_p bins are comoving, unlike the other statistics
+        ymap_version       str    — which y-map was stacked
+        mask_threshold     float  — sky-mask cut applied
+        area_deg2_sz       float  — SZ-only effective area; NOT the survey area
+        n_gal_act, n_rand_act  int
+
+    joint_covariance/
+      attrs: slice_sz  [start, stop]   — the SZ block's span in the joint data vector
+      rp_centres_sz    (N,)            — comoving bin centres [Mpc]
+
+Unit handling differs from the other statistics in two ways worth stating plainly:
+
+* ``sigma_y`` is **dimensionless** and therefore h-invariant, like ΔΣ — the reader must not
+  h-scale it.  ``rp_centres`` is a distance and is converted Mpc → Mpc/h as usual.
+* the r_p bins are **comoving**, whereas this page's other entries are physical Mpc.  The
+  ``comoving`` attribute records that rather than leaving it to be inferred.
+
+.. warning::
+
+   The measurement is **beam-convolved** — the y-map is.  Compare it against
+   :meth:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra.projected_gy` with
+   ``beam_fwhm_arcmin`` set, never against the unbeamed model.  ``z_hist`` exists because a
+   fixed angular beam maps to a comoving scale via χ(z), so its size varies across the stack;
+   feed it to ``projected_gy_nz`` when that matters.  ``area_deg2_sz`` is the ACT-masked area
+   and must never be substituted for the survey ``area_sr`` that the abundance statistics
+   divide by.
+
 File naming convention::
 
     {SURVEY}_VLIM_ANY_Mstar{MSTAR_LO}-{MSTAR_HI}_z{Z_MIN}-{Z_MAX}-{STAT}.h5

@@ -44,6 +44,7 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    :caption: Pipeline — Galaxy × thermal SZ
 
    pipeline_gal_tsz
+   godmax_cross_check
 
 .. toctree::
    :maxdepth: 2
@@ -58,6 +59,7 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    tier3_forecast
    tier4_forecast
    sensitivity_benchmark
+   benchmark_map_mcmc
 
 .. toctree::
    :maxdepth: 2

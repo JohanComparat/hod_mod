@@ -144,6 +144,46 @@ and the parallelisation strategy used for the X-ray Limber integral.
 
 **Estimated runtime**: MAP ~15–60 min per sample; MAP+MCMC 4–24 h per sample.
 
+Benchmark observables — multi-probe forecast fit
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``hod_mod/scripts/fitting/fit_benchmark_observables.py``
+
+Interfaces the :doc:`benchmark-observables tree <sensitivity_benchmark>`
+(``$HOD_MOD_DATA_DIR/benchmark_observables/``) with the differentiable inference
+stack (:mod:`hod_mod.fitting.jax_inference`).  It builds the forecast
+:class:`~hod_mod.forecast.forward_jax.ForwardModel`, loads the benchmark data
+vector aligned to the model's own rows with
+:func:`hod_mod.fitting.benchmark_data.load_forecast_vector`, and runs a gradient
+MAP (``run_map_jax``) then blackjax NUTS (``run_nuts``) under a Planck prior on
+the cosmological parameters.
+
+For the ``simulated`` stand-ins (forward-model fiducial + Stage-IV forecast
+noise), ``--data-mode recover`` (default) takes the published **forecast noise**
+``y_err`` from the tree, generates self-consistent data and checks the pipeline
+recovers the fiducial; ``--data-mode benchmark`` fits the tree ``y`` values
+as-is for a cross-configuration goodness-of-fit.
+
+.. code-block:: bash
+
+   # list the simulated observables available in the tree
+   python -m hod_mod.scripts.fitting.fit_benchmark_observables --list
+
+   # MAP + MCMC over an abundance + AGN-clustering + shear vector
+   JAX_ENABLE_X64=1 python -m hod_mod.scripts.fitting.fit_benchmark_observables \
+       --which xlf n_gal wp_agn cl_kk --free Omega_m sigma8 --mode both
+
+Outputs (under ``$HOD_MOD_RESULTS/fits/benchmark/``)::
+
+    <label>_map.json            MAP parameters + χ²/dof (written as soon as MAP ends)
+    <label>_mcmc_summary.json   posterior medians ± σ, acceptance rate
+    <label>_chain.npy           the NUTS chain
+
+**Note**: the Limber angular spectra (``cl_*``) inflate the NUTS compile ~10×;
+MAP handles the full multi-probe vector cheaply, so prefer projected/abundance
+observables (``xlf``/``n_gal``/``wp_agn``) or a small ``--n-samples`` when
+sampling over angular spectra (see :mod:`hod_mod.fitting.jax_inference`).
+
 BGS/LS10 real data — More+2015 HOD
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
