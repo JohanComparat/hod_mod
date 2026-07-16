@@ -17,11 +17,11 @@ Expected tolerances
 - N_sat:       < 2%     (AUMHODModel = exact TINK=0 replica)
 - n_gal:       < 2%     (same σ₈, same HMF integral)
 - b_eff:       < 2%
-- w_p:         < 60%    (two-halo dominated by P_lin shape: CAMB vs AUM/E-H)
-- delta_sigma: < 130%   (additionally sensitive to c(M): Diemer+2019 vs AUM built-in)
+- w_p:         < 15%    (measured 9.3% max / 2.8% median, 2026-07)
+- delta_sigma: < 15%    (measured 8.9% max / 4.2% median, 2026-07; sensitive to c(M):
+                         Diemer+2019 vs AUM built-in)
 
-The large w_p / ΔΣ tolerances are intentional.  The dominant sources of
-disagreement are:
+The residual w_p / ΔΣ disagreement is physical, not numerical.  The dominant sources are:
 
 1. **Linear P(k) shape**: hod_mod uses CAMB (full Boltzmann solver);
    AUM uses the Eisenstein-Hu 1998 fitting formula normalised to the same σ₈.
@@ -253,11 +253,15 @@ class TestWp:
     _RP = np.logspace(np.log10(0.5), np.log10(20.0), 12)
 
     def test_wp_agrees(self, setup):
-        """w_p agrees to within 60% — dominated by CAMB vs AUM/E-H P_lin shape.
+        """w_p agrees with AUM to within 15% (measured: 9.3% max, 2.8% median, 2026-07).
 
-        The 2-halo contribution at rp > 3 Mpc/h differs by ~10–15% because
-        hod_mod uses CAMB P_lin while AUM uses Eisenstein-Hu fitted to the
-        same σ₈.  The 1-halo term adds discrepancy at small scales.
+        The residual is CAMB vs AUM/Eisenstein-Hu P_lin shape plus the 1-halo term at small
+        scales -- genuine modelling differences between the two codes.
+
+        The tolerance was 60% until 2026-07 and caught nothing: hod_mod's Hankel transform was
+        silently a trapezoid truncated at k*r ~ 8, putting w_p 21% (16% median) away from AUM,
+        and this test passed throughout.  15% leaves room for the known model differences while
+        being tight enough to fail if the transform breaks again.
         """
         import hod as h_aum
         wp_gga = np.asarray(setup["pred"].wp(jnp.asarray(self._RP), _PI_MAX, _Z,
@@ -268,7 +272,7 @@ class TestWp:
         wp_aum = _from_carr(wp_c, len(self._RP))
 
         pct = 100.0 * np.abs(wp_gga - wp_aum) / np.abs(wp_aum)
-        assert np.all(pct < 60.0), (
+        assert np.all(pct < 15.0), (
             f"w_p max %diff = {pct.max():.1f}% at rp={self._RP[pct.argmax()]:.2f} Mpc/h"
         )
 
@@ -302,12 +306,13 @@ class TestDeltaSigma:
     _R = np.logspace(np.log10(0.3), 1.0, 10)
 
     def test_ds_agrees(self, setup):
-        """ΔΣ agrees to within 130% — dominated by c(M) + P_lin differences.
+        """ΔΣ agrees with AUM to within 15% (measured: 8.9% max, 4.2% median, 2026-07).
 
-        At R < 1 Mpc/h the 1-halo term is sensitive to the concentration-mass
-        relation; hod_mod uses Diemer+2019, AUM uses its own built-in c(M).
-        The 2-halo contribution at large R adds the same P_lin shape mismatch
-        as for w_p.
+        The residual is the concentration-mass relation (hod_mod: Diemer+2019; AUM: its own)
+        at R < 1 Mpc/h, plus the same P_lin shape mismatch as w_p at large R.
+
+        The tolerance was 130% until 2026-07, which is not a test.  With the Hankel transform
+        broken ΔΣ sat 20% (15% median) from AUM and this still passed.
         """
         import hod as h_aum
         ds_gga = np.asarray(setup["pred"].delta_sigma(jnp.asarray(self._R), _Z,
@@ -318,7 +323,7 @@ class TestDeltaSigma:
         ds_aum = _from_carr(esd_c, len(self._R))
 
         pct = 100.0 * np.abs(ds_gga - ds_aum) / np.abs(ds_aum)
-        assert np.all(pct < 130.0), (
+        assert np.all(pct < 15.0), (
             f"ΔΣ max %diff = {pct.max():.1f}% at R={self._R[pct.argmax()]:.2f} Mpc/h"
         )
 

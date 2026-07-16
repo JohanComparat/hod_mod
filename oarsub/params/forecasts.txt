@@ -1,0 +1,13 @@
+# Family D — Fisher forecasts + the benchmark MAP+MCMC forecast fit.  These use
+# forward_jax._pk_to_xi (w_p / ΔΣ), so the fiducial vector and Jacobian shift
+# under the v0.3 fix.  tier3/tier4 parallelise with --jobs 6 → give ≥6 cores.
+# Commands reproduce exactly what each docs page states it ran (production, not
+# --smoke).  Rebuild the benchmark-observables tree first if fiducials moved:
+#   python -m hod_mod.scripts.data.make_benchmark_observables --out $HOD_MOD_DATA_DIR/benchmark_observables
+# make_sensitivity_figures runs in Phase 4 (post-processing), not here.
+python -m hod_mod.scripts.forecasts.run_tier2_forecast --rmin 0.1 0.5 2.5 --n-bands 6 --split-sfq --include-radio --include-hi --include-ssfr --include-ir
+python -m hod_mod.scripts.forecasts.run_tier3_forecast --jobs 6
+python -m hod_mod.scripts.forecasts.run_tier4_forecast --jobs 6
+python -m hod_mod.scripts.forecasts.run_stage4_forecast --rmin 0.1 0.3 0.5 1 2.5 5 10
+python -m hod_mod.scripts.forecasts.run_sensitivity_study --rel-err 0.001 0.01 0.05 --rmin 0.1 0.5 2.5 10 --add-planck-prior
+python -m hod_mod.scripts.fitting.fit_benchmark_observables --which xlf n_gal wp_agn --free Omega_m sigma8 lg_m1h lg_m0star agn_log10_lstar --mode both --sampler emcee --n-k 64 --n-m 64 --n-warmup 200 --n-samples 400 --n-walkers 32 --err-scale 10 --label benchmark_map_mcmc

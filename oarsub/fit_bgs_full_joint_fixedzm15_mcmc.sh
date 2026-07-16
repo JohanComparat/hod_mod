@@ -28,7 +28,7 @@ set -euo pipefail
 
 REPO="${HOME}/software/hod_mod"
 CONDA_ENV="hod_mod"
-OUT_DIR="${HOME}/data/hod_mod_results/bgs_full_joint_fixedzm15"
+OUT_DIR="${HOME}/data/hod_mod_results/bgs_full_joint_fixedzm15_v0.3"  # v0.3 Hankel re-run (0.2.3 kept)
 
 # --- data / results roots (the COMPLETE data root includes xray_bands/) ------
 export HOD_MOD_DATA_DIR="${HOME}/data/hod_mod_data"

@@ -1,0 +1,18 @@
+# Family A (MAP + MCMC) — literature benchmarks whose docs show a posterior /
+# corner figure.  Each line runs MAP, then emcee, then regenerates figures.
+# Submit:  oarsub --project <P> -l /nodes=1/core=8,walltime=08:00:00 \
+#            --array-param-file oarsub/params/benchmarks_mcmc.txt -S ./oarsub/run_job.sh
+# (--force-mcmc so a stale flatchain.npz from the 0.2.3 run is not reused.)
+python -m hod_mod.scripts.benchmarks.run_benchmark --model more2015_logM11_12 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model more2015_logM11p3_12 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model more2015_logM11p4_12 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model kravtsov2004 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model zheng2007 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model zumandelbaum2015 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model zumandelbaum2015_bin_9p4_9p8 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model zumandelbaum2015_bin_9p8_10p2 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model zumandelbaum2015_bin_10p2_10p6 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model zumandelbaum2015_bin_10p6_11p0 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model zumandelbaum2015_bin_11p0_11p2 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model zumandelbaum2015_bin_11p2_11p4 --mcmc --force-mcmc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model zumandelbaum2015_bin_11p4_12p0 --mcmc --force-mcmc --plot

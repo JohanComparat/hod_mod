@@ -2,6 +2,70 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- **GODMAX independent SZ cross-check.** Added an independent-code validation of
+  the thermal-SZ machinery against [GODMAX](https://github.com/shivampcosmo/GODMAX)
+  ([Pandey2024], arXiv:2401.18072), driving both codes through the *shared*
+  Battaglia+2012 electron pressure profile so the comparison isolates hod_mod's
+  projection stack from the gas-physics model.
+  - New `hod_mod.gas.PressureProfileBattaglia12` — the AGN-feedback GNFW pressure
+    ([Battaglia2012], arXiv:1109.3711, Δ=200c), mirroring GODMAX's `Battaglia_12_16`
+    (Kaiser `P_200c` amplitude, mass/z-scaled `{P0, xc, β}`, electron factor
+    `f_e=(2+2X_H)/(3+5X_H)`). Reproduces an independent-quadrature reference for
+    `P_e(r|M,z)` and `ỹ(k|M)` to ~1e-6.
+  - New tSZ projectors in `HaloModelCrossSpectra`: `angular_cl_yy` (tSZ auto,
+    via `_pk_tables_yy`) and `angular_cl_ky` (shear × tSZ, reusing `P_my` with a
+    new tomographic convergence kernel `_convergence_kernel`).
+  - `scripts/godmax/export_godmax_b12_reference.py` freezes the reference
+    (`--source godmax` in a GODMAX env, or a self-contained `--source independent`
+    NumPy build); `hod_mod/scripts/validate_godmax.py` overlays + reports residuals;
+    `tests/test_godmax_comparison.py` adds self-contained machinery checks plus
+    skipif reference assertions. New docs page `docs/godmax_cross_check.rst`.
+
+## [0.3.0] — 2026-07-15
+
+**Behaviour-changing release — minor bump, not a patch.** This corrects the Hankel transform
+underlying every real-space observable, so every number the code produces moves: `w_p` by up to
+19%, `ΔΣ` by up to 20%, `Σ_y` by ~16%. Results from 0.2.3 and earlier are superseded and any fit
+built on them should be re-run. Pinning `~=0.2.3` will *not* pick this up, which is deliberate:
+a silent 20% shift in a patch release is exactly what a minor bump exists to prevent.
+
+- **Fixed `_pk_to_xi` (`observables.clustering`)**, which was not the Ogata double-exponential
+  quadrature it claimed to be. Two coupled bugs that masked each other:
+  1. the nodes were a factor `1/h = 200` too small — `x = π(hn)tanh(...)` instead of the
+     `x = πn tanh(...)` documented in the file's own header comment — with a compensating `h`
+     prefactor hiding it in the normalisation. The result was a plain trapezoid truncated at
+     `k·r ≈ π h N = 8.04`, so the double-exponential decay of the weights (the entire point of
+     the scheme) never happened;
+  2. `P(k)` was extrapolated as a *constant* above the table's `k_max`. Bug 1's truncation was
+     limiting the damage from bug 2, so fixing either alone was worse than fixing neither.
+
+  Now: correct nodes (reaching `k·r ≈ 1608`) plus a power-law high-k continuation, guarded
+  against a degenerate or `-inf` tail.
+
+- **Validation.** The corrected transform agrees with an *exact analytic* transform pair to
+  <1e-4 (the old one returned the **wrong sign** where `ξ ≈ 3e-4`), with `mcfit`'s and
+  `hankl`'s independent FFTLog implementations to 0.12%/0.26% on a real `P_gm` and 0.04%/0.26%
+  on a real `P_gy`, and — end-to-end against **AUM**, an independent C++ halo model — improves
+  `w_p` from 16.1% to **2.8%** median disagreement and `ΔΣ` from 15.1% to **4.2%**. The residual
+  is the known CAMB-vs-Eisenstein-Hu `P_lin` and Diemer19-vs-AUM `c(M)` difference, not numerics.
+
+- **Tests.** `tests/test_aum_comparison.py` tolerances tightened from 60%/130% to **15%/15%** —
+  at 60% the broken transform sat 21% from AUM and the test passed. Added an exact analytic
+  transform pair and a node-reach guard. Recorded that `TestOgataHankel`'s `k^-2` power-law
+  tests are structurally blind to node/extrapolation bugs and must not be read as coverage.
+
+- **tSZ**: `projected_gy` gains `beam_fwhm_arcmin` (Gaussian beam via the existing
+  `psf_window_ell`, applied as `B(|k|χ)` before the Abel projection — exact by projection-slice),
+  plus `projected_gy_nz` for an n(z)-weighted beam, `sigma_y_theta`, and a reusable `cap_filter`
+  for compensated aperture photometry. `SumStatReader` gains `sz()` for `sum_stat`'s `sz/` group.
+  Fixed an unguarded `rp_centres_wp`/`rp_centres_esd` lookup that made any subset-of-statistics
+  joint file fail to open.
+
+- **Version**: `__init__.__version__` had been stale at 0.2.1 since 0.2.2/0.2.3 shipped; it now
+  tracks `pyproject.toml` again.
+
 ## [0.2.3] — 2026-07-08
 
 Maintenance release — first PyPI upload carrying the 0.2.2 differentiable
