@@ -237,6 +237,29 @@ class SumStatReader:
                     "attrs":       dict(subgrp.attrs),
                 }
 
+            if "sz" in f:
+                sz_grp = f["sz"]
+                subgrp, _ = _first_subgroup(sz_grp)
+                # r_p in Mpc → Mpc/h; sigma_y is dimensionless Compton-y, h-invariant like ΔΣ.
+                # sum_stat writes these bins as COMOVING separations (attr ``comoving``), unlike
+                # the physical-Mpc convention this module's header describes for the other
+                # statistics.  The * h is the same conversion either way, but the distinction
+                # matters to whoever compares against a model, so it is surfaced rather than
+                # silently dropped.
+                cache["sz"] = {
+                    "rp":          np.array(subgrp["rp_centres"]) * h,
+                    "sigma_y":     np.array(subgrp["sigma_y"]),
+                    "cov":         np.array(subgrp["cov"]),
+                    "bin_edges":   np.array(subgrp["bin_edges"]) * h,
+                    "z_hist":      np.array(subgrp["z_hist"]),
+                    "z_bin_edges": np.array(subgrp["z_bin_edges"]),
+                    "comoving":    bool(subgrp.attrs.get("comoving", True)),
+                    "beam_fwhm_arcmin": float(subgrp.attrs.get("beam_fwhm_arcmin", np.nan)),
+                    "z_eff":       float(subgrp.attrs.get("z_eff_sz", np.nan)),
+                    "ymap_version": str(subgrp.attrs.get("ymap_version", "")),
+                    "attrs":       dict(subgrp.attrs),
+                }
+
             if "number_density" in f:
                 nd_grp = f["number_density"]
                 subgrp, _ = _first_subgroup(nd_grp)
@@ -275,11 +298,16 @@ class SumStatReader:
                         "cov_raw":         np.array(jg["cov"]),
                         "subsamples_raw":  subs_raw,   # (n_jk, 286) or None
                         "slices":          slices,
-                        "rp_centres_wp":   np.array(jg["rp_centres_wp"]) * h,
-                        "rp_centres_esd":  np.array(jg["rp_centres_esd"]) * h,
                         "h":               h,
                         "attrs":           jg_attrs,
                     }
+                    # The bin-centre arrays are per-statistic, so a file carrying any subset of
+                    # stats carries only some of them; ``joint_bgs`` already treats them as
+                    # optional on the way out, so they must be optional on the way in too.
+                    # (An SZ-only file has no wp or ESD centres.)
+                    for _name in ("rp_centres_wp", "rp_centres_esd", "rp_centres_sz"):
+                        if _name in jg:
+                            cache["joint_bgs"][_name] = np.array(jg[_name]) * h
                 else:
                     # Legacy joint format: n_bins_smf/wp/ds attrs.
                     n_smf = int(jg_attrs.get("n_bins_smf", 0))
@@ -426,6 +454,34 @@ class SumStatReader:
             raise KeyError(f"No esd group found in {self._path}.")
         return self._cache["esd"]
 
+    def sz(self) -> dict:
+        """Return the stacked galaxy × Compton-y profile Σ_y(r_p).
+
+        Returns
+        -------
+        dict with keys:
+
+        * ``rp``          — projected **comoving** separation bin centres, Mpc/h
+        * ``sigma_y``     — Σ_y(r_p), dimensionless Compton-y (h-invariant)
+        * ``cov``         — covariance matrix, dimensionless²
+        * ``bin_edges``   — comoving bin edges, Mpc/h
+        * ``z_hist``, ``z_bin_edges`` — n(z) of the stacked galaxies, normalised to unit sum
+        * ``beam_fwhm_arcmin`` — beam FWHM of the y-map [arcmin]
+        * ``z_eff``       — weighted mean redshift of the stacked galaxies
+        * ``ymap_version``, ``comoving``, ``attrs``
+
+        Notes
+        -----
+        The measurement is **beam-convolved** — the y-map is.  Comparing it to an unbeamed model
+        is a systematic in the inner bins, not a subtlety: pass ``beam_fwhm_arcmin`` to
+        :meth:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra.projected_gy`, or use
+        ``z_hist`` with ``projected_gy_nz`` to average the beam over the sample's n(z) (a fixed
+        angular beam maps to a comoving scale through χ(z), so its size varies across the stack).
+        """
+        if "sz" not in self._cache:
+            raise KeyError(f"No sz group found in {self._path}.")
+        return self._cache["sz"]
+
     def number_density(self) -> dict:
         """Return the galaxy number density n of the sample.
 
@@ -549,6 +605,8 @@ class SumStatReader:
             out["rp_wp"]  = raw["rp_centres_wp"]
         if "rp_centres_esd" in raw:
             out["rp_esd"] = raw["rp_centres_esd"]
+        if "rp_centres_sz" in raw:
+            out["rp_sz"]  = raw["rp_centres_sz"]   # comoving Mpc/h; see sz()
         if raw.get("subsamples_raw") is not None:
             subs_h = raw["subsamples_raw"][:, idx] * sc[np.newaxis, :]
             out["subsamples"] = subs_h   # (n_jk, n_sel)
@@ -556,7 +614,7 @@ class SumStatReader:
 
     def list_groups(self) -> list:
         """List available statistic types in this file."""
-        return [k for k in ("wp", "smf", "esd", "number_density", "joint", "joint_bgs")
+        return [k for k in ("wp", "smf", "esd", "sz", "number_density", "joint", "joint_bgs")
                 if k in self._cache]
 
     def attrs(self) -> dict:
