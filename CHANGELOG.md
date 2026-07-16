@@ -23,6 +23,29 @@ All notable changes to this project will be documented in this file.
     `tests/test_godmax_comparison.py` adds self-contained machinery checks plus
     skipif reference assertions. New docs page `docs/godmax_cross_check.rst`.
 
+## [0.3.1] — 2026-07-16
+
+**Documentation/data patch — no change to any computed number.**
+
+- **Restored `data/more2015_boss_cmass/wp_cmass_z052.csv`**, deleted in `ecb561c`
+  but still referenced by `README.md`, `configs/hod_fit_more2015_cmass.yml`,
+  `configs/hod_fit_more2015_cmass_joint.yml` and the sample `metadata.json`.
+  `WpFitter(load_config("configs/hod_fit_more2015_cmass.yml"))` raised
+  `FileNotFoundError` on a clean checkout. The file is the 12-bin digitized
+  More+2015 Fig 2 / White+2014 `w_p` (`rp_hMpc,wp_hMpc,wp_err_hMpc`).
+- **Made every README code block self-contained.** The gas, lensing and
+  differentiable-inference snippets referenced `fhmp`, `x0`, `theta`, `rp`,
+  `ell`, `z_arr` and `nz_g` without defining them (they were only bound in a
+  later block), so no block ran standalone — `NameError` on copy-paste. Each
+  block now builds what it needs and has been executed against the tree.
+- **Corrected README facts:** `run_benchmark.py --model more2015` is not a valid
+  choice (`more2015_logM11_12`); `tangential_shear` / `radial_critical_radius`
+  are module-level functions in `observables.lensing`, not
+  `ClusterLensingPrediction` methods (the class exposes `magnification` and
+  `critical_curves`); `ProductionMultiProbeModel` lives in
+  `hod_mod.fitting.jax_inference`; the tier forecast drivers live in
+  `hod_mod/scripts/forecasts/`.
+
 ## [0.3.0] — 2026-07-15
 
 **Behaviour-changing release — minor bump, not a patch.** This corrects the Hankel transform

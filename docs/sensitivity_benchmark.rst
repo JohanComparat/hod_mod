@@ -103,8 +103,7 @@ opposed to a Fisher forecast) would use today.
      - Precision / signal-to-noise today
    * - ``wp`` per (z, M*) cell
      - SDSS DR7 per-sample w_p [Zehavi2011]_; DESI DR1 small-scale
-       clustering + lensing (`arXiv:2512.15962
-       <https://arxiv.org/abs/2512.15962>`_)
+       clustering + lensing [Lange2025]_
      - few-% per point at z < 0.2; DESI extends to z ≈ 1 (LRG)
    * - ``ds`` (ΔΣ)
      - SDSS [Mandelbaum2006]_, [Leauthaud2017]_; DESI×DES/KiDS lensing
@@ -125,7 +124,8 @@ opposed to a Fisher forecast) would use today.
      - Madau–Dickinson compilation [MadauDickinson2014]_; LoTSS radio view
      - ~12 % per Δz shell (the tier-3 noise assumption is current-data)
    * - shear tomography (``cl_kk``)
-     - KiDS-Legacy, 1347 deg² [Wright2025]_ (+ DES Y3 joint)
+     - KiDS-Legacy, 1347 deg² [Wright2025]_; DES Y3 cosmic shear
+       [Amon2022]_ [Secco2022]_
      - S8 to 2.3 %
    * - ``cl_kCMB`` (CMB-lensing auto)
      - ACT DR6 [Qu2024]_ / Planck PR4
@@ -135,8 +135,8 @@ opposed to a Fisher forecast) would use today.
      - 38–50σ; S8 to 2.7 %
    * - ``cl_gy`` (galaxy × tSZ)
      - ACT × BOSS CMASS stacked tSZ + kSZ profiles [Schaan2021]_
-       [Amodeo2021]_
-     - ~10σ-level profile detections per sample
+       [Amodeo2021]_; DES Y3 lensing × ACT DR6 tSZ [Pandey2025]_
+     - ~10σ-level profiles per sample; 21σ lensing × tSZ cross
    * - ``cl_gX`` (galaxy × soft X-ray, bands)
      - eROSITA × legacy galaxy samples: band-resolved X-ray profiles and
        scaling relations [Comparat2025]_
@@ -167,7 +167,8 @@ opposed to a Fisher forecast) would use today.
      - —
    * - ``ilf`` / ``cl_gI`` (IR)
      - WISE all-sky 3.4/4.6/12 μm imaging [Wright2010]_ (the tier-3 band
-       choice); SPHEREx spectral maps arriving [Dore2014]_
+       choice); WISE quasar host-halo clustering [Petter2023]_; SPHEREx
+       spectral maps arriving [Dore2014]_
      - WISE crosses measurable now; spectro-IR from 2026–27
    * - ``uvlf``
      - GALEX local [Wyder2005]_; z = 4–8 [Finkelstein2015]_; z = 9–16 JWST
@@ -369,7 +370,7 @@ The benchmark data tree
 -----------------------
 
 The compilation above is materialised as a JSON tree in the data
-repository, ``$HOD_MOD_DATA_DIR/benchmark_observables/`` — **83 files**,
+repository, ``$HOD_MOD_DATA_DIR/benchmark_observables/`` — **96 files**,
 one per (bibliographic reference, observable, sample):
 
 .. code-block:: text
@@ -443,17 +444,28 @@ Provenance classes
   should replace it (e.g. the [Aird2015]_ electronic XLF tables, the
   KiDS-Legacy band powers [Wright2025]_, the [Kulkarni2019]_ QLF
   tables).
-* **placeholder (10)** — no local stand-in is meaningful (data outside
+* **placeholder (23)** — no local stand-in is meaningful (data outside
   the model grid such as the z > 4 UV LFs, scalar relations such as the
   M_BH census, or external catalogues such as the eRASS1 cluster
-  products); reference + description + extraction hint only.
+  products); reference + description + extraction hint only.  The
+  second-iteration expansion added thirteen of these: the page-cited
+  measurements that previously had no file (DR7 clustering [Zehavi2011]_,
+  g-g lensing [Mandelbaum2006]_ [Leauthaud2017]_, the DESI-DR1
+  cross-survey lensing release [Heydenreich2025]_, DESI geometry/full-shape
+  [DESIDR2]_ [DESI2024FS]_, the FRB Macquart relation [Macquart2020]_,
+  MIGHTEE-HI [Ponomareva2023]_, UltraVISTA SMFs [Muzzin2013]_, the low-mass
+  M_BH pin [Greene2020]_) plus a fresh-literature pass (DES Y3 cosmic shear
+  [Amon2022]_ [Secco2022]_, DES Y3 × ACT lensing×tSZ [Pandey2025]_, WISE
+  quasar clustering [Petter2023]_).
 
 Operator worklist
 ~~~~~~~~~~~~~~~~~
 
-**38 files carry** ``needs_operator_extraction: true`` (all simulated
-and placeholder entries plus the two derived fits).  ``index.json``
-lists them::
+**51 files carry** ``needs_operator_extraction: true`` (all simulated
+and placeholder entries plus the two derived fits); the machine-readable
+checklist, grouped by wavelength/tracer with the citation link and
+extraction hint per file, is regenerated alongside the tree as
+``DIGITIZATION_WORKLIST.md``.  ``index.json`` also lists them::
 
     python -c "
     import json

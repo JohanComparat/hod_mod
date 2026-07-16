@@ -1,7 +1,15 @@
-"""Electron-pressure profiles (Arnaud+2010, DPM) for the tSZ Compton-y signal."""
+"""Electron-pressure profiles (Arnaud+2010, DPM, Battaglia+2012) for the tSZ Compton-y signal."""
 import numpy as np
 import jax.numpy as jnp
-from .conversions import _MPC_CM, _RHO_CRIT0, _SIGMA_T_OVER_ME_C2, _gnfw_f_params, _profile_uk_gl, m200_to_m500c
+from .conversions import (
+    _MPC_CM,
+    _RHO_CRIT0,
+    _SIGMA_T_OVER_ME_C2,
+    _G_MSUN2_MPC4_KEV,
+    _gnfw_f_params,
+    _profile_uk_gl,
+    m200_to_m500c,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +337,193 @@ class PressureProfileDPM:
 
         r_max = self._r_max_factor * r200
         raw   = _profile_uk_gl(k, r_max, _integrand, n_gl=self._n_gl)  # (Nk, NM)
+
+        conv = _SIGMA_T_OVER_ME_C2 * (_MPC_CM / h)   # cm³/(keV·Mpc/h)
+        return conv * raw   # (Nk, NM) [(Mpc/h)²]
+
+
+# ---------------------------------------------------------------------------
+# Battaglia+2012 pressure profile  (tSZ) — shared profile for the GODMAX check
+# ---------------------------------------------------------------------------
+
+class PressureProfileBattaglia12:
+    """Battaglia+2012 generalized-NFW electron pressure profile for tSZ.
+
+    Reference: Battaglia, Bond, Pfrommer & Sijacki 2012, ApJ 758, 74
+    (arXiv:1109.3711), Table 1 "AGN feedback, Δ=200".  This is the analytic
+    pressure model used by **GODMAX** (Pandey+2024, arXiv:2401.18072), so it
+    serves as the *shared, apples-to-apples* profile for the independent SZ
+    cross-check: driving both codes through the identical B12 profile isolates
+    hod_mod's projection machinery (HMF/bias integrals, Ogata-Hankel + Limber)
+    from the gas-physics model.
+
+    The **thermal** pressure is a generalized NFW in ``x = r / R_{200c}``:
+
+    .. math::
+
+        P_{\\rm th}(x|M_{200c}, z) = P_{200c}\\, P_0
+            \\left(\\frac{x}{x_c}\\right)^{\\gamma}
+            \\left[1 + \\left(\\frac{x}{x_c}\\right)^{\\alpha}\\right]^{-\\beta}
+
+    with the self-similar (Kaiser) amplitude
+
+    .. math::
+
+        P_{200c} = \\frac{G\\,M_{200c}\\,200\\,\\rho_{\\rm cr}(z)\\,f_b}{2\\,R_{200c}}
+
+    (physical :math:`M_{200c}`, :math:`\\rho_{\\rm cr}(z)`, :math:`R_{200c}`;
+    :math:`f_b = \\Omega_b/\\Omega_m`).  Each of :math:`\\{P_0, x_c, \\beta\\}`
+    scales with mass and redshift as
+
+    .. math::
+
+        A(M, z) = A_0 \\left(\\frac{M_{200c}}{10^{14}\\,M_\\odot}\\right)^{\\alpha_m}
+                  (1+z)^{\\alpha_z}
+
+    while :math:`\\gamma = -0.3` and :math:`\\alpha = 1.0` are fixed.
+
+    The **electron** pressure returned by :meth:`_p3d` is
+    :math:`P_e = f_e\\,P_{\\rm th}` with
+    :math:`f_e = (2 + 2 X_H)/(3 + 5 X_H) \\approx 0.518` for hydrogen mass
+    fraction :math:`X_H = 0.76`, so that the shared :meth:`pressure_uk` applies
+    only the Compton-y prefactor :math:`\\sigma_T/(m_e c^2)` — identical to
+    :class:`PressureProfileA10`.
+
+    Fiducial parameters — Battaglia+2012 Table 1 (AGN feedback, Δ=200):
+
+    +--------+---------+-----------+-----------+
+    | Param  | A0      | α_m       | α_z       |
+    +========+=========+===========+===========+
+    | P0     | 18.1    | 0.154     | −0.758    |
+    +--------+---------+-----------+-----------+
+    | xc     | 0.497   | −0.00865  | 0.731     |
+    +--------+---------+-----------+-----------+
+    | β      | 4.35    | 0.0393    | 0.415     |
+    +--------+---------+-----------+-----------+
+
+    Unlike :class:`PressureProfileA10` (which converts M₂₀₀→M₅₀₀c internally),
+    B12 is natively an M₂₀₀c profile, so the halo cache must be built with
+    ``mdef='200c'`` — then ``m200_arr``/``r200_arr`` are the M₂₀₀c/R₂₀₀c triple.
+
+    Parameters
+    ----------
+    r_max_over_r200c : float
+        Integration truncation radius as a multiple of R₂₀₀c (default 4).
+        Must match the GODMAX export configuration for the cross-check.
+    n_gl : int
+        Gauss-Legendre quadrature nodes (default 200).
+    x_h : float
+        Hydrogen mass fraction for the thermal→electron pressure factor
+        ``f_e = (2 + 2 x_h)/(3 + 5 x_h)`` (default 0.76).
+    """
+
+    # Battaglia+2012 Table 1 — AGN feedback, Δ=200 (dict: A0, alpha_m, alpha_z)
+    _P0   = {"A0": 18.1,  "am":  0.154,    "az": -0.758}
+    _XC   = {"A0": 0.497, "am": -0.00865,  "az":  0.731}
+    _BETA = {"A0": 4.35,  "am":  0.0393,   "az":  0.415}
+    _gamma = -0.3
+    _alpha = 1.0
+
+    def __init__(self, r_max_over_r200c: float = 4.0, n_gl: int = 200, x_h: float = 0.76):
+        self._r_max_factor = float(r_max_over_r200c)
+        self._n_gl = int(n_gl)
+        self._x_h = float(x_h)
+        self._f_e = (2.0 + 2.0 * self._x_h) / (3.0 + 5.0 * self._x_h)
+
+    @staticmethod
+    def _scale(params: dict, m200c_phys, z) -> jnp.ndarray:
+        """A(M,z) = A0·(M/1e14)^α_m·(1+z)^α_z, with M in physical Msun."""
+        return (params["A0"]
+                * (jnp.asarray(m200c_phys) / 1.0e14) ** params["am"]
+                * (1.0 + z) ** params["az"])
+
+    def _p3d(
+        self,
+        r_over_r200: jnp.ndarray,
+        m200c,
+        z: float,
+        h: float,
+        omega_m: float,
+        f_b: float,
+        r200c: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """P_e(x = r/R₂₀₀c | M₂₀₀c, z) in keV cm⁻³ (Battaglia+2012, ×f_e).
+
+        Parameters
+        ----------
+        r_over_r200 : dimensionless x = r/R₂₀₀c; broadcasts against m200c
+        m200c : M₂₀₀c [Msun/h], scalar or array broadcastable against x
+        z, h, omega_m : redshift, Hubble parameter, matter fraction
+        f_b : baryon fraction Ω_b/Ω_m
+        r200c : comoving R₂₀₀c [Mpc/h] (same convention as the halo cache)
+        """
+        # Physical quantities for the Kaiser amplitude P_200c.
+        m_phys      = jnp.asarray(m200c) / h                       # Msun
+        ez2         = omega_m * (1.0 + z) ** 3 + (1.0 - omega_m)
+        rho_cr_phys = _RHO_CRIT0 * h ** 2 * ez2                    # Msun/Mpc³ (physical, z)
+        r200c_phys  = jnp.asarray(r200c) / h / (1.0 + z)          # Mpc (physical)
+        p200        = (_G_MSUN2_MPC4_KEV * m_phys * 200.0 * rho_cr_phys * f_b
+                       / (2.0 * r200c_phys))                       # keV/cm³
+
+        # Mass/redshift-scaled shape parameters (M in physical Msun).
+        p0   = self._scale(self._P0,   m_phys, z)
+        xc   = self._scale(self._XC,   m_phys, z)
+        beta = self._scale(self._BETA, m_phys, z)
+
+        xr    = jnp.asarray(r_over_r200) / xc
+        shape = xr ** self._gamma * (1.0 + xr ** self._alpha) ** (-beta)
+        return self._f_e * p200 * p0 * shape
+
+    def pressure_uk(
+        self,
+        k_arr: np.ndarray,
+        m200_arr: np.ndarray,
+        r200_arr: np.ndarray,
+        c200_arr: np.ndarray,
+        z: float,
+        theta_cosmo: dict,
+    ) -> np.ndarray:
+        """Pressure-profile Fourier transform ỹ(k|M) in (Mpc/h)².
+
+        Same interface and unit convention as
+        :meth:`PressureProfileA10.pressure_uk` (the ``c200_arr`` argument is
+        accepted for signature compatibility but unused — B12 needs no
+        concentration).  Requires ``theta_cosmo`` to carry ``'Omega_b'`` for the
+        baryon fraction f_b = Ω_b/Ω_m.
+
+        Parameters
+        ----------
+        k_arr : (Nk,) [h/Mpc]
+        m200_arr : (NM,) M₂₀₀c [Msun/h]  (build the cache with mdef='200c')
+        r200_arr : (NM,) R₂₀₀c [Mpc/h], comoving
+        c200_arr : (NM,) unused
+        z : redshift
+        theta_cosmo : dict with keys 'h', 'Omega_m', 'Omega_b'
+
+        Returns
+        -------
+        uk : (Nk, NM) [(Mpc/h)²]
+        """
+        # Kept traceable (jnp, no float()) so the tSZ cross-power stays
+        # differentiable w.r.t. cosmology on the eh98 backend.
+        h       = theta_cosmo["h"]
+        omega_m = theta_cosmo["Omega_m"]
+        omega_b = theta_cosmo["Omega_b"]
+        f_b     = omega_b / omega_m
+
+        m200 = jnp.asarray(m200_arr, dtype=float)
+        r200 = jnp.asarray(r200_arr, dtype=float)
+        k    = jnp.asarray(k_arr,    dtype=float)
+
+        def _integrand(r_nodes) -> jnp.ndarray:
+            """P_e(r, M) on the quadrature grid, broadcast over the mass axis."""
+            return self._p3d(
+                jnp.asarray(r_nodes) / r200[:, None],
+                m200[:, None], z, h, omega_m, f_b, r200[:, None],
+            )
+
+        r_max = self._r_max_factor * r200          # (NM,) [Mpc/h]
+        raw   = _profile_uk_gl(k, r_max, _integrand, n_gl=self._n_gl)
 
         conv = _SIGMA_T_OVER_ME_C2 * (_MPC_CM / h)   # cm³/(keV·Mpc/h)
         return conv * raw   # (Nk, NM) [(Mpc/h)²]

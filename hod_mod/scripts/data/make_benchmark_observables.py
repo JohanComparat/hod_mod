@@ -22,7 +22,7 @@ types:
 Usage::
 
     python -m hod_mod.scripts.data.make_benchmark_observables \
-        [--out /home/comparat/data/benchmark_observables]
+        [--out /home/comparat/data/hod_mod_data/benchmark_observables]
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ REFS = {
     "Zheng2007": ("Zheng Z. et al. 2007, ApJ 667, 760",
                   "https://arxiv.org/abs/astro-ph/0703457"),
     "Guo2018": ("Guo H. et al. 2018, ApJ 858, 30",
-                "https://arxiv.org/abs/1803.07697"),
+                "https://arxiv.org/abs/1804.01993"),
     "Guo2019": ("Guo H. et al. 2019, ApJ 871, 147",
                 "https://arxiv.org/abs/1810.05318"),
     "Leauthaud2012": ("Leauthaud A. et al. 2012, ApJ 744, 159",
@@ -60,11 +60,11 @@ REFS = {
     "vanUitert2016": ("van Uitert E. et al. 2016, MNRAS 459, 3251",
                       "https://arxiv.org/abs/1601.06791"),
     "Zacharegkas2025": ("Zacharegkas G. et al. 2025",
-                        "https://arxiv.org/abs/2106.08438"),
+                        "https://arxiv.org/abs/2506.22367"),
     "ZuMandelbaum2015": ("Zu Y. & Mandelbaum R. 2015, MNRAS 454, 1161",
                          "https://arxiv.org/abs/1505.02781"),
     "Lange2025": ("Lange J.U. et al. 2025",
-                  "https://arxiv.org/abs/2502.10230"),
+                  "https://arxiv.org/abs/2512.15962"),
     "Comparat2025": ("Comparat J. et al. 2025, A&A 697, A173",
                      "https://arxiv.org/abs/2503.19796"),
     "Comparat2023": ("Comparat J. et al. 2023, A&A 673, A122",
@@ -127,6 +127,36 @@ REFS = {
                  "https://arxiv.org/abs/1507.05636"),
     "Behroozi2019": ("Behroozi P. et al. 2019, MNRAS 488, 3143",
                      "https://arxiv.org/abs/1806.07893"),
+    # --- second-iteration expansion: page-cited measurements not yet in the tree
+    "Zehavi2011": ("Zehavi I. et al. 2011, ApJ 736, 59",
+                   "https://arxiv.org/abs/1005.2413"),
+    "Mandelbaum2006": ("Mandelbaum R. et al. 2006, MNRAS 372, 758",
+                       "https://arxiv.org/abs/astro-ph/0605476"),
+    "Leauthaud2017": ("Leauthaud A. et al. 2017, MNRAS 467, 3024",
+                      "https://arxiv.org/abs/1611.08606"),
+    "Heydenreich2025": ("Heydenreich S. et al. 2025 (Lensing Without Borders)",
+                        "https://arxiv.org/abs/2506.21677"),
+    "DESIDR2": ("DESI Collaboration 2025, Phys. Rev. D 112, 083515 (DR2 BAO)",
+                "https://arxiv.org/abs/2503.14738"),
+    "DESI2024FS": ("DESI Collaboration 2025, JCAP 07, 028 (2024 VII full-shape)",
+                   "https://arxiv.org/abs/2411.12022"),
+    "Macquart2020": ("Macquart J.-P. et al. 2020, Nature 581, 391",
+                     "https://arxiv.org/abs/2005.13161"),
+    "Ponomareva2023": ("Ponomareva A.A. et al. 2023, MNRAS 522, 5308",
+                       "https://arxiv.org/abs/2304.13051"),
+    "Muzzin2013": ("Muzzin A. et al. 2013, ApJ 777, 18",
+                   "https://arxiv.org/abs/1303.4409"),
+    "Greene2020": ("Greene J.E., Strader J. & Ho L.C. 2020, ARA&A 58, 257",
+                   "https://arxiv.org/abs/1911.09678"),
+    # --- second-iteration expansion: fresh-literature additions
+    "Pandey2025": ("Pandey S. et al. 2025 (DES Y3 x ACT DR6 lensing x tSZ)",
+                   "https://arxiv.org/abs/2506.07432"),
+    "Petter2023": ("Petter G.C. et al. 2023, ApJ 946, 27",
+                   "https://arxiv.org/abs/2302.00690"),
+    "Amon2022": ("Amon A. et al. 2022, Phys. Rev. D 105, 023514 (DES Y3 shear)",
+                 "https://arxiv.org/abs/2105.13543"),
+    "Secco2022": ("Secco L.F. et al. 2022, Phys. Rev. D 105, 023515 (DES Y3 shear)",
+                  "https://arxiv.org/abs/2105.13544"),
 }
 
 
@@ -612,6 +642,66 @@ PLACEHOLDERS = [
     ("microwave", "galaxies", "Schaan2021", "ksz_profiles",
      "ACT x CMASS kSZ profiles (gas-density observable, model extension)",
      "data products on LAMBDA / ACT DR5 release"),
+    # --- second-iteration expansion: page-cited measurements now materialised
+    #     as flagged placeholders (operator digitizes/downloads the table)
+    ("optical", "galaxies", "Zehavi2011", "wp_dr7",
+     "SDSS DR7 w_p(r_p) per luminosity/colour sample — the reference low-z "
+     "clustering benchmark (extends the digitized Zehavi2005 M_r<-21 point)",
+     "Zehavi+2011 electronic tables / Fig. 6-9 per volume-limited sample"),
+    ("optical", "galaxies", "Mandelbaum2006", "ds",
+     "SDSS galaxy-galaxy weak-lensing DeltaSigma per luminosity/M* bin",
+     "Mandelbaum+2006 electronic tables / SDSS g-g lensing release"),
+    ("optical", "galaxies", "Leauthaud2017", "ds",
+     "'lensing is low': CMASS z~0.5 DeltaSigma vs the clustering prediction "
+     "(the wp-vs-lensing tension benchmark)",
+     "Leauthaud+2017 published DeltaSigma points (their Fig. 4/Table)"),
+    ("optical", "galaxies", "Heydenreich2025", "ds_wp",
+     "Lensing Without Borders: DESI-DR1 x DES/KiDS/HSC DeltaSigma + w_p, "
+     "public KP7 data release",
+     "public data release accompanying arXiv:2506.21677 — ingestible as "
+     "'observed' once the release files are fetched into a data/ folder"),
+    ("optical", "galaxies", "DESIDR2", "bao",
+     "DESI DR2 BAO distances D_M/r_d, D_H/r_d, D_V/r_d per tracer/redshift",
+     "DESI DR2 II tables; geometry block for (w0, wa, h) — needs the "
+     "P(k)-shape upgrade before it can be fit"),
+    ("optical", "galaxies", "DESI2024FS", "fs_multipoles",
+     "DESI DR1 full-shape multipoles / compressed (f sigma8, alpha) per z bin",
+     "DESI 2024 VII data + public likelihood; full-shape block"),
+    ("radio", "gas", "Macquart2020", "frb_dm",
+     "FRB dispersion-measure vs redshift (Macquart relation): an absolute "
+     "census of ionised baryons Sigma n_e",
+     "Macquart+2020 Nature Fig. 2 DM_cosmic(z); NEW observable — needs the "
+     "f_b(M) -> DM line-of-sight projection in the model"),
+    ("radio", "hi", "Ponomareva2023", "himf_zgt0",
+     "MIGHTEE-HI first MeerKAT HI mass function beyond z~0 (untargeted "
+     "interferometric)",
+     "Ponomareva+2023 HIMF Schechter points — extends the local ALFALFA "
+     "HIMF in redshift"),
+    ("optical", "galaxies", "Muzzin2013", "smf",
+     "UltraVISTA total + quiescent stellar-mass functions 0.2<z<4",
+     "Muzzin+2013 tables; a z-evolution anchor complementing COSMOS2020 "
+     "[Weaver2023]"),
+    ("optical", "blackholes", "Greene2020", "mbh_lowmass",
+     "low-mass end of the M_BH-sigma / M_BH-M_bulge relation (dwarf/IMBH "
+     "extension of the local census)",
+     "Greene+2020 review compilation; companion pin to [KormendyHo2013] for "
+     "agn_mu_bh"),
+    # --- second-iteration expansion: fresh-literature additions (see
+    #     docs/_lit_expansion.md for the search log and rationale)
+    ("microwave", "lensing", "Pandey2025", "cl_ky",
+     "DES Y3 lensing x ACT DR6 tSZ cross C_l^{gamma,y}, 21sigma (baryonic "
+     "feedback at group-cluster scales)",
+     "Pandey+2025 bandpowers — a current lensing x tSZ benchmark beyond the "
+     "ACT x CMASS profiles [Amodeo2021]"),
+    ("infrared", "agn", "Petter2023", "wp_agn_ir",
+     "host-halo clustering of 1.4M WISE obscured/unobscured quasars",
+     "Petter+2023 w(theta)/bias per sample — the IR-side AGN clustering "
+     "benchmark (obscuration parameter shared with the X-ray sector)"),
+    ("optical", "lensing", "Amon2022", "cl_kk",
+     "DES Y3 cosmic shear (real space), S8~0.76 at 2-3% — a second shear "
+     "anchor beside KiDS-Legacy [Wright2025]",
+     "Amon+2022 / Secco+2022 (arXiv:2105.13544) DES Y3 shear two-point "
+     "data vector + covariance"),
 ]
 
 
@@ -632,10 +722,83 @@ def ingest_placeholders(out_root):
 
 
 # --------------------------------------------------------------------------
+# 6. operator worklist: the hand-digitization checklist
+# --------------------------------------------------------------------------
+
+# how urgent each provenance class is to replace with a real extracted table
+_WORKLIST_PRIORITY = {
+    "observed_derived_fit": "1 — published fit; add the binned points behind it",
+    "simulated": "2 — forecast stand-in; replace y_err/values with the real table",
+    "placeholder": "3 — no local data at all; digitize/download from scratch",
+}
+
+
+def write_worklist(out_root):
+    """Emit ``DIGITIZATION_WORKLIST.md`` — every flagged file, grouped, with the
+    citation, link and extraction hint the operator needs to fill it by hand."""
+    idx = json.load(open(os.path.join(out_root, "index.json")))
+    groups = {}
+    for rel, v in idx.items():
+        if not v["needs_operator_extraction"]:
+            continue
+        body = json.load(open(os.path.join(out_root, rel)))
+        ref = body.get("reference", {})
+        prov = body.get("provenance", {})
+        groups.setdefault((v["wavelength"], v["tracer"]), []).append({
+            "path": rel,
+            "observable": v["observable"],
+            "provenance": prov.get("type", v["provenance"]),
+            "citation": ref.get("citation", v["reference"]),
+            "link": ref.get("doi") or ref.get("arxiv"),
+            "hint": prov.get("extraction_hint", ""),
+        })
+    n = sum(len(g) for g in groups.values())
+    lines = [
+        "# Digitization worklist",
+        "",
+        f"**{n} benchmark files still need an operator to extract the real "
+        "published measurement.** Auto-generated from `index.json` by "
+        "`hod_mod.scripts.data.make_benchmark_observables` — do not edit by "
+        "hand; re-run the generator to refresh.",
+        "",
+        "When a table is extracted, replace the JSON *in place* (same file "
+        "name): set `provenance.type = \"observed\"`, record the source "
+        "table/figure in `provenance.origin` and the tool in "
+        "`extraction_method`, fill `data`, and clear "
+        "`needs_operator_extraction`. Priority: `1` published fits (add the "
+        "binned points), `2` forecast stand-ins (real errors, not Stage-IV "
+        "noise), `3` pure placeholders.",
+        "",
+    ]
+    for (wl, tr) in sorted(groups):
+        items = sorted(groups[(wl, tr)],
+                       key=lambda d: (d["provenance"], d["path"]))
+        lines.append(f"## {wl} / {tr}")
+        lines.append("")
+        lines.append("| Priority | Observable | Source | Extraction hint | File |")
+        lines.append("|---|---|---|---|---|")
+        for d in items:
+            pr = _WORKLIST_PRIORITY.get(d["provenance"], d["provenance"])[0]
+            src = d["citation"]
+            if d["link"]:
+                src = f"[{src}]({d['link']})"
+            hint = (d["hint"] or "").replace("|", "\\|")
+            lines.append(
+                f"| {pr} | `{d['observable']}` | {src} | {hint} | "
+                f"`{d['path']}` |")
+        lines.append("")
+    path = os.path.join(out_root, "DIGITIZATION_WORKLIST.md")
+    with open(path, "w") as fh:
+        fh.write("\n".join(lines))
+    print(f"[worklist] {n} files -> {os.path.relpath(path, out_root)}")
+    return n
+
+
+# --------------------------------------------------------------------------
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out", default="/home/comparat/data/benchmark_observables")
+    ap.add_argument("--out", default="/home/comparat/data/hod_mod_data/benchmark_observables")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
     idx = []
@@ -659,6 +822,7 @@ def main():
         }
     with open(os.path.join(args.out, "index.json"), "w") as fh:
         json.dump(summary, fh, indent=1)
+    write_worklist(args.out)
     n_obs = sum(1 for v in summary.values() if v["provenance"] == "observed")
     n_sim = sum(1 for v in summary.values() if v["provenance"] == "simulated")
     n_fit = sum(1 for v in summary.values()

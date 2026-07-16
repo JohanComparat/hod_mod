@@ -38,6 +38,14 @@ _RHO_CRIT0         = 2.775e11       # (Msun/h) (Mpc/h)⁻³  (h-independent)
 _SIGMA_T_OVER_ME_C2 = _SIGMA_T_CM2 / _ME_C2_KEV   # cm²/keV
 _KB_KEV             = 8.617333e-8                   # keV/K (Boltzmann constant)
 
+# Self-similar pressure amplitude constant for the Battaglia+2012 profile:
+# coeff = (G · M_sun² / Mpc⁴) expressed in keV/cm³, so that
+#   P_200 = coeff · M[Msun] · Δ · ρ_cr(z)[Msun/Mpc³] · f_b / (2 R_Δ[Mpc])
+# comes out in keV/cm³ (matches GODMAX's astropy-derived value to ~1e-4).
+#   G·M_sun²/Mpc⁴ = 6.6743e-8·(1.98841e33)²/(3.0856776e24)⁴ = 2.9109e-39 erg/cm³
+#   × 6.241509e8 keV/erg = 1.8168e-30 keV/cm³
+_G_MSUN2_MPC4_KEV  = 1.8168e-30                    # keV/cm³ (see derivation above)
+
 
 # ---------------------------------------------------------------------------
 # Helper: M₂₀₀ (any Δ) → M₅₀₀c, R₅₀₀c  via NFW bisection
