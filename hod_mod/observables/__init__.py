@@ -24,6 +24,7 @@ from .cross_spectra import (
     psf_window_ell,
     psf_king_profile,
     psf_king_window_ell,
+    cap_filter,
 )
 from .cross_clustering import ClusterGalaxyCrossCorrelation
 from .lensing import (
@@ -52,6 +53,7 @@ __all__ = [
     "psf_window_ell",
     "psf_king_profile",
     "psf_king_window_ell",
+    "cap_filter",
     "ClusterGalaxyCrossCorrelation",
     "ClusterLensingPrediction",
     "sigma_crit",

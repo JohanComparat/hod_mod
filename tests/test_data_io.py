@@ -71,6 +71,46 @@ def make_smf_hdf5(path, h=0.6736, n_bins=14):
         g.create_dataset("bin_edges", data=np.linspace(9.0, 12.0, n_bins + 1))
 
 
+def make_sz_hdf5(path, h=0.6736, n_bins=12, n_z=20):
+    """Write a minimal sum_stat SZ HDF5 file (sz/ group + joint_covariance with slice_sz)."""
+    import h5py
+    rp_Mpc = np.logspace(np.log10(0.5), np.log10(30.0), n_bins)
+    sigma_y = 1e-6 * (rp_Mpc / 0.5) ** (-1.5)          # dimensionless, h-invariant
+    cov = np.diag((0.1 * sigma_y) ** 2)
+    z_edges = np.linspace(0.05, 0.35, n_z + 1)
+    z_hist = np.full(n_z, 1.0 / n_z)
+
+    with h5py.File(path, "w") as f:
+        f.attrs["created_by"] = "test"
+        g = f.create_group("sz").create_group("TEST_SAMPLE")
+        g.attrs["beam_fwhm_arcmin"] = 1.6
+        g.attrs["z_eff_sz"] = 0.26
+        g.attrs["comoving"] = True
+        g.attrs["ymap_version"] = "act-planck_dr6.02_nilc_ComptonY_deproj_cib_1.0_10.7.fits"
+        g.attrs["mask_threshold"] = 0.99
+        g.attrs["n_gal_act"] = 74353
+        cosmo = g.create_group("cosmology")
+        cosmo.attrs["name"] = "test"
+        cosmo.create_dataset("H0", data=h * 100.0)
+        cosmo.create_dataset("Om0", data=0.315)
+        g.create_dataset("rp_centres", data=rp_Mpc)
+        g.create_dataset("sigma_y", data=sigma_y)
+        g.create_dataset("cov", data=cov)
+        g.create_dataset("bin_edges", data=np.logspace(np.log10(0.5), np.log10(30.0), n_bins + 1))
+        g.create_dataset("z_hist", data=z_hist)
+        g.create_dataset("z_bin_edges", data=z_edges)
+
+        jc = f.create_group("joint_covariance")
+        jc.attrs["statistics"] = ["SZ"]
+        jc.attrs["slice_sz"] = [0, n_bins]
+        jc.attrs["sample_id"] = "TEST_SAMPLE"
+        jc.create_dataset("data_vector", data=sigma_y)
+        jc.create_dataset("cov", data=cov)
+        jc.create_dataset("err", data=np.sqrt(np.diag(cov)))
+        jc.create_dataset("rp_centres_sz", data=rp_Mpc)
+    return rp_Mpc, sigma_y
+
+
 def make_joint_hdf5(path, h=0.6736, n_smf=10, n_wp=10, n_ds=10):
     """Write a minimal joint SMF+wp+ESD HDF5 file."""
     import h5py
@@ -506,3 +546,82 @@ class TestSumStatH5Helper:
                     _h5_h(hf)
         finally:
             os.unlink(path)
+
+
+class TestSumStatReaderSz:
+    """The sz/ group: stacked galaxy x Compton-y."""
+
+    def _reader(self):
+        import tempfile
+        from hod_mod.data_io.sum_stat_reader import SumStatReader
+
+        fd = tempfile.NamedTemporaryFile(suffix=".h5", delete=False)
+        fd.close()
+        rp_Mpc, sy = make_sz_hdf5(fd.name)
+        return SumStatReader.from_hdf5(fd.name), fd.name, rp_Mpc, sy
+
+    def test_roundtrip_and_h_units(self):
+        """rp is a distance (Mpc -> Mpc/h); sigma_y is dimensionless and must NOT be scaled."""
+        import os
+
+        r, path, rp_Mpc, sy = self._reader()
+        try:
+            d = r.sz()
+            h = r.h()
+            assert np.allclose(d["rp"], rp_Mpc * h)
+            assert np.allclose(d["sigma_y"], sy), "dimensionless y must not be h-scaled"
+            assert np.allclose(d["cov"], np.diag((0.1 * sy) ** 2))
+            assert d["beam_fwhm_arcmin"] == 1.6
+            assert d["comoving"] is True
+            assert abs(d["z_hist"].sum() - 1.0) < 1e-12
+            assert len(d["z_bin_edges"]) == len(d["z_hist"]) + 1
+            assert "sz" in r.list_groups()
+        finally:
+            os.unlink(path)
+
+    def test_joint_bgs_sz_slice_is_not_h_scaled(self):
+        """sz falls through joint_bgs's probe dispatch to scale 1.0 -- correct for a
+        dimensionless observable, but it happens implicitly, so pin it."""
+        import os
+
+        r, path, _, sy = self._reader()
+        try:
+            jt = r.joint_bgs(probes=("sz",))
+            assert np.allclose(jt["data_vector"], sy)
+            assert jt["cov"].shape == (len(sy), len(sy))
+        finally:
+            os.unlink(path)
+
+    def test_sz_only_file_opens_without_wp_or_esd_centres(self):
+        """An SZ-only file has no rp_centres_wp/esd in joint_covariance.
+
+        from_hdf5 used to require both unconditionally, so any file carrying a subset of
+        statistics failed to open at all -- masked only by sum_stat happening to write them
+        even for SZ-only runs.  joint_bgs already treated them as optional on the way out.
+        """
+        import os
+
+        r, path, rp_Mpc, _ = self._reader()
+        try:
+            jt = r.joint_bgs(probes=("sz",))
+            assert "rp_wp" not in jt and "rp_esd" not in jt
+            assert np.allclose(jt["rp_sz"], rp_Mpc * r.h())
+        finally:
+            os.unlink(path)
+
+    def test_missing_sz_group_raises(self):
+        import os
+        import tempfile
+
+        from hod_mod.data_io.sum_stat_reader import SumStatReader
+
+        fd = tempfile.NamedTemporaryFile(suffix=".h5", delete=False)
+        fd.close()
+        make_wp_hdf5(fd.name)
+        try:
+            r = SumStatReader.from_hdf5(fd.name)
+            assert "sz" not in r.list_groups()
+            with pytest.raises(KeyError):
+                r.sz()
+        finally:
+            os.unlink(fd.name)
