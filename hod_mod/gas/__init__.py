@@ -14,7 +14,7 @@ from .conversions import (
     _MPC_CM,
     _SIGMA_T_OVER_ME_C2,
 )
-from .pressure import PressureProfileA10, PressureProfileDPM
+from .pressure import PressureProfileA10, PressureProfileDPM, PressureProfileBattaglia12
 from .density import GasDensityDPM
 from .cooling import (
     temperature_from_dpm,
@@ -28,6 +28,7 @@ from .erosita_response import ErositaResponse, load_ecf_tables
 __all__ = [
     "PressureProfileA10",
     "PressureProfileDPM",
+    "PressureProfileBattaglia12",
     "GasDensityDPM",
     "MetallicityProfileDPM",
     "temperature_from_dpm",
