@@ -30,7 +30,7 @@ import jax.numpy as jnp
 
 # sys.path.insert removed — hod_mod is installed
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.observables.clustering import FullHaloModelPrediction
@@ -191,7 +191,7 @@ class _CachedPkLinear:
 
 def _build_predictor_for(hod_model, profile, pk_cached):
     """Build a FullHaloModelPrediction for the given (hod_model, profile)."""
-    pk_lin = LinearPowerSpectrum()
+    pk_lin = default_pk_linear()
     cosmo  = pk_lin.default_cosmology()
     hmf    = make_hmf("csst")
     cfg    = HOD_REGISTRY[hod_model]
@@ -575,8 +575,8 @@ def main():
         print("No completed results found.")
         return
 
-    # Shared CAMB cache
-    pk_obj    = LinearPowerSpectrum()
+    # Shared linear-P(k) cache (backend from HOD_MOD_PK_BACKEND)
+    pk_obj    = default_pk_linear()
     pk_cached = _CachedPkLinear(pk_obj)
     cosmo_def = pk_obj.default_cosmology()
 

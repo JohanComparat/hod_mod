@@ -94,7 +94,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from hod_mod.core.beyond_linear_bias import BeyondLinearBiasMead21
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.connection.hod import (
@@ -599,7 +599,7 @@ class MultiProbeFitter:
         self.n_burnin            = n_burnin
         self.output_dir          = output_dir
 
-        self._pk_lin = LinearPowerSpectrum()
+        self._pk_lin = default_pk_linear()
         self.cosmo_default = self._pk_lin.default_cosmology()
 
         self._load_data(data_file, rp_min_wp, rp_max_wp, rp_min_hsc, rp_min_des, rp_max_esd, esd_sn_min)

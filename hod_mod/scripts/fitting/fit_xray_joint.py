@@ -42,7 +42,7 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import minimize
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.gas import GasDensityDPM
@@ -142,7 +142,7 @@ def _precompute(sample, hmf_backend, f_sys):
         print(f"  [{sample}] cached grid axes changed -> rebuilding", flush=True)
 
     th = F._THETA_COSMO
-    pk = LinearPowerSpectrum()
+    pk = default_pk_linear()
     hmf = make_hmf(hmf_backend, pk_func=pk.pk_linear)
     colo = dict(flat=True, H0=th["h"] * 100.0, Om0=th["Omega_m"],
                 Ob0=th["Omega_b"], sigma8=0.811, ns=th["n_s"])

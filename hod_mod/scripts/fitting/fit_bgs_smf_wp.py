@@ -77,7 +77,7 @@ import jax.numpy as jnp
 import numpy as np
 from scipy.optimize import minimize
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.connection.hod import (
@@ -274,7 +274,7 @@ class _Infrastructure:
             print(f"  WARNING: BeyondLinearBiasMead21 unavailable ({exc}); using linear bias.", flush=True)
             bnl = None
 
-        pk_lin    = LinearPowerSpectrum()
+        pk_lin    = default_pk_linear()
         hmf       = make_hmf(hmf_backend, pk_func=pk_lin.pk_linear)
         hp        = HaloProfile(_COLOSSUS, cm_relation="diemer19")
         hod       = ZuMandelbaum15HODModel(hmf, hmf.bias)

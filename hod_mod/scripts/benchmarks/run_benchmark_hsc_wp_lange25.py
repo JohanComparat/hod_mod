@@ -38,7 +38,7 @@ from hod_mod.fitting import (
     _assemble_hod_params,
     load_config,
 )
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import default_pk_linear
 from hod_mod.fitting import HOD_MODELS
 from hod_mod.scripts.benchmarks.benchmark_plots import (
     _COL_DATA, _COL_MAP, _COL_PUB,
@@ -119,8 +119,10 @@ class MultiSampleJointFitter:
         sample_configs : dict
             Mapping sample name → path to its benchmark YAML config.
         """
-        # Shared, cached power-spectrum evaluator (one CAMB call per unique cosmo)
-        pk_base = LinearPowerSpectrum()
+        # Shared, cached power-spectrum evaluator (one backend call per unique
+        # cosmo; essential under HOD_MOD_PK_BACKEND=camb, cheap insurance under
+        # the default emulator)
+        pk_base = default_pk_linear()
         self._pk_shared = _CachedPkLinear(pk_base)
 
         # Per-sample JointFitter instances
