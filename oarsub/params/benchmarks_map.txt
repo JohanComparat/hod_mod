@@ -1,0 +1,33 @@
+# Family A (MAP-only) — literature benchmarks whose docs show only w_p / ΔΣ
+# overlays (no posterior/corner figure).  One MAP fit + figures per line.
+# Submit:  oarsub --project <P> -l /nodes=1/core=8,walltime=02:00:00 \
+#            --array-param-file oarsub/params/benchmarks_map.txt -S ./oarsub/run_job.sh
+# To also sample a key, move its line to benchmarks_mcmc.txt (adds --mcmc).
+python -m hod_mod.scripts.benchmarks.run_benchmark --model more2015_logM11_12_freecosmo --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model guo2018 --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model guo2019 --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model leauthaud2012_ds --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model vanutert2016_ds --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model zumandelbaum2015_ds --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_bwpd_wp --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_bwpd_esd --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_bwpd_hsc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs3_bwpd_wp --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs3_bwpd_esd --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs3_bwpd_hsc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg1_bwpd_wp --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg1_bwpd_esd --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg1_bwpd_hsc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg2_bwpd_wp --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg2_bwpd_esd --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg2_bwpd_hsc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_des --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs3_des --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg1_des --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_hsc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs3_hsc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg1_hsc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_lrg2_hsc --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_wp --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_ds_des --plot
+python -m hod_mod.scripts.benchmarks.run_benchmark --model lange2025_bgs2_ds_hsc --plot
