@@ -305,8 +305,15 @@ class HaloModelCrossSpectra:
     ----------
     fhmp : FullHaloModelPrediction
         Already-instantiated prediction object whose static cache is reused.
-    pressure_profile : PressureProfileA10, optional
-        Electron pressure profile for tSZ. If ``None``, tSZ methods raise.
+    pressure_profile : PressureProfileDPM | PressureProfileA10 | \
+                       PressureProfileBattaglia12, optional
+        Electron pressure profile for tSZ.  The recommended default is
+        :class:`~hod_mod.gas.PressureProfileDPM` (Oppenheimer+2025) — passing
+        the *same* DPM model here and to ``density_profile`` makes the tSZ
+        pressure and the X-ray temperature ``T = P/n_e`` derive from one gas
+        model, so X-ray and SZ share the DPM gas parameters.  A10 and
+        Battaglia12 remain selectable alternatives / cross-check profiles.
+        If ``None``, tSZ methods raise.
     density_profile : GasDensityDPM, optional
         Electron density profile for X-ray. If ``None``, X-ray methods raise.
     """
@@ -427,7 +434,8 @@ class HaloModelCrossSpectra:
     def _pressure_uk_cached(
         self, z: float, theta_cosmo: dict, sc: dict
     ) -> np.ndarray:
-        """ỹ(k|M,z) from PressureProfileA10, with caching. (Nk, NM) [(Mpc/h)²]."""
+        """ỹ(k|M,z) from the pressure profile (DPM / A10 / Battaglia12), with
+        caching. (Nk, NM) [(Mpc/h)²]."""
         if self._pp is None:
             raise RuntimeError("No pressure_profile provided to HaloModelCrossSpectra")
         y_uk = lambda: self._pp.pressure_uk(

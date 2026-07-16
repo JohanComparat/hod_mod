@@ -10,8 +10,13 @@ This pipeline reuses the same halo-model engine as the galaxy clustering and
 galaxy × X-ray pipelines: :class:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra`
 wraps an existing :class:`~hod_mod.observables.clustering.FullHaloModelPrediction`
 (reusing its cached halo mass function, bias, linear power spectrum and dark-matter
-profile FT) and adds an electron-pressure field
-(:class:`~hod_mod.gas.PressureProfileA10`, Arnaud+2010, or the DPM variant).
+profile FT) and adds an electron-pressure field. The default pressure profile is
+:class:`~hod_mod.gas.PressureProfileDPM` (Oppenheimer+2025) — using the *same* DPM
+model for the pressure and density profiles couples the tSZ signal to the soft
+X-ray prediction, since the tSZ pressure :math:`P` and the X-ray temperature
+:math:`T = P/n_e` derive from one gas model.
+:class:`~hod_mod.gas.PressureProfileA10` (Arnaud+2010) and
+:class:`~hod_mod.gas.PressureProfileBattaglia12` remain selectable alternatives.
 
 The model
 ---------
@@ -45,7 +50,7 @@ Worked example
     from hod_mod.connection.hod import MoreHODModel
     from hod_mod.observables.clustering import FullHaloModelPrediction
     from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
-    from hod_mod.gas import PressureProfileA10
+    from hod_mod.gas import PressureProfileDPM
 
     theta = {"h": 0.6774, "Omega_m": 0.3089, "Omega_b": 0.0486,
              "n_s": 0.9667, "sigma8": 0.8159}
@@ -56,7 +61,7 @@ Worked example
     hp     = HaloProfile()
 
     fhmp   = FullHaloModelPrediction(pk_lin, hod, hp)
-    pp     = PressureProfileA10(r_max_over_r500c=5.0, n_gl=150)
+    pp     = PressureProfileDPM(model=2, r_max_over_r200=3.0, n_gl=150)
     cross  = HaloModelCrossSpectra(fhmp, pressure_profile=pp)
 
     rp      = np.logspace(-1, 1.3, 20)           # Mpc/h
@@ -135,7 +140,7 @@ cancels any spatially flat component.  To compare against them, filter the *beam
 :math:`T_{\rm AP} = 2Y(\theta_d) - Y(\sqrt{2}\theta_d)`, matching Schaan et al. 2021 Eqs.
 (10)-(11) — not a mean :math:`y`.
 
-The validation figures (A10 pressure profile, :math:`P_{g,y}(k)` decomposition,
+The validation figures (DPM pressure profile, :math:`P_{g,y}(k)` decomposition,
 :math:`\Sigma_y(r_p)`, :math:`C_\ell^{g,y}`) are produced by::
 
     hod-mod validate sz-xray
@@ -143,7 +148,8 @@ The validation figures (A10 pressure profile, :math:`P_{g,y}(k)` decomposition,
 References
 ----------
 
-* Arnaud et al. 2010, arXiv:0910.1234 — A10 generalized-NFW pressure profile.
+* Oppenheimer et al. 2025, arXiv:2505.14782 — DPM gas model (default pressure + density + Z).
+* Arnaud et al. 2010, arXiv:0910.1234 — A10 generalized-NFW pressure profile (alternative).
 * Amodeo et al. 2021, arXiv:2009.05558 — ACT × BOSS CMASS: gas thermodynamics from tSZ+kSZ.
 * Schaan et al. 2021, arXiv:2009.05557 — the companion measurement; stacked CAP profiles.
 * Pandey et al. 2025, arXiv:2506.07432 — DES Y3 shear × ACT DR6 tSZ.

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import jax.numpy as jnp
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.core.beyond_linear_bias import BeyondLinearBiasMead21
@@ -201,7 +201,7 @@ class WpFitter:
 
     def _setup_common(self, config: FitConfig):
         self.config      = config
-        self._pk_lin     = LinearPowerSpectrum()
+        self._pk_lin     = default_pk_linear()
         self.theta_cosmo = (
             config.cosmology if config.cosmology is not None
             else self._pk_lin.default_cosmology()

@@ -24,6 +24,11 @@ dependencies = [
     "pooch",
     "platformdirs",
     "AletheiaCosmo",
+    # Default linear-P(k) backend (forecast/pk_cosmopower.py): CAMB-accurate and
+    # JAX-differentiable. A core dep rather than an extra because it is the
+    # default — a silent EH98 fallback would make the science depend on which
+    # packages happen to be installed.
+    "cosmopower-jax",
 ]
 
 [project.scripts]
