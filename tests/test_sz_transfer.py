@@ -97,3 +97,42 @@ def test_amplitude_scales_linearly_in_p03():
     a1 = sz_amplitude(m, 1.627e-6, 0.8, 1.627e-6, 0.8)
     a2 = sz_amplitude(m, 2.0 * 1.627e-6, 0.8, 1.627e-6, 0.8)
     np.testing.assert_allclose(a2, 2.0 * a1, rtol=1e-12)
+
+
+# --- the SZ leg of fit_xray_joint_bands (data loader + chi2 plumbing) ---------
+
+def test_das2023_loader_units_and_shape():
+    """Every mapped das_2023 profile loads with sane units and ordering."""
+    from hod_mod.scripts.fitting.fit_xray_joint_bands import (
+        _SZ_DATA_FILES, _load_sz_data)
+    for sample in _SZ_DATA_FILES:
+        x, y, err = _load_sz_data(sample)
+        assert x.shape == y.shape == err.shape and x.size >= 5
+        assert np.all(np.diff(x) > 0), "r/R200 must be increasing"
+        assert np.all(x > 0) and np.all(x < 20), "r is in R200 units"
+        # y1e8 columns were rescaled by 1e-8 -> stacked y is ~1e-8..1e-6
+        assert np.all(y > 1e-10) and np.all(y < 1e-5)
+        assert np.all(err > 0)
+        # the digitized (up, low) envelope must bracket mid: err < y at these S/N
+        assert np.all(err < y)
+
+
+def test_unmapped_sample_returns_none():
+    from hod_mod.scripts.fitting.fit_xray_joint_bands import _load_sz_data
+    assert _load_sz_data("S1") is None
+
+
+def test_sigma_y_model_uses_native_params():
+    """_sigma_y_model must consume p[2] (log10_p03) / p[3] (beta_P) exactly."""
+    from hod_mod.scripts.fitting.fit_xray_joint_bands import _sigma_y_model
+    rng = np.random.default_rng(0)
+    m200 = np.geomspace(1e12, 1e15, 30)
+    sz = dict(G=rng.random((6, 30)), m200=m200, p03_ref=1.627e-6, beta_ref=0.8)
+    p = np.zeros(9); p[2] = np.log10(1.627e-6); p[3] = 0.8
+    base = _sigma_y_model(p, sz)
+    # doubling P_0.3 doubles Sigma_y (exact linearity)
+    p2 = p.copy(); p2[2] = np.log10(2 * 1.627e-6)
+    np.testing.assert_allclose(_sigma_y_model(p2, sz), 2.0 * base, rtol=1e-12)
+    # beta_P tilts the mass weighting -> changes the profile
+    p3 = p.copy(); p3[3] = 1.0
+    assert not np.allclose(_sigma_y_model(p3, sz), base)

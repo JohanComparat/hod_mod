@@ -11,6 +11,10 @@ Free params ``[log10_ne03, beta_n, log10_p03, beta_P, p2, r_max, log10DC, z_meta
 agn_gamma]``.  The point of the re-base: **the same four gas parameters drive the
 X-ray bands and the tSZ Σ_y** (:mod:`hod_mod.fitting.sz_transfer` integrates the very
 same P), so a joint X-ray×SZ fit constrains one gas model rather than two disjoint ones.
+``--sz`` activates that SZ leg: the Das et al. 2023 stacked Compton-y profiles
+(``data/das_2023/``) enter the per-sample likelihood through a precomputed
+:func:`~hod_mod.fitting.sz_transfer.build_sz_transfer` kernel, rescaled analytically
+in ``(P_0.3, β_P)`` at MCMC speed.
 
 Forward model: the band-b luminosity of a halo is
 
@@ -37,6 +41,9 @@ Usage:
     HOD_MOD_DATA_DIR=/home/comparat/data HOD_MOD_RESULTS=/home/comparat/data/hod_mod_results \
       JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_xray_joint_bands \
       --samples S1 S2 S3 S4 --mcmc
+
+    # X-ray x SZ joint fit (adds the Das et al. 2023 Sigma_y leg on S4/S5):
+    ... fit_xray_joint_bands --samples S1 S4 S5 --sz --mcmc
 """
 
 from __future__ import annotations
@@ -70,6 +77,7 @@ from hod_mod.scripts.validate_gas_profiles import _make_density_variant, _rho_cr
 from hod_mod.gas.conversions import _MPC_CM
 from hod_mod.fitting.dpm_bands import (
     build_j_table, t0_of_mass, emission_measure_factor, shape_integral, v_shape_of_mass)
+from hod_mod.fitting.sz_transfer import build_sz_transfer, predict_sigma_y
 
 _OUT_DIR = os.fspath(paths.results_root() / "xray_joint_bands")
 
@@ -408,6 +416,117 @@ def _precompute(sample, hmf_backend):
     return G_grid, log10_m500c, ez, agn_dc1, bd, mask, m_np, r_delta
 
 
+# --- tSZ Sigma_y leg (opt-in --sz): Das et al. 2023 stacked Compton-y --------
+#
+# The digitized profiles (data/das_2023/, r in units of R200, y scaled by 1e8)
+# are per stellar-mass BIN, while the fit samples are stellar-mass THRESHOLD
+# samples; the mapping below pairs each bin with the threshold sample sharing
+# its lower edge (the steep SMF makes the bin dominate the threshold counts).
+# fig_B1 [10.9, 11.2] straddles the S4/S5 thresholds and stays unmapped.
+#
+# Model side: predict_sigma_y rescales a precomputed kernel analytically in
+# (P_0.3, beta_P) — the SAME two parameters that set T = P/n_e in the X-ray
+# bands, which is the entire point of the joint fit.  The pressure radial
+# SHAPE is the fixed DPM model-2 form (p2/r_max in this fit deform only the
+# density); the SZ leg therefore constrains amplitude and mass slope only.
+#
+# Two stated approximations (both well inside the ~40% Sigma_y errors):
+#  * the data's per-galaxy r/R200 stacking is compared against the model
+#    profile at a single occupation-weighted effective R200;
+#  * the kernel is built at the sample's zmean, not the (unpublished) mean z
+#    of the Das et al. stack.
+_SZ_BEAM_FWHM_ARCMIN = 1.6         # y-map beam; MUST match the measurement's map
+_SZ_DATA_FILES = {
+    "S4": "fig_B1_top_107M110_compton_y_profile.txt",   # log10 M* in [10.7, 11.0]
+    "S5": "fig_5_bottom_left_compton_y_profile.txt",    # log10 M* in [11.0, 11.3]
+}
+
+
+def _load_sz_data(sample):
+    """(x = r/R200, y, sigma_y) from the digitized Das et al. 2023 profile.
+
+    Columns: r_mid, r_up, r_low, y1e8_up, y1e8_mid, y1e8_low (comma-separated;
+    the r_up/r_low columns are the bin extent, not an uncertainty).  Returns
+    ``None`` when the sample has no mapped profile.
+    """
+    fn = _SZ_DATA_FILES.get(sample)
+    if fn is None:
+        return None
+    fp = paths.repo_root() / "data" / "das_2023" / fn
+    if not fp.is_file():
+        raise FileNotFoundError(f"missing SZ profile: {fp}")
+    arr = np.loadtxt(fp, delimiter=",")
+    x = arr[:, 0]
+    y = arr[:, 4] * 1e-8
+    sig = 0.5 * (arr[:, 3] - arr[:, 5]) * 1e-8    # (up - low)/2, symmetrised
+    return x, y, sig
+
+
+def _precompute_sz(sample, hmf_backend, beam_fwhm_arcmin=_SZ_BEAM_FWHM_ARCMIN):
+    """Build (or load) the per-sample Sigma_y transfer kernel + data vector.
+
+    Mirrors the X-ray ``_precompute`` cache pattern.  The kernel G_sz(r_p, M)
+    is exact at any (P_0.3, beta_P) via :func:`sz_amplitude` rescaling from the
+    reference the pressure profile was built with (see
+    :mod:`hod_mod.fitting.sz_transfer`), so it is built ONCE per sample.
+    """
+    data = _load_sz_data(sample)
+    if data is None:
+        return None
+    x, y, err = data
+    os.makedirs(_OUT_DIR, exist_ok=True)
+    cache = os.path.join(_OUT_DIR, f"{sample}_sz_transfer.npz")
+    if os.path.exists(cache):
+        d = np.load(cache)
+        if (np.array_equal(d["x"], x) and float(d["beam"]) == float(beam_fwhm_arcmin)):
+            return dict(G=d["G"], m200=d["m200"], x=x, y=y, err=err,
+                        p03_ref=float(d["p03_ref"]), beta_ref=float(d["beta_ref"]),
+                        r200_eff=float(d["r200_eff"]), n_pts=int(y.size))
+        print(f"  [{sample}] cached SZ kernel stale -> rebuild", flush=True)
+
+    from hod_mod.gas import PressureProfileDPM
+    th = F._THETA_COSMO
+    # same P(k) routing as the X-ray transfer (_precompute): one likelihood,
+    # one linear P(k)
+    pk = default_pk_linear(); hmf = make_hmf(hmf_backend, pk_func=pk.pk_linear)
+    colo = dict(flat=True, H0=th["h"] * 100.0, Om0=th["Omega_m"], Ob0=th["Omega_b"],
+                sigma8=0.811, ns=th["n_s"])
+    hp = HaloProfile(colo, cm_relation="diemer19")
+    hod = ZuMandelbaum15HODModel(hmf, hmf.bias)
+    fhmp = FullHaloModelPrediction(pk, hod, hp)
+    pp = PressureProfileDPM(model=2, r_max_over_r200=3.0, n_gl=60)
+    cross = HaloModelCrossSpectra(fhmp, pressure_profile=pp)
+    hod_params = B._build_hod_params(sample)
+    zmean = float(F.SAMPLES[sample]["zmean"])
+
+    # occupation-weighted effective R200 [Mpc/h comoving] to map the data's
+    # x = r/R200 onto the kernel's r_p grid (frame-independent: the (1+z)
+    # factor cancels in the ratio)
+    sc = cross._get_static_cache(zmean, th, hod_params)
+    nc, ns, n_gal, b_eff = cross._get_hod_weights(zmean, th, hod_params, sc)
+    m_np = np.asarray(sc["m_np"], float)
+    w = np.asarray(sc["dndm_np"], float) * np.asarray(nc, float)
+    r200_eff = float(np.trapezoid(w * np.asarray(sc["r_delta"], float), m_np)
+                     / np.trapezoid(w, m_np))
+    rp = x * r200_eff
+
+    t0 = time.time()
+    G, m200 = build_sz_transfer(cross, zmean, th, hod_params, rp,
+                                beam_fwhm_arcmin=float(beam_fwhm_arcmin))
+    np.savez(cache, G=G, m200=m200, x=x, beam=float(beam_fwhm_arcmin),
+             p03_ref=float(pp._P_03), beta_ref=float(pp._beta), r200_eff=r200_eff)
+    print(f"[{sample}] SZ kernel built in {time.time()-t0:.0f}s "
+          f"(R200_eff={r200_eff:.3f} Mpc/h) -> {cache}", flush=True)
+    return dict(G=G, m200=m200, x=x, y=y, err=err, p03_ref=float(pp._P_03),
+                beta_ref=float(pp._beta), r200_eff=r200_eff, n_pts=int(y.size))
+
+
+def _sigma_y_model(p, sz):
+    """Sigma_y(r_p) at the native-DPM params ``p`` from the precomputed kernel."""
+    return predict_sigma_y(sz["G"], sz["m200"], 10.0 ** p[2], p[3],
+                           sz["p03_ref"], sz["beta_ref"])
+
+
 # --- native-DPM J_b(T_0, Z) grid over the (p2, r_max) shape axes -------------
 
 # T_0 axis must resolve the sharp edge that the T_min selection puts in J(T_0):
@@ -520,7 +639,12 @@ def _model_bands(p, S):
 
 def _chi2_sample(p, S):
     r = (_model_bands(p, S) - S["wtheta"])[:, S["mask"]] / S["err"][:, S["mask"]]
-    return float(np.sum(r ** 2))
+    chi2 = float(np.sum(r ** 2))
+    sz = S.get("sz")
+    if sz is not None:
+        # the tSZ leg: same (P_0.3, beta_P) as T = P/n_e in the bands above
+        chi2 += float(np.sum(((_sigma_y_model(p, sz) - sz["y"]) / sz["err"]) ** 2))
+    return chi2
 
 
 def _bounds():
@@ -623,6 +747,27 @@ def _figures_bands(tag, samples, flat, chain_full, lp_full, nburn, map_p, out_di
         a2.set_title(f"{s}: band ratio (temperature)", fontsize=9); a2.legend(fontsize=8)
         fig.tight_layout(); fig.savefig(os.path.join(out_dir, f"{s}_bands_spectrum.png"), dpi=110)
         plt.close(fig)
+        sz = S.get("sz")
+        if sz is not None:
+            # posterior-median Sigma_y band from the flat chain (kernel is exact
+            # in (P_0.3, beta_P), so this is a cheap matrix product per draw)
+            sub = flat[:: max(1, flat.shape[0] // 400)]
+            ys = np.array([_sigma_y_model(q, sz) for q in sub])
+            lo, med, hi = np.percentile(ys, [16, 50, 84], axis=0)
+            fig, ax = plt.subplots(figsize=(6, 4.5))
+            ax.errorbar(sz["x"], sz["y"], yerr=sz["err"], fmt="ko", ms=4,
+                        label="Das et al. 2023")
+            ax.plot(sz["x"], _sigma_y_model(map_p, sz), "C0-", label="MAP")
+            ax.fill_between(sz["x"], lo, hi, color="C0", alpha=0.25,
+                            label="posterior 16-84%")
+            ax.set_xscale("log"); ax.set_yscale("log")
+            ax.set_xlabel(r"$r / R_{200}$"); ax.set_ylabel(r"$\Sigma_y$")
+            ax.set_title(f"{s}: stacked Compton-y (same $P_{{0.3}}, \\beta_P$ "
+                         "as the X-ray bands)", fontsize=9)
+            ax.legend(fontsize=8)
+            fig.tight_layout()
+            fig.savefig(os.path.join(out_dir, f"{s}_sz_profile.png"), dpi=110)
+            plt.close(fig)
 
 
 # --- main -------------------------------------------------------------------
@@ -639,6 +784,12 @@ def main(argv=None):
     ap.add_argument("--nburn", type=int, default=2000)
     ap.add_argument("--candidate", default="baseline", choices=_CANDIDATES,
                     help="hot-gas hypothesis to test; writes to its own subfolder")
+    ap.add_argument("--sz", action="store_true",
+                    help="add the Das et al. 2023 Sigma_y leg (samples with a "
+                         "mapped data/das_2023 profile only; see _SZ_DATA_FILES)")
+    ap.add_argument("--sz-beam-arcmin", type=float, default=_SZ_BEAM_FWHM_ARCMIN,
+                    help="Gaussian beam FWHM of the y-map the profiles were "
+                         "measured on (default %(default)s; MUST match the map)")
     args = ap.parse_args(argv)
     tag = "_".join(args.samples)
 
@@ -679,6 +830,23 @@ def main(argv=None):
                           m200=m200, r200=r200, h=float(F._THETA_COSMO["h"]),
                           J_interp=j_interp, V_interp=v_interp)
         print(f"[{s}] transfer ready, n_pts={samples[s]['n_pts']}", flush=True)
+
+    if args.sz:
+        n_sz = 0
+        for s in args.samples:
+            sz = _precompute_sz(s, args.hmf, beam_fwhm_arcmin=args.sz_beam_arcmin)
+            if sz is not None:
+                samples[s]["sz"] = sz
+                samples[s]["n_pts"] += sz["n_pts"]
+                n_sz += 1
+                print(f"[{s}] SZ leg ready: {sz['n_pts']} Sigma_y pts "
+                      f"(beam {args.sz_beam_arcmin}', R200_eff={sz['r200_eff']:.3f} Mpc/h)",
+                      flush=True)
+            else:
+                print(f"[{s}] SZ leg: no mapped das_2023 profile — X-ray only", flush=True)
+        if n_sz == 0:
+            print("WARNING: --sz given but no requested sample has a mapped "
+                  f"profile (mapped: {sorted(_SZ_DATA_FILES)})", flush=True)
 
     anchor_sample = "S1" if "S1" in samples else args.samples[0]
     samples[anchor_sample]["c_total"] = 1.0
@@ -725,6 +893,12 @@ def main(argv=None):
     out = dict(zip(_PARAMS, [float(v) for v in map_p]))
     out["chi2"] = chi2; out["ndof"] = ndof; out["chi2_per_dof"] = chi2 / ndof
     out["chi2_per_sample"] = {s: float(_chi2_sample(map_p, S)) for s, S in samples.items()}
+    if args.sz:
+        out["sz"] = {s: dict(n_pts=S["sz"]["n_pts"], beam_arcmin=args.sz_beam_arcmin,
+                             r200_eff=S["sz"]["r200_eff"],
+                             chi2=float(np.sum(((_sigma_y_model(map_p, S["sz"])
+                                                 - S["sz"]["y"]) / S["sz"]["err"]) ** 2)))
+                     for s, S in samples.items() if "sz" in S}
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, f"joint_bands_map_{tag}.json"), "w") as fh:
         json.dump(out, fh, indent=2)
