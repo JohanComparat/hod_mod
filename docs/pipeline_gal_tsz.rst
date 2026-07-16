@@ -145,6 +145,36 @@ The validation figures (DPM pressure profile, :math:`P_{g,y}(k)` decomposition,
 
     hod-mod validate sz-xray
 
+The Σ_y transfer kernel (MCMC-fast, exact)
+------------------------------------------
+
+A live :meth:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra.projected_gy`
+call costs ~60 s (halo-model mass integrals + Ogata Hankel) — hopeless inside
+an MCMC.  :mod:`hod_mod.fitting.sz_transfer` precomputes the **per-halo-mass
+projected kernel** :math:`G_{sz}(r_p, M)` once, so the stacked Compton-y
+profile becomes a single weighted matrix–vector product
+
+.. math::
+
+   \Sigma_y(r_p) = \sum_M A(M)\, G_{sz}(r_p, M),
+   \qquad
+   A(M) = \frac{P_{0.3}}{P_{0.3}^{\rm ref}}\;
+          M_{12}^{\,\beta_P - \beta_P^{\rm ref}} .
+
+The rescaling is **exact** (not an interpolation): the DPM pressure *shape* is
+independent of :math:`(P_{0.3}, \beta_P)`, both halo terms carry the y-leg
+linearly, and the Hankel projection is linear in :math:`P(k)`.  Measured
+agreement with ``projected_gy`` is ~3e-6 relative — five orders of magnitude
+below the ~40 % :math:`\Sigma_y` measurement errors — including far from the
+reference point (asserted in ``tests/test_sz_transfer.py``).
+
+This is what couples the SZ and X-ray legs of the joint fit: the same
+:math:`(P_{0.3}, \beta_P)` set the X-ray temperature :math:`T = P/n_e`, so
+freeing them moves both observables.  The band-fit driver consumes the kernel
+via its ``--sz`` flag, fitting the Das et al. 2023 stacked Compton-y profiles
+(digitized per stellar-mass bin in ``data/das_2023/``, :math:`r` in
+:math:`R_{200}` units) — see :doc:`xray_joint_fit`.
+
 References
 ----------
 
@@ -153,6 +183,8 @@ References
 * Amodeo et al. 2021, arXiv:2009.05558 — ACT × BOSS CMASS: gas thermodynamics from tSZ+kSZ.
 * Schaan et al. 2021, arXiv:2009.05557 — the companion measurement; stacked CAP profiles.
 * Pandey et al. 2025, arXiv:2506.07432 — DES Y3 shear × ACT DR6 tSZ.
+* Das et al. 2023 — stacked Compton-:math:`y` profiles per stellar-mass bin;
+  the digitized points live in ``data/das_2023/`` (Fig. 5 and Fig. B1).
 
 API
 ---
@@ -160,3 +192,7 @@ API
 .. autoclass:: hod_mod.observables.cross_spectra.HaloModelCrossSpectra
    :members: projected_gy, projected_gy_nz, sigma_y_theta, angular_cl_gy
    :noindex:
+
+.. automodule:: hod_mod.fitting.sz_transfer
+   :members:
+   :undoc-members:

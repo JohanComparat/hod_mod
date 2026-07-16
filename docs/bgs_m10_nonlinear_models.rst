@@ -59,7 +59,8 @@ Three models are compared, all sharing the same HMF (Tinker+2008), halo profile
      - Free parameters (5 each)
    * - **M1**
      - More+2015 (MoreHODModel)
-     - Linear  (CAMB)
+     - Linear  (CAMB backend, used for this run; the 0.3.1 default is
+       CosmoPower-JAX — see :doc:`cosmology`)
      - :math:`\log M_{\rm min}`,  :math:`\sigma_{\log m}`,  :math:`\log M_1`,  :math:`\alpha`,  :math:`\kappa`
    * - **M2**
      - More+2015 (MoreHODModel)

@@ -997,11 +997,11 @@ class HaloModelCrossSpectra:
         Notes
         -----
         The beam is a **transverse** convolution — it smears on the sky, never along the line of
-        sight — yet it is applied here as an *isotropic* window B(|k|χ) on the 3D power spectrum
-        before the projection.  That is exact, not an approximation, and the reason is the
-        projection-slice theorem: the line-of-sight integral in :func:`_pk_to_wp` evaluates the
-        3D power at k_z = 0, where |k| = k_⊥, so the isotropic window reduces to the transverse
-        one exactly where it is sampled.  The apparent line-of-sight smearing integrates away —
+        sight — yet it is applied here as an *isotropic* window :math:`B(|k|\chi)` on the 3D
+        power spectrum before the projection.  That is exact, not an approximation, and the
+        reason is the projection-slice theorem: the line-of-sight integral in :func:`_pk_to_wp`
+        evaluates the 3D power at :math:`k_z = 0`, where :math:`|k| = k_\perp`, so the isotropic
+        window reduces to the transverse one exactly where it is sampled.  The apparent line-of-sight smearing integrates away —
         convolving along π and then integrating over π is a no-op for a normalised kernel.
 
         Checked numerically against a direct transverse-only 2D Hankel transform of

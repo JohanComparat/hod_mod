@@ -19,7 +19,10 @@ Setup
 -----
 
 **Model sectors.**  One log-likelihood assembles three forward models on the
-shared halo-model engine (CAMB :math:`P(k)` + Tinker08 HMF + Zu & Mandelbaum
+shared halo-model engine (linear :math:`P(k)` from
+:func:`~hod_mod.core.power_spectrum.default_pk_linear` — the fits shown here
+ran on the CAMB backend; since 0.3.1 the package default is the CosmoPower-JAX
+emulator, see :doc:`cosmology` — + Tinker08 HMF + Zu & Mandelbaum
 2015 occupation):
 
 * **Galaxies (ZM15).**  :math:`n_\mathrm{gal}` (SMF integral), projected

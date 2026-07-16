@@ -23,6 +23,7 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    data_formats
    data_hosting
    scripts
+   oarsub_campaign
 
 .. toctree::
    :maxdepth: 2
@@ -76,6 +77,8 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    bgs_comparat2025_mstar10_joint_fit
    bgs_zm15_joint_mcmc
    bgs_full_joint
+   bgs_m10_nonlinear_models
+   bgs_m10_nl_allmodels
    timing_joint_model
 
 .. toctree::

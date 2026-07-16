@@ -6,3 +6,8 @@ Data I/O
    :undoc-members:
    :show-inheritance:
 
+.. automodule:: hod_mod.data_io.registry
+   :members:
+   :undoc-members:
+   :show-inheritance:
+

@@ -1335,3 +1335,30 @@ and — with a constant relative error :math:`f` — the Fisher matrix is the si
 closing the loop with the Fisher identity used at the top of this page (an
 analytic Gaussian covariance with cross-observable correlations is available via
 :mod:`hod_mod.forecast.covariance`).
+
+API reference
+-------------
+
+.. automodule:: hod_mod.forecast.forward_jax
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.forecast.fisher
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.forecast.covariance
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.forecast.params
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.forecast.tomography
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.forecast.pk_eisenstein_hu
+   :members:
+   :undoc-members:

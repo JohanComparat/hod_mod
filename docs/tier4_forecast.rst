@@ -239,6 +239,24 @@ blocks per (z, M*) cell — [Mandelbaum2006]_ at Euclid scale.  Kind
 the shear sources also run out): the production grid yields 104 of the
 naive 156 blocks.
 
+.. figure:: _images/tier4_forecast__cell_grid.png
+   :width: 98%
+
+   Fiducial galaxy density and total signal-to-noise per (z, M*) cell,
+   with the 104 morphology-split blocks overlaid on the tier-3 grid.
+
+.. figure:: _images/tier4_forecast__agn_sector.png
+   :width: 98%
+
+   AGN clustering per L_X bin with its pair-count errors, and the
+   AGN-sector parameter constraints including the BH–bulge coupling.
+
+.. figure:: _images/tier4_forecast__band_spectroscopy.png
+   :width: 85%
+
+   Spectral-parameter constraints with and without the X-ray energy-band
+   spectra, at the 111-parameter vector.
+
 The exact gates
 ---------------
 
@@ -336,6 +354,12 @@ The w_g+ recipe is *effective* (no IA–clustering cross-covariance) — the
 tSZ/IM documentation precedent; the AGN-host floor is larger than the
 galaxy one because point-source light complicates host classification.
 
+.. figure:: _images/tier4_forecast__noise_budget.png
+   :width: 98%
+
+   Relative errors for a representative mid-z cell and its shell,
+   including the morphology-split and IA noise recipes.
+
 Operational record
 ------------------
 
@@ -416,6 +440,36 @@ tier-4(111).  The tier-3 conditioning caveat stands
 eigenvalue floor at this dynamic range).  SUMMARY, npz and the
 ``tier4_forecast__*`` figure suite live in
 ``$HOD_MOD_RESULTS/tier4_forecast/``.
+
+.. figure:: _images/tier4_forecast__cosmo_constraints.png
+   :width: 70%
+
+   :math:`\Omega_m`–:math:`\sigma_8` with all 111 parameters free vs
+   astrophysics pinned.
+
+.. figure:: _images/tier4_forecast__astro_sectors.png
+   :width: 85%
+
+   Per-parameter posterior-to-prior ratios by sector, now including the
+   morphology sector; dots show the cosmology-pinned case.
+
+.. figure:: _images/tier4_forecast__zevolution.png
+   :width: 98%
+
+   The redshift-evolution slopes and the reconstructed SHMR pivot-mass
+   evolution band at the 111-parameter vector.
+
+.. figure:: _images/tier4_forecast__probe_attribution.png
+   :width: 85%
+
+   Cumulative probe build-up through the tier-4 additions (morphology
+   split, sizes, IA, BH–bulge coupling).
+
+.. figure:: _images/tier4_forecast__degeneracies.png
+   :width: 85%
+
+   The strongest degeneracies that *survive* the full 111-parameter data
+   combination.
 
 Continuation points
 -------------------

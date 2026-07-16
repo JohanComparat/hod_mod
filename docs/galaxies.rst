@@ -993,3 +993,11 @@ the LS10-BGS S1…S7 sample configuration.
 .. automodule:: hod_mod.agn.hod
    :members:
    :undoc-members:
+
+.. automodule:: hod_mod.agn.duty_cycle
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.agn.powell
+   :members:
+   :undoc-members:
