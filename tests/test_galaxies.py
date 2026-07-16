@@ -487,7 +487,22 @@ class TestHODModelsIntegrate:
 # ---------------------------------------------------------------------------
 
 class TestOgataHankel:
-    """Ogata 2005 quadrature node table and _pk_to_xi."""
+    """Ogata 2005 quadrature node table and _pk_to_xi.
+
+    .. note::
+
+       The accuracy tests below use scale-free power laws (P ∝ k^-2), which are precisely the
+       family that cannot see a node-range or extrapolation bug: scaling the nodes by a constant
+       multiplies a power law by a constant and leaves the recovered r-slope untouched, and the
+       truncated tail contributes a constant Si(x_max) → Si(∞) offset of 0.2%.  They passed
+       unchanged throughout the years the transform was silently a truncated trapezoid (fixed
+       2026-07; see :func:`~hod_mod.observables.clustering._ogata_table`).
+
+       Do not treat them as coverage of the transform's correctness.  The tests that constrain
+       it are the exact analytic transform pair in ``TestPkToWpAccuracyEnvelope``
+       (tests/test_cross_spectra.py), because an analytic pair pins the *amplitude* at a given
+       r, which a power law does not.
+    """
 
     def test_table_shapes(self):
         x, w = _ogata_table(128, 0.01)
