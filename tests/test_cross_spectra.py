@@ -249,6 +249,43 @@ class TestAngularPowerSpectrumGX:
         assert np.all(np.isfinite(threaded))
         assert np.allclose(serial, threaded, rtol=1e-6)
 
+
+class TestAngularPowerSpectrumGXFullApec:
+    """FULL-APEC C_ℓ^{gX}: density + pressure + metallicity + cooling.
+
+    Regression for the 2026-07 campaign NaN: activating the temperature-
+    dependent Λ(T,Z) emissivity made the whole C_ℓ^{gX} non-finite (float32
+    underflow of Λ~1e-24), which silently pinned the Family-C gas presets to
+    the density-only path.  Guarded since by the float32-safe ``safe_log``
+    floor and the Λ_ref renormalisation in ``_pk_tables_gX`` — this test is
+    what would have caught it end-to-end.
+    """
+
+    _ELL = np.logspace(2, 3.5, 5)
+    _Z   = np.linspace(0.25, 0.45, 4)
+    _NZ  = np.exp(-0.5 * ((np.linspace(0.25, 0.45, 4) - 0.35) / 0.05) ** 2)
+
+    @pytest.fixture(scope="class")
+    def cross_gX_full(self, fhmp):
+        from hod_mod.gas import PressureProfileDPM
+        from hod_mod.gas.metallicity import MetallicityProfileDPM
+        from hod_mod.gas.cooling import ApecCoolingTable
+        soxs = pytest.importorskip("soxs")  # noqa: F841 — APEC table needs it
+        return HaloModelCrossSpectra(
+            fhmp,
+            density_profile=GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=80),
+            pressure_profile=PressureProfileDPM(model=2, r_max_over_r200=3.0, n_gl=60),
+            metallicity_profile=MetallicityProfileDPM(),
+            cooling_function=ApecCoolingTable(emin=0.5, emax=2.0, n_T=20, n_Z=5),
+        )
+
+    @pytest.mark.slow
+    def test_cl_gX_full_apec_finite_positive(self, cross_gX_full, hod_params):
+        cl = np.asarray(cross_gX_full.angular_cl_gX(
+            self._ELL, self._Z, self._NZ, _THETA, hod_params, n_workers=1))
+        assert cl.shape == (5,)
+        assert np.all(np.isfinite(cl)) and np.all(cl > 0)
+
     def test_cl_gX_psf_suppresses_small_scales(self, cross_gX, hod_params):
         raw = np.asarray(cross_gX.angular_cl_gX(self._ELL, self._Z, self._NZ, _THETA, hod_params))
         psf = np.asarray(cross_gX.angular_cl_gX(self._ELL, self._Z, self._NZ, _THETA, hod_params,
