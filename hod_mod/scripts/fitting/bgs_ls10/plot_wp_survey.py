@@ -68,9 +68,9 @@ OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..",
 OUT_DIR = os.path.abspath(OUT_DIR)
 os.makedirs(OUT_DIR, exist_ok=True)
 
-SUM_STAT_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..",
-                 "sum_stat", "data"))
+from hod_mod.paths import sum_stat_root
+
+SUM_STAT_DIR = str(sum_stat_root())
 
 MODEL_COLOR = {
     "more2015":        "#1f77b4",
