@@ -51,10 +51,13 @@ result trees already carry the tag.)
   `tests/test_sz_transfer.py`); the DPM pressure amplitude/mass-slope
   `(P_0.3, β_P)` rescale analytically, making them free at MCMC speed.
 - **SZ Σ_y leg wired into `fit_xray_joint_bands.py`** (opt-in `--sz`): stacked
-  Compton-y profiles digitized from Das et al. 2023 (`data/das_2023/`, r in
-  R200 units, per stellar-mass bin) enter the per-sample likelihood through the
-  same DPM pressure parameters that set the X-ray temperature — one gas model,
-  two observables.
+  Compton-y profiles digitized from Das et al. 2023, ApJ 951, 125
+  (`data/das_2023/`, r in R200 units, per stellar-mass bin) enter the
+  per-sample likelihood through the same DPM pressure parameters that set the
+  X-ray temperature — one gas model, two observables.  The measurement
+  conventions are built in: 2.4' Gaussian beam (the CIB-deprojected M20
+  y-map; 1.6' pre-deprojection) and area-weighted averaging over the
+  beam-width annuli the paper reports.
 
 ### Forecast posterior beyond Fisher
 

@@ -430,12 +430,25 @@ def _precompute(sample, hmf_backend):
 # SHAPE is the fixed DPM model-2 form (p2/r_max in this fit deform only the
 # density); the SZ leg therefore constrains amplitude and mass slope only.
 #
-# Two stated approximations (both well inside the ~40% Sigma_y errors):
-#  * the data's per-galaxy r/R200 stacking is compared against the model
-#    profile at a single occupation-weighted effective R200;
-#  * the kernel is built at the sample's zmean, not the (unpublished) mean z
-#    of the Das et al. stack.
-_SZ_BEAM_FWHM_ARCMIN = 1.6         # y-map beam; MUST match the measurement's map
+# Beam and averaging conventions (Das, Chiang & Mathur 2023, ApJ 951, 125):
+# the fitted/plotted profiles (their Figs. 5 and B1) come from the CIB- and
+# Galactic-dust-corrected M20 ACT+Planck y-map, whose effective Gaussian beam
+# is FWHM = 2.4' (the pre-deprojection map is 1.6'; their Sec. 2.1).  Each
+# data point is the MEAN y over a circular annulus whose full width equals the
+# beam FWHM (their Eq. 4; that is what the wide r_up/r_low columns are), so
+# the model must be annulus-averaged, not evaluated at r_mid — at the
+# innermost annulus (0.1-0.85 R200) a point evaluation biases ~2x high.
+#
+# Stated approximations (all well inside the ~40% Sigma_y errors):
+#  * the data's per-galaxy r/R200 stacking (their method iii) is compared
+#    against the model at a single occupation-weighted effective R200 —
+#    the same median-theta200 approximation their own model uses (Eq. 6);
+#  * the kernel is built at the sample's zmean, not the Das et al. stack's;
+#  * their fit includes a free zero-point offset y_zp (map systematic) that
+#    our halo-model prediction has no counterpart for; the digitized points
+#    are the measurements, so any residual y_zp is absorbed nowhere.
+_SZ_BEAM_FWHM_ARCMIN = 2.4   # CIB-deprojected map (Das+2023 Sec 2.1); 1.6' = pre-deprojection
+_SZ_N_ANNULUS = 16           # radial nodes per annulus for the area-weighted mean
 _SZ_DATA_FILES = {
     "S4": "fig_B1_top_107M110_compton_y_profile.txt",   # log10 M* in [10.7, 11.0]
     "S5": "fig_5_bottom_left_compton_y_profile.txt",    # log10 M* in [11.0, 11.3]
@@ -443,11 +456,12 @@ _SZ_DATA_FILES = {
 
 
 def _load_sz_data(sample):
-    """(x = r/R200, y, sigma_y) from the digitized Das et al. 2023 profile.
+    """(x = r/R200, x_lo, x_hi, y, sigma_y) from the digitized Das et al. 2023 profile.
 
-    Columns: r_mid, r_up, r_low, y1e8_up, y1e8_mid, y1e8_low (comma-separated;
-    the r_up/r_low columns are the bin extent, not an uncertainty).  Returns
-    ``None`` when the sample has no mapped profile.
+    Columns: r_mid, r_up, r_low, y1e8_up, y1e8_mid, y1e8_low (comma-separated).
+    ``x_lo/x_hi`` are the annulus edges (width = the 2.4' beam FWHM in R200
+    units — NOT an uncertainty).  Returns ``None`` when the sample has no
+    mapped profile.
     """
     fn = _SZ_DATA_FILES.get(sample)
     if fn is None:
@@ -457,9 +471,35 @@ def _load_sz_data(sample):
         raise FileNotFoundError(f"missing SZ profile: {fp}")
     arr = np.loadtxt(fp, delimiter=",")
     x = arr[:, 0]
+    x_hi = arr[:, 1]
+    x_lo = arr[:, 2]
     y = arr[:, 4] * 1e-8
     sig = 0.5 * (arr[:, 3] - arr[:, 5]) * 1e-8    # (up - low)/2, symmetrised
-    return x, y, sig
+    return x, x_lo, x_hi, y, sig
+
+
+def _annulus_average_matrix(x_lo, x_hi, n_nodes=_SZ_N_ANNULUS):
+    """(W, x_nodes): area-weighted annulus-mean operator.
+
+    ``W @ f(x_nodes)`` is the mean of ``f`` over each annulus
+    [x_lo_i, x_hi_i] with the 2D area measure 2πx dx (trapezoid weights on
+    ``n_nodes`` radial nodes per annulus), matching how Das et al. 2023
+    average y in beam-width annuli (their Eq. 4a).
+    """
+    x_lo = np.asarray(x_lo, float); x_hi = np.asarray(x_hi, float)
+    n_ann = x_lo.size
+    nodes = np.empty((n_ann, n_nodes))
+    W = np.zeros((n_ann, n_ann * n_nodes))
+    for i in range(n_ann):
+        r = np.linspace(x_lo[i], x_hi[i], n_nodes)
+        w = np.empty(n_nodes)
+        w[1:-1] = (r[2:] - r[:-2]) / 2.0
+        w[0] = (r[1] - r[0]) / 2.0
+        w[-1] = (r[-1] - r[-2]) / 2.0
+        w = w * r                       # 2πr dr, the 2π cancels in the mean
+        nodes[i] = r
+        W[i, i * n_nodes:(i + 1) * n_nodes] = w / w.sum()
+    return W, nodes.ravel()
 
 
 def _precompute_sz(sample, hmf_backend, beam_fwhm_arcmin=_SZ_BEAM_FWHM_ARCMIN):
@@ -473,12 +513,15 @@ def _precompute_sz(sample, hmf_backend, beam_fwhm_arcmin=_SZ_BEAM_FWHM_ARCMIN):
     data = _load_sz_data(sample)
     if data is None:
         return None
-    x, y, err = data
+    x, x_lo, x_hi, y, err = data
     os.makedirs(_OUT_DIR, exist_ok=True)
     cache = os.path.join(_OUT_DIR, f"{sample}_sz_transfer.npz")
     if os.path.exists(cache):
         d = np.load(cache)
-        if (np.array_equal(d["x"], x) and float(d["beam"]) == float(beam_fwhm_arcmin)):
+        if ("x_lo" in d.files and np.array_equal(d["x"], x)
+                and np.array_equal(d["x_lo"], x_lo)
+                and int(d["n_annulus"]) == _SZ_N_ANNULUS
+                and float(d["beam"]) == float(beam_fwhm_arcmin)):
             return dict(G=d["G"], m200=d["m200"], x=x, y=y, err=err,
                         p03_ref=float(d["p03_ref"]), beta_ref=float(d["beta_ref"]),
                         r200_eff=float(d["r200_eff"]), n_pts=int(y.size))
@@ -508,12 +551,19 @@ def _precompute_sz(sample, hmf_backend, beam_fwhm_arcmin=_SZ_BEAM_FWHM_ARCMIN):
     w = np.asarray(sc["dndm_np"], float) * np.asarray(nc, float)
     r200_eff = float(np.trapezoid(w * np.asarray(sc["r_delta"], float), m_np)
                      / np.trapezoid(w, m_np))
-    rp = x * r200_eff
+
+    # kernel on the fine annulus nodes, then fold the annulus-mean operator W
+    # in: predict_sigma_y(W @ G_fine, ...) IS the annulus-averaged prediction
+    # (both are linear in the per-mass amplitudes).
+    W, x_nodes = _annulus_average_matrix(x_lo, x_hi)
+    rp = x_nodes * r200_eff
 
     t0 = time.time()
-    G, m200 = build_sz_transfer(cross, zmean, th, hod_params, rp,
-                                beam_fwhm_arcmin=float(beam_fwhm_arcmin))
-    np.savez(cache, G=G, m200=m200, x=x, beam=float(beam_fwhm_arcmin),
+    G_fine, m200 = build_sz_transfer(cross, zmean, th, hod_params, rp,
+                                     beam_fwhm_arcmin=float(beam_fwhm_arcmin))
+    G = W @ G_fine
+    np.savez(cache, G=G, m200=m200, x=x, x_lo=x_lo, x_hi=x_hi,
+             n_annulus=_SZ_N_ANNULUS, beam=float(beam_fwhm_arcmin),
              p03_ref=float(pp._P_03), beta_ref=float(pp._beta), r200_eff=r200_eff)
     print(f"[{sample}] SZ kernel built in {time.time()-t0:.0f}s "
           f"(R200_eff={r200_eff:.3f} Mpc/h) -> {cache}", flush=True)

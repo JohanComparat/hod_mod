@@ -183,8 +183,11 @@ References
 * Amodeo et al. 2021, arXiv:2009.05558 — ACT × BOSS CMASS: gas thermodynamics from tSZ+kSZ.
 * Schaan et al. 2021, arXiv:2009.05557 — the companion measurement; stacked CAP profiles.
 * Pandey et al. 2025, arXiv:2506.07432 — DES Y3 shear × ACT DR6 tSZ.
-* Das et al. 2023 — stacked Compton-:math:`y` profiles per stellar-mass bin;
-  the digitized points live in ``data/das_2023/`` (Fig. 5 and Fig. B1).
+* Das, Chiang & Mathur 2023, ApJ 951, 125 — stacked Compton-:math:`y`
+  profiles per stellar-mass bin on the M20 ACT+Planck y-maps (Gaussian beam
+  FWHM 1.6' before / 2.4' after CIB deprojection); the digitized points live
+  in ``data/das_2023/`` (Fig. 5 and Fig. B1, from the 2.4' CIB-deprojected
+  map, averaged in beam-width annuli).
 
 API
 ---
