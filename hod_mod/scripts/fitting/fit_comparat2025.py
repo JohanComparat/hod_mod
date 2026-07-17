@@ -700,6 +700,64 @@ _SHAPE_CACHE_DIR  = _RESULTS_DIR / "shape_cache"
 _BETA_GAS_DEFAULT      = 0.25   # MAP run6 β_n (was 0.20)
 _BETA_PRESSURE_DEFAULT = 0.86   # MAP run6 β_P (was 0.80)
 
+# --- opt-in physical ECF chain + S1-anchored residual amplitudes (--ecf) -----
+#
+# Without this, the model is on a raw n_e²-scale — the full model→counts chain
+# (Λ_eff, Mpc→cm line of sight, 1/4π, the eROSITA flux→count ECF, sr→arcsec²,
+# ~1e7-1e8 combined) is absorbed entirely by log10_A_gas / log10_A_AGN, which
+# makes those parameters uninterpretable and lets the two legs trade freely.
+# With --ecf: (1) infra.enable_ecf(sample) folds the validated per-component
+# eROSITA TM0 ECF into both legs (ErositaResponse; the gas as ECF(kT(M)), the
+# AGN at Γ=1.9), and (2) a one-time S1 anchor absorbs the remaining
+# sample-independent geometry into per-sample constants ∝ 1/S^R_X (the same
+# convention as fit_xray_joint._c_obs_total / fit_agn_duty_cycle_baseline.
+# _c_total), so log10_A_gas / log10_A_AGN become O(1) residual fudge factors
+# centred on 0.  DEFAULT OFF: the running v0.3/v0.31 campaign presets must
+# stay comparable; flip after a validated re-anchor.
+_USE_ECF = False
+_ECF_ANCHOR = None       # {"c_gas_S1", "c_agn_S1", "srx_S1", "agn_model"}
+
+
+def _ecf_anchor_consts(label: str, infra) -> tuple:
+    """Per-sample (c_gas, c_amp_agn) residual-amplitude conversions under --ecf.
+
+    Measured ONCE on S1: shapes at the fiducial HOD/β with the ECF enabled,
+    non-negative lsq of (A_gas, A_AGN) against the S1 w_θ in the fitted range —
+    those solutions are DEFINED as the conversions, so the free amplitudes sit
+    at 1 (log10 = 0) on S1 at the fiducial.  Other samples scale ∝ 1/S^R_X
+    (background surface brightness; cooling/ECF/geometry are sample-independent).
+    Cached to ``_RESULTS_DIR/ecf_anchor_<agn_model>.json``.
+    """
+    global _ECF_ANCHOR
+    if not _USE_ECF:
+        return 1.0, 1.0
+    if _ECF_ANCHOR is None:
+        cache = _RESULTS_DIR / f"ecf_anchor_{infra.agn_model_choice}.json"
+        if cache.exists():
+            _ECF_ANCHOR = json.loads(cache.read_text())
+        else:
+            from scipy.optimize import lsq_linear
+            print("[ecf] measuring the S1 anchor (fiducial shapes + lsq) ...",
+                  flush=True)
+            shapes = _predict_shape("S1", infra, _hod_params("S1"),
+                                    beta_gas=_BETA_GAS_DEFAULT,
+                                    beta_pressure=_BETA_PRESSURE_DEFAULT)
+            d = load_data("S1")
+            m = (d["theta_arcsec"] >= 8.0) & (d["theta_arcsec"] <= 300.0)
+            w = 1.0 / np.maximum(np.abs(d["wtheta_err"][m]), 1e-30)
+            A = np.column_stack([shapes["gas"][m] * w, shapes["agn"][m] * w])
+            sol = lsq_linear(A, d["wtheta"][m] * w,
+                             bounds=([0.0, 0.0], [np.inf, np.inf]), method="bvls")
+            _ECF_ANCHOR = dict(c_gas_S1=float(sol.x[0]), c_agn_S1=float(sol.x[1]),
+                               srx_S1=float(load_data("S1")["beckground"][0]),
+                               agn_model=infra.agn_model_choice)
+            _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+            cache.write_text(json.dumps(_ECF_ANCHOR, indent=2))
+            print(f"[ecf] S1 anchor: c_gas={sol.x[0]:.4e} c_agn={sol.x[1]:.4e} "
+                  f"-> {cache.name}", flush=True)
+    f = _ECF_ANCHOR["srx_S1"] / float(load_data(label)["beckground"][0])
+    return _ECF_ANCHOR["c_gas_S1"] * f, _ECF_ANCHOR["c_agn_S1"] * f
+
 # eROSITA CalDB PSF option (False → analytic King, True → TM1-7 mean from FITS)
 _USE_CALDB_PSF = False
 _CALDB_DIR = Path(
@@ -726,7 +784,8 @@ def _shape_cache_key(
         agn_tag = f"hod_finc{agn_finc:.4f}"
     else:
         agn_tag = f"ham_{psf_tag}"
-    raw = f"{label}|{hp_str}|beta{beta_gas:.4f}|betaP{beta_pressure:.4f}|{agn_tag}"
+    ecf_tag = "|ecf" if _USE_ECF else ""
+    raw = f"{label}|{hp_str}|beta{beta_gas:.4f}|betaP{beta_pressure:.4f}|{agn_tag}{ecf_tag}"
     return hashlib.md5(raw.encode()).hexdigest()[:12]
 
 
@@ -811,6 +870,11 @@ def _predict_shape(
     Results are cached to .npz files keyed by HOD params + beta_gas + AGN config.
     """
     infra.use_agn_for(label)   # attach the per-sample AGN model to infra.cross
+    if _USE_ECF:
+        infra.enable_ecf(label)          # per-sample ECF tables on both legs
+    else:
+        infra.cross._ecf_gas_table = None   # never leak a previous sample's ECF
+        infra.cross._ecf_agn = None
     if agn_build:
         infra.use_agn_override(label, agn_build)   # rebuild HODAgnModel occupation
 
@@ -1070,8 +1134,9 @@ def log_likelihood(
         )
 
     shapes = shape_cache[cache_key]
-    A_gas  = 10.0 ** log10_A_gas
-    A_AGN  = 10.0 ** log10_A_AGN
+    c_gas, c_agn = _ecf_anchor_consts(label, infra)   # (1, 1) unless --ecf
+    A_gas  = 10.0 ** log10_A_gas * c_gas
+    A_AGN  = 10.0 ** log10_A_AGN * c_agn
     wm_all = A_gas * shapes["gas"] + A_AGN * shapes["agn"]
 
     # --- w_θ likelihood (diagonal + systematic floor) ---
@@ -1667,8 +1732,9 @@ def plot_bestfit(
         )
 
     shapes  = shape_cache[ck]
-    A_gas   = 10.0 ** p["log10_A_gas"]
-    A_AGN   = 10.0 ** p["log10_A_AGN"]
+    c_gas, c_agn = _ecf_anchor_consts(label, infra)   # (1, 1) unless --ecf
+    A_gas   = 10.0 ** p["log10_A_gas"] * c_gas
+    A_AGN   = 10.0 ** p["log10_A_AGN"] * c_agn
     wm_gas         = A_gas * shapes["gas"]
     wm_gas_1h_cen  = A_gas * shapes.get("gas_1h_cen", shapes["gas"] * np.nan)
     wm_gas_1h_sat  = A_gas * shapes.get("gas_1h_sat", shapes["gas"] * np.nan)
@@ -2629,11 +2695,21 @@ def _parse_args():
                         "it is not recommended for low log10m_star_thresh "
                         "samples such as S1 (see AemulusNuHaloMassFunction "
                         "docstring in hod_mod.core.halo_mass_function).")
+    p.add_argument("--ecf", action="store_true",
+                   help="fold the physical eROSITA ECF into both legs and "
+                        "anchor the residual amplitudes on S1 (log10_A_gas / "
+                        "log10_A_AGN become O(1) fudge factors centred on 0). "
+                        "OPT-IN: results are not comparable to non-ECF runs.")
     return p.parse_args()
 
 
 def main():
     args = _parse_args()
+    if args.ecf:
+        global _USE_ECF
+        _USE_ECF = True
+        print("[ecf] physical ECF chain + S1-anchored residual amplitudes ON",
+              flush=True)
     f_sys = args.add_syst / 100.0 if args.add_syst is not None else args.f_sys
 
     labels = list(SAMPLES.keys()) if "all" in args.sample else args.sample
