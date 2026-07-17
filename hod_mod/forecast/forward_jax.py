@@ -83,8 +83,8 @@ PARAM_NAMES = [
     "beta_sat", "bcut", "beta_cut", "alpha_sat",          # satellite HOD shape
     "beta_b", "log10_M_eta", "beta_eta",                  # baryon-sector shape
     "alpha_in_gas", "alpha_tr_gas",                       # gas emissivity slopes
-    "p0_pressure", "c500_pressure", "gamma_pressure",     # A10 GNFW pressure
-    "alpha_pressure", "beta_out_pressure",                # ("beta_pressure" is the tilt)
+    "p03_pressure", "c_dpm_pressure", "alpha_in_pressure",  # DPM GNFW pressure (Oppenheimer+2025)
+    "alpha_tr_pressure", "alpha_out_pressure",              # ("beta_pressure" is the mass-slope tilt)
     "agn_rho", "agn_sig_mstar",                           # AGN-XLF internals (Powell Model 2)
     # ---- tier-2 redshift-evolution slopes: additive on the base parameter per
     # ln[(1+z_eff)/(1+z_pivot)] (see ForwardModel._theta_eff); fiducial 0 ----
@@ -306,13 +306,19 @@ def _gnfw(x, alpha_in, alpha_tr, alpha_out):
 
 
 def _gnfw_pressure(x, alpha_in, alpha_tr, alpha_out):
-    r"""A10 GNFW pressure shape p(x) (Arnaud+2010 universal profile)."""
+    r"""GNFW electron-pressure shape p(x) — identical functional form for the
+    DPM (Oppenheimer+2025, default) and Arnaud+2010 universal profiles."""
     xs = jnp.maximum(x, 1e-8)
     return xs ** (-alpha_in) * (1.0 + xs ** alpha_tr) ** ((alpha_in - alpha_out) / alpha_tr)
 
 
-# A10 universal GNFW pressure slopes (Arnaud+2010).
-_A10 = dict(P0=8.403, c500=1.177, gamma=0.3081, alpha=1.0510, beta=5.4905)
+# DPM Model 2 electron-pressure parameters (Oppenheimer+2025, arXiv:2505.14782):
+# gNFW shape (alpha_in/alpha_tr/alpha_out), mass slope beta_P, redshift exponent
+# gamma_P = 8/3, and the scale-radius concentration c_DPM.  P03 is the repo-
+# calibrated S1 amplitude [keV cm^-3] (see direct_prediction_gal_gas_agn._P_03_CAL);
+# only the ratio p03_pressure/P03 matters for the log-derivative Fisher.
+_DPM_P2 = dict(P03=1.627e-6, c_dpm=2.772, alpha_in=0.3, alpha_tr=1.3,
+               alpha_out=4.1, beta=0.85, gamma=8.0 / 3.0)
 
 
 def _c_dk15(sigma, n_eff):
@@ -441,7 +447,7 @@ class ForwardModel:
         logmhi_himf=None,
         logloii_oiilf=None,
         loglir_ilf=None,
-        pk_correction: str = "none",
+        pk_correction: str = "cosmopower",
         log10m_min: float = 10.0,
         radio_map_bands=None,
         ir_map_bands=None,
@@ -481,15 +487,21 @@ class ForwardModel:
         self._fb_model = make_baryon_fraction(self.baryon_model)
         # linear P(k): the EH98 shape, optionally corrected by the linearized
         # CAMB ratio table (missing-physics wave 2; spectrum + first
-        # derivatives CAMB-accurate near the fiducial)
+        # derivatives CAMB-accurate near the fiducial), or the CosmoPower-JAX
+        # neural emulator (CAMB-accurate to <0.1% natively, still fully
+        # differentiable — supersedes the linearized ratio patch).
         self.pk_correction = str(pk_correction).lower()
         if self.pk_correction == "camb_linear":
             from hod_mod.forecast.pk_camb_ratio import load as _load_ratio
             self._pk = EisensteinHu98PkLinear(camb_ratio=_load_ratio())
         elif self.pk_correction == "none":
             self._pk = EisensteinHu98PkLinear()
+        elif self.pk_correction == "cosmopower":
+            from hod_mod.forecast.pk_cosmopower import CosmoPowerJaxPkLinear
+            self._pk = CosmoPowerJaxPkLinear()
         else:
-            raise ValueError("pk_correction must be 'none' or 'camb_linear'")
+            raise ValueError(
+                "pk_correction must be 'none', 'camb_linear' or 'cosmopower'")
         self._hmf = HaloMassFunction(self._pk.as_hmf_pk_func(), model="tinker08", Delta=200.0)
 
         self.k = jnp.logspace(-4.0, jnp.log10(200.0), n_k)
@@ -1027,25 +1039,33 @@ class ForwardModel:
         return outs
 
     def _pressure_uk(self, theta, H):
-        """Normalised A10 GNFW pressure FT × P500(M) × mass tilt, (Nk, NM)."""
+        """Normalised DPM GNFW electron-pressure FT × P(M) × mass tilt, (Nk, NM).
+
+        DPM electron pressure (Oppenheimer+2025 Eq. 2), natively M200-based: the
+        scale radius is R200/c_DPM, the shape is the gNFW f(x | α_in, α_tr, α_out),
+        and the amplitude is P0.3 · E(z)^(8/3) · M12^β_P.  The ``/eta`` gas-extent
+        and ``·fb`` baryon couplings are shared with the X-ray/ΔΣ legs, so the
+        pressure sits in the same gas sector as the density (though pressure and
+        density keep their own DPM slopes).
+        """
         r_max = 3.0 * H["r_delta"]
-        r_s = (H["r_delta"] / theta[_IDX["c500_pressure"]]) / H["eta"]  # shared gas extent
+        r_s = (H["r_delta"] / theta[_IDX["c_dpm_pressure"]]) / H["eta"]  # DPM R_s, shared gas extent
 
         def f_nodes(r):
-            return _gnfw_pressure(r / r_s[:, None], theta[_IDX["gamma_pressure"]],
-                                  theta[_IDX["alpha_pressure"]], theta[_IDX["beta_out_pressure"]])
+            return _gnfw_pressure(r / r_s[:, None], theta[_IDX["alpha_in_pressure"]],
+                                  theta[_IDX["alpha_tr_pressure"]], theta[_IDX["alpha_out_pressure"]])
 
         u_shape = _profile_uk_normalized(self.k, r_max, f_nodes(r_max[:, None] * self.gx[None, :]),
                                          self.gx, self.gw)
         ez = jnp.sqrt(self._e2z(self._cosmo(theta), H["z"]))
-        log10_m500c = self.log10m + jnp.log10(0.72)
-        beta_p = 2.0 / 3.0 + 0.12 + theta[_IDX["beta_pressure"]]        # A10 self-similar + tilt
-        # thermal energy ∝ gas mass ∝ f_b(M)  → shared baryon sector.  The GNFW
-        # amplitude enters as the ratio p0_pressure/P0_fid so the fiducial
-        # prediction is unchanged while ∂lnC_gy/∂P0 = 1/P0 is exact.
-        P500 = (10.0 ** (beta_p * (log10_m500c - 14.5)) * ez ** (8.0 / 3.0) * H["fb"]
-                * (theta[_IDX["p0_pressure"]] / _A10["P0"]))
-        return u_shape * P500[None, :]
+        beta_p = _DPM_P2["beta"] + theta[_IDX["beta_pressure"]]          # DPM β_P base + tilt
+        # DPM Eq. 2, M200-native (pivot 1e12 M_sun/h): thermal energy ∝ gas mass
+        # ∝ f_b(M) → shared baryon sector.  The amplitude enters as the ratio
+        # p03_pressure/P0.3_fid so the fiducial cl_gy is set by the DPM model
+        # while ∂lnC_gy/∂p03_pressure = 1/p03_pressure is exact.
+        P_dpm = (10.0 ** (beta_p * (self.log10m - 12.0)) * ez ** (8.0 / 3.0) * H["fb"]
+                 * (theta[_IDX["p03_pressure"]] / _DPM_P2["P03"]))
+        return u_shape * P_dpm[None, :]
 
     # ---- AGN spectral helpers (Γ power law + obscured fraction) ------
     def _k_h2s(self, theta):

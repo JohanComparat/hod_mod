@@ -127,14 +127,16 @@ class TestProductionInference:
     def _model(self, which_cross=False):
         from hod_mod.observables import make_differentiable_prediction
         from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
-        from hod_mod.gas import PressureProfileA10, GasDensityDPM
+        from hod_mod.gas import PressureProfileDPM, GasDensityDPM
         from hod_mod.connection.hod import MoreHODModel
         from hod_mod.fitting.jax_inference import ProductionMultiProbeModel
         pred = make_differentiable_prediction("more15")
         cross = None
         if which_cross:
+            # One DPM gas model → cl_gy (tSZ, via P) and cl_gX (X-ray, via
+            # n_e and T = P/n_e) share the DPM gas parameters.
             cross = HaloModelCrossSpectra(
-                pred, pressure_profile=PressureProfileA10(r_max_over_r500c=3.0, n_gl=24),
+                pred, pressure_profile=PressureProfileDPM(model=2, r_max_over_r200=3.0, n_gl=24),
                 density_profile=GasDensityDPM(model=2, r_max_over_r200=3.0, n_gl=24))
         base_cosmo = {"Omega_m": 0.31, "Omega_b": 0.0493, "h": 0.6736,
                       "n_s": 0.9649, "sigma8": 0.8111}

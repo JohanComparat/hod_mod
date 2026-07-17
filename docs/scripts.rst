@@ -184,6 +184,34 @@ MAP handles the full multi-probe vector cheaply, so prefer projected/abundance
 observables (``xlf``/``n_gal``/``wp_agn``) or a small ``--n-samples`` when
 sampling over angular spectra (see :mod:`hod_mod.fitting.jax_inference`).
 
+Full NUTS posterior of the forecast model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``hod_mod/scripts/forecasts/run_forecast_nuts.py``
+
+The payoff of the differentiable stack: instead of the Gaussian/linear Fisher
+approximation (:mod:`hod_mod.forecast.fisher`), it samples the *actual*
+posterior of :class:`~hod_mod.forecast.forward_jax.ForwardModel` with blackjax
+NUTS, using ``jax.grad`` straight through the forward model.  The P(k) backend
+defaults to the CosmoPower-JAX emulator (``--pk cosmopower``; ``none`` /
+``camb_linear`` selectable for comparison).  Nothing is reimplemented — the
+likelihood, gradient MAP and sampler come from
+:mod:`hod_mod.fitting.jax_inference`.
+
+With ``--compare-fisher`` (default) the run reports the Fisher σ from the same
+Jacobian machinery next to the NUTS σ; in the Gaussian regime they must agree,
+which validates the emulator swap and the sampler at once.
+
+.. code-block:: bash
+
+   JAX_ENABLE_X64=1 JAX_PLATFORMS=cpu HOD_MOD_RESULTS=/path/to/results \
+     python -m hod_mod.scripts.forecasts.run_forecast_nuts \
+     --which wp smf --free cosmo --n-warmup 400 --n-samples 800
+
+Observables default to the projected/abundance set (``wp``/``smf``) — the
+angular spectra unroll their Limber projection into the NUTS trajectory and
+inflate the compile ~10× (same caveat as above).
+
 BGS/LS10 real data — More+2015 HOD
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

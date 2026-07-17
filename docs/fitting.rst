@@ -250,9 +250,38 @@ Usage example
    :members:
    :undoc-members:
 
+.. automodule:: hod_mod.fitting.models
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.fitting.fitters
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.fitting.full_joint
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.fitting.jax_inference
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.fitting.dpm_bands
+   :members:
+   :undoc-members:
+
+.. automodule:: hod_mod.fitting.dpm_priors
+   :members:
+   :undoc-members:
+
 .. automodule:: hod_mod.fitting.planck_prior
    :members:
    :undoc-members:
+
+.. seealso::
+
+   :mod:`hod_mod.fitting.sz_transfer` — the Σ_y transfer kernel, documented on
+   :doc:`pipeline_gal_tsz`.
 
 ---
 

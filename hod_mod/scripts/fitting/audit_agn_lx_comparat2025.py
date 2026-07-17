@@ -42,7 +42,7 @@ import json
 import numpy as np
 from scipy.integrate import trapezoid
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.connection.hod import ZuMandelbaum15HODModel
 from hod_mod.agn.ham import HamAGNModel, _LOG10_LX_MIN_PHYSICAL
@@ -120,7 +120,7 @@ def build_precomputed() -> dict:
     parameters, across every optimizer iteration — none of
     ``scatter_lx``/``log10_A_kcorr``/``log10_A_dc`` touch this precompute.
     """
-    pk_lin = LinearPowerSpectrum()
+    pk_lin = default_pk_linear()
     hmf = make_hmf("tinker08", pk_func=pk_lin.pk_linear)
     hod = ZuMandelbaum15HODModel(hmf, hmf.bias)
     agn = HamAGNModel(pk_lin=pk_lin)

@@ -103,12 +103,132 @@ def sum_stat_root() -> Path:
     """Return the root of the ``sum_stat`` measurement products.
 
     Defaults to the ``sum_stat`` package's ``data`` directory under the user's
-    ``software`` tree; set ``$HOD_MOD_SUMSTAT`` to override.
+    ``software`` tree; set ``$HOD_MOD_SUMSTAT`` to override.  The measurement
+    products are published inside the sum_stat repository, so a plain clone at
+    the default location is sufficient.
     """
     env = os.environ.get("HOD_MOD_SUMSTAT")
     if env:
         return Path(env).expanduser()
     return Path.home() / "software" / "sum_stat" / "data"
+
+
+_MANIFEST_CACHE: dict[Path, dict] = {}
+
+
+def sum_stat_manifest(root: str | os.PathLike | None = None) -> dict:
+    """Return sum_stat's ``summary.yaml`` manifest (parsed, cached per root).
+
+    The manifest indexes every published measurement file — see sum_stat's
+    ``docs/data_products.rst``.  All paths inside it are relative to *root*;
+    the ``sum_stat_file*`` helpers below return them resolved.
+    """
+    root = Path(root).expanduser() if root is not None else sum_stat_root()
+    if root not in _MANIFEST_CACHE:
+        manifest_path = root / "summary.yaml"
+        if not manifest_path.exists():
+            raise FileNotFoundError(
+                f"sum_stat manifest not found: {manifest_path}\n"
+                "Clone https://github.com/JohanComparat/sum_stat at "
+                "~/software/sum_stat (or set $HOD_MOD_SUMSTAT to its data/ "
+                "directory). If you re-measured locally, regenerate the "
+                "manifest with sum_stat's scripts/gen_summary_yaml.py."
+            )
+        import yaml
+
+        _MANIFEST_CACHE[root] = yaml.safe_load(manifest_path.read_text())
+    return _MANIFEST_CACHE[root]
+
+
+def sum_stat_file(
+    sample_id: str, statistic: str = "joint", root: str | os.PathLike | None = None
+) -> Path:
+    """Resolve one published measurement file: ``samples[sample_id][statistic]``.
+
+    Parameters
+    ----------
+    sample_id : str
+        Full sum_stat sample id, e.g.
+        ``"LS10_VLIM_ANY_10.0_Mstar_12.0_0.05_z_0.18_N_2759238"``.
+    statistic : str, default "joint"
+        Manifest file key: ``"joint"``, ``"sz"``, or ``"cap"``.
+    root : path-like, optional
+        Override :func:`sum_stat_root`.
+    """
+    root = Path(root).expanduser() if root is not None else sum_stat_root()
+    samples = sum_stat_manifest(root)["samples"]
+    if sample_id not in samples:
+        raise KeyError(
+            f"unknown sum_stat sample {sample_id!r}; manifest has:\n  "
+            + "\n  ".join(sorted(samples))
+        )
+    files = samples[sample_id]["files"]
+    if statistic not in files:
+        raise KeyError(
+            f"sample {sample_id} has no {statistic!r} file "
+            f"(available: {sorted(files)})"
+        )
+    return root / files[statistic]
+
+
+def _by_threshold(entries: dict, mstar_min: float, what: str) -> dict:
+    matches = [
+        e for e in entries.values()
+        if abs(e["meta"]["mstar_min"] - mstar_min) < 1e-6
+    ]
+    if not matches:
+        avail = sorted(e["meta"]["mstar_min"] for e in entries.values())
+        raise KeyError(f"no {what} sample with mstar_min={mstar_min}; available: {avail}")
+    return matches[0]
+
+
+def sum_stat_file_by_threshold(
+    mstar_min: float, statistic: str = "joint", root: str | os.PathLike | None = None
+) -> Path:
+    """Resolve a BGS VLIM measurement by its M* threshold (e.g. ``10.0``).
+
+    Deterministic manifest lookup — replaces the historical
+    ``sorted(glob(...))[-1]`` pattern, whose pick silently depended on
+    lexicographic filename order.
+    """
+    root = Path(root).expanduser() if root is not None else sum_stat_root()
+    entry = _by_threshold(sum_stat_manifest(root)["samples"], mstar_min, "BGS")
+    files = entry["files"]
+    if statistic not in files:
+        raise KeyError(
+            f"BGS mstar_min={mstar_min} has no {statistic!r} file (available: {sorted(files)})"
+        )
+    return root / files[statistic]
+
+
+def sum_stat_mass_bin_files(
+    root: str | os.PathLike | None = None,
+) -> list[tuple[float, float, Path]]:
+    """Return the thin-mass-bin files as sorted ``(mstar_lo, mstar_hi, path)``."""
+    root = Path(root).expanduser() if root is not None else sum_stat_root()
+    out = [
+        (b["mstar_lo"], b["mstar_hi"], root / b["file"])
+        for entry in sum_stat_manifest(root)["mass_bins"].values()
+        for b in entry["bins"]
+    ]
+    return sorted(out)
+
+
+def sum_stat_mock_file(
+    mstar_min: float, statistic: str = "wp", root: str | os.PathLike | None = None
+) -> Path:
+    """Resolve an Uchuu mock measurement by M* threshold.
+
+    ``statistic`` is one of ``"joint"``, ``"smf"``, ``"wp"``, ``"wtheta"``.
+    """
+    root = Path(root).expanduser() if root is not None else sum_stat_root()
+    entry = _by_threshold(sum_stat_manifest(root)["mocks"], mstar_min, "mock")
+    files = entry["files"]
+    if statistic not in files:
+        raise KeyError(
+            f"mock mstar_min={mstar_min} has no {statistic!r} file (available: {sorted(files)})"
+        )
+    return root / files[statistic]
 
 
 def cache_root() -> Path:

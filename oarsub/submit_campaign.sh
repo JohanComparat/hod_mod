@@ -21,7 +21,12 @@ PROJECT="${1:?usage: submit_campaign.sh <PROJECT> <family> [--devel]}"
 FAMILY="${2:?family ∈ benchmarks_map|benchmarks_mcmc|production|forecasts|comparat2025|full_joint|all}"
 DEVEL="${3:-}"
 
-WRAP="./oarsub/run_job.sh"
+# VTAG selects the campaign (tree + pinned P(k) backend). It is resolved HERE, in
+# the submitting shell, and forwarded as an ARGUMENT: OAR does not propagate the
+# environment to the node, so exporting it would be silently dropped.
+VTAG="${VTAG:-v0.31}"
+echo "[submit] VTAG=$VTAG"
+WRAP="./oarsub/run_job.sh --vtag ${VTAG}"
 declare -A LFLAG=(
   [benchmarks_map]="/nodes=1/core=8,walltime=02:00:00"
   [benchmarks_mcmc]="/nodes=1/core=8,walltime=08:00:00"
@@ -56,15 +61,15 @@ case "$FAMILY" in
   production) submit_array production "-t besteffort -t idempotent" ;;   # resumable chains
   comparat2025)
     for s in gas-shape gas-temp gas-full agn-occ agn-lum; do
-      echo "[submit] comparat2025 $s"; oarsub --project "$PROJECT" -S "./oarsub/fit_comparat2025_${s//-/_}.sh"
+      echo "[submit] comparat2025 $s"; oarsub --project "$PROJECT" -S "./oarsub/fit_comparat2025_${s//-/_}.sh ${VTAG}"
     done ;;
   full_joint)
-    oarsub --project "$PROJECT" -S ./oarsub/fit_bgs_full_joint_fixedzm15_mcmc.sh
-    oarsub --project "$PROJECT" -S ./oarsub/fit_bgs_full_joint_allparams_mcmc.sh ;;
+    oarsub --project "$PROJECT" -S "./oarsub/fit_bgs_full_joint_fixedzm15_mcmc.sh ${VTAG}"
+    oarsub --project "$PROJECT" -S "./oarsub/fit_bgs_full_joint_allparams_mcmc.sh ${VTAG}" ;;
   all)
-    "$0" "$PROJECT" benchmarks_map;  "$0" "$PROJECT" benchmarks_mcmc
-    "$0" "$PROJECT" production;       "$0" "$PROJECT" forecasts
-    "$0" "$PROJECT" comparat2025;     "$0" "$PROJECT" full_joint ;;
+    VTAG="$VTAG" "$0" "$PROJECT" benchmarks_map;  VTAG="$VTAG" "$0" "$PROJECT" benchmarks_mcmc
+    VTAG="$VTAG" "$0" "$PROJECT" production;       VTAG="$VTAG" "$0" "$PROJECT" forecasts
+    VTAG="$VTAG" "$0" "$PROJECT" comparat2025;     VTAG="$VTAG" "$0" "$PROJECT" full_joint ;;
   *) echo "unknown family: $FAMILY" >&2; exit 2 ;;
 esac
 echo "monitor:  oarstat -u \$USER   |   logs in oarsub/logs/"

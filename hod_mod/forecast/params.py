@@ -46,8 +46,8 @@ _FIDUCIAL_DEFAULT = {
     "beta_sat": 0.9, "bcut": 0.86, "beta_cut": 0.41, "alpha_sat": 1.0,   # _FIXED_HOD
     "beta_b": 1.5, "log10_M_eta": 13.0, "beta_eta": 1.5,                 # _FIXED_BARYON
     "alpha_in_gas": 0.9, "alpha_tr_gas": 2.0,                            # gas emissivity slopes
-    "p0_pressure": 8.403, "c500_pressure": 1.177, "gamma_pressure": 0.3081,
-    "alpha_pressure": 1.0510, "beta_out_pressure": 5.4905,               # A10 GNFW
+    "p03_pressure": 1.627e-6, "c_dpm_pressure": 2.772, "alpha_in_pressure": 0.3,
+    "alpha_tr_pressure": 1.3, "alpha_out_pressure": 4.1,                 # DPM Model 2 GNFW
     "agn_rho": 0.0, "agn_sig_mstar": 0.20,                               # Powell Model 2 internals
     # --- tier-2 z-evolution slopes (per ln(1+z), pivot z=0.3): fiducial 0 =
     # the tier-1 no-evolution model (self-similar E(z) scalings untouched).
@@ -136,8 +136,8 @@ BROAD_PRIOR_SIGMA = {
     "beta_sat": 1.0, "bcut": 5.0, "beta_cut": 1.0, "alpha_sat": 0.5,
     "beta_b": 1.0, "log10_M_eta": 1.0, "beta_eta": 1.0,
     "alpha_in_gas": 0.5, "alpha_tr_gas": 1.0,
-    "p0_pressure": 4.0, "c500_pressure": 0.6, "gamma_pressure": 0.3,
-    "alpha_pressure": 0.5, "beta_out_pressure": 2.0,
+    "p03_pressure": 1.627e-6, "c_dpm_pressure": 1.4, "alpha_in_pressure": 0.3,
+    "alpha_tr_pressure": 0.6, "alpha_out_pressure": 2.0,
     "agn_rho": 0.5, "agn_sig_mstar": 0.15,
     # Tier-2 z-evolution slopes — broad (an O(1) change per e-fold of 1+z).
     "lg_m1h_zs": 2.0, "lg_m0star_zs": 2.0, "sigma_lnmstar_zs": 2.0,
@@ -196,9 +196,9 @@ PARAM_LATEX = {
     "beta_b": r"$\beta_b$", "log10_M_eta": r"$\log_{10}M_\eta$",
     "beta_eta": r"$\beta_\eta$",
     "alpha_in_gas": r"$\alpha_{\rm in}$", "alpha_tr_gas": r"$\alpha_{\rm tr}$",
-    "p0_pressure": r"$P_0$", "c500_pressure": r"$c_{500}$",
-    "gamma_pressure": r"$\gamma_P$", "alpha_pressure": r"$\alpha_P$",
-    "beta_out_pressure": r"$\beta_{P,\rm out}$",
+    "p03_pressure": r"$P_{0.3}$", "c_dpm_pressure": r"$c_{\rm DPM}$",
+    "alpha_in_pressure": r"$\alpha_{\rm in}^P$", "alpha_tr_pressure": r"$\alpha_{\rm tr}^P$",
+    "alpha_out_pressure": r"$\alpha_{\rm out}^P$",
     "agn_rho": r"$\rho_{\rm BH}$", "agn_sig_mstar": r"$\sigma_{M_*}^{\rm BH}$",
     # Tier-2 z-evolution slopes.
     "lg_m1h_zs": r"$\partial_z\lg M_1$", "lg_m0star_zs": r"$\partial_z\lg M_{0*}$",
@@ -262,9 +262,9 @@ SECTORS = {
              "eta", "fc", "bsat", "beta_sat", "bcut", "beta_cut", "alpha_sat",
              "lg_m1h_zs", "lg_m0star_zs", "sigma_lnmstar_zs"],
     "gas": ["lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max",
-            "alpha_in_gas", "alpha_tr_gas", "beta_pressure", "p0_pressure",
-            "c500_pressure", "gamma_pressure", "alpha_pressure",
-            "beta_out_pressure", "lx_zs", "kt_zs",
+            "alpha_in_gas", "alpha_tr_gas", "beta_pressure", "p03_pressure",
+            "c_dpm_pressure", "alpha_in_pressure", "alpha_tr_pressure",
+            "alpha_out_pressure", "lx_zs", "kt_zs",
             "t_prof_slope", "z_gas_norm", "z_gas_mslope", "z_gas_zs"],
     "baryon": ["log10_M_pivot", "log10_eta_min", "beta_b", "log10_M_eta",
                "beta_eta", "eps_sn", "eta_w_norm", "alpha_w"],

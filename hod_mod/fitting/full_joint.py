@@ -33,7 +33,7 @@ from pathlib import Path
 import numpy as np
 import h5py
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.connection.hod import ZuMandelbaum15HODModel
@@ -139,7 +139,7 @@ class JointFull:
 
         # --- galaxy model (ZM15 + full halo model) -------------------------
         self._log("[joint] building galaxy model ...", flush=True)
-        pk = LinearPowerSpectrum()
+        pk = default_pk_linear()
         self.hmf = make_hmf(hmf_backend, pk_func=pk.pk_linear)
         hp = HaloProfile({"H0": _THETA_COSMO["h"] * 100.0, "Om0": _THETA_COSMO["Omega_m"],
                           "Ob0": _THETA_COSMO["Omega_b"], "ns": _THETA_COSMO["n_s"],
@@ -158,7 +158,8 @@ class JointFull:
             self._log("[joint] building X-ray transfer grid (cached) ...", flush=True)
             XB._apply_candidate("baseline")
             self._xb_params = XB._PARAMS
-            G_grid, log10_m500c, ez, agn_dc1, bd, mask = XB._precompute(sample, hmf_backend)
+            (G_grid, log10_m500c, ez, agn_dc1, bd, mask,
+             m200, r200) = XB._precompute(sample, hmf_backend)
             err = np.sqrt(bd["wtheta_err"] ** 2 + (f_sys * np.abs(bd["wtheta"])) ** 2)
             from scipy.interpolate import RegularGridInterpolator
             G_interp = RegularGridInterpolator(
@@ -166,6 +167,10 @@ class JointFull:
                 G_grid.reshape(XB._P2_GRID.size, XB._RMAX_GRID.size, -1),
                 method="linear", bounds_error=False, fill_value=None)
             cool_bands, cool_broad = XB._band_cooling()
+            # Native-DPM J_b(T_0, Z | p2, r_max) — the X-ray leg now shares
+            # {n_e,0.3, beta_n, P_0.3, beta_P} with the tSZ Sigma_y leg.
+            j_grid, v_grid = XB._j_grid(sample)
+            j_interp, v_interp = XB._make_j_interp(j_grid, v_grid)
             self._S = dict(G_interp=G_interp, nth=bd["theta_arcsec"].size,
                            log10_m500c=log10_m500c, ez=ez, agn_dc1=agn_dc1,
                            wtheta=bd["wtheta"], err=err, mask=mask,
@@ -174,7 +179,9 @@ class JointFull:
                            cool_broad=cool_broad, kT_lo=0.09, kT_hi=19.0,
                            c_obs_total=XB.J._c_obs_total(sample),
                            srx=float(_load_xray_broad(sample)["beckground"][0]),
-                           n_pts=int(mask.sum()) * XB._NB, c_total=1.0)
+                           n_pts=int(mask.sum()) * XB._NB, c_total=1.0,
+                           m200=m200, r200=r200, h=float(_THETA_COSMO["h"]),
+                           J_interp=j_interp, V_interp=v_interp)
             c_total, _ = XB._anchor({sample: self._S}, sample)
             self._S["c_total"] = c_total
             self._log(f"[joint]   c_total anchor = {c_total:.3e}", flush=True)

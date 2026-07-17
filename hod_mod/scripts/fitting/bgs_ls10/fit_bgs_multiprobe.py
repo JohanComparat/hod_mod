@@ -83,7 +83,6 @@ BGS HOD priors (`arXiv:2512.15960 <https://arxiv.org/abs/2512.15960>`_)
 from __future__ import annotations
 
 import argparse
-import glob
 import json
 import os
 import time
@@ -94,7 +93,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from hod_mod.core.beyond_linear_bias import BeyondLinearBiasMead21
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.connection.hod import (
@@ -285,20 +284,34 @@ HOD_REGISTRY = {
 
 
 def _find_data_file(mstar_lo: float, info: dict, sum_stat_dir: str) -> str:
-    """Locate the BGS joint HDF5 file for the given mass bin by glob."""
+    """Locate the BGS joint HDF5 file for the given mass bin.
+
+    Resolved through sum_stat's ``summary.yaml`` manifest — a deterministic
+    lookup, unlike the historical ``sorted(glob(...))[-1]`` whose pick
+    depended on lexicographic filename order.  Falls back to that glob only
+    when *sum_stat_dir* carries no manifest (e.g. a locally re-measured copy).
+    """
+    from hod_mod.paths import sum_stat_file_by_threshold
+
+    try:
+        return str(sum_stat_file_by_threshold(mstar_lo, "joint", root=sum_stat_dir))
+    except FileNotFoundError:
+        pass
+    import glob
+
     mlo = f"{mstar_lo:.1f}"
     mhi = f"{info['mstar_hi']:.1f}"
-    subdir = os.path.join(sum_stat_dir, f"BGS_Mstar{mlo}")
     pattern = os.path.join(
-        subdir,
+        sum_stat_dir, f"BGS_Mstar{mlo}",
         f"LS10_VLIM_ANY_{mlo}_Mstar_{mhi}_*_joint_*-sys-comb.h5",
     )
     matches = sorted(glob.glob(pattern))
     if not matches:
         raise FileNotFoundError(
-            f"No joint BGS file found matching pattern:\n  {pattern}"
+            f"No summary.yaml manifest in {sum_stat_dir} and no joint BGS file "
+            f"matching pattern:\n  {pattern}"
         )
-    return matches[-1]  # take the most recent if multiple exist
+    return matches[-1]
 
 
 # ---------------------------------------------------------------------------
@@ -599,7 +612,7 @@ class MultiProbeFitter:
         self.n_burnin            = n_burnin
         self.output_dir          = output_dir
 
-        self._pk_lin = LinearPowerSpectrum()
+        self._pk_lin = default_pk_linear()
         self.cosmo_default = self._pk_lin.default_cosmology()
 
         self._load_data(data_file, rp_min_wp, rp_max_wp, rp_min_hsc, rp_min_des, rp_max_esd, esd_sn_min)

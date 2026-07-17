@@ -33,7 +33,7 @@ from pathlib import Path
 import numpy as np
 import h5py
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.connection.hod import ZuMandelbaum15HODModel
@@ -123,7 +123,7 @@ def _load_knn() -> dict | None:
 def build_full_model():
     """Return (fhmp, cross, powell_at_z, hmf, hod_params).  powell_at_z(z) caches
     a PowellAGNModel per redshift (default Powell/Ananna centres)."""
-    pk = LinearPowerSpectrum()
+    pk = default_pk_linear()
     hmf = make_hmf("tinker08", pk_func=pk.pk_linear)
     hp = HaloProfile(_COLOSSUS, cm_relation="diemer19")
     hod = ZuMandelbaum15HODModel(hmf, hmf.bias)

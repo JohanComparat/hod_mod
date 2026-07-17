@@ -210,7 +210,10 @@ class ProductionMultiProbeModel:
     cross : HaloModelCrossSpectra | None
         Provides ``angular_cl_gy`` (needs a pressure profile) and/or
         ``angular_cl_gX`` (needs a density/gas profile).  Required if ``cl_gy``
-        or ``cl_gX`` is requested.
+        or ``cl_gX`` is requested.  Build it with a single DPM gas model
+        (``PressureProfileDPM`` + ``GasDensityDPM``, same ``model=``) so that the
+        tSZ ``cl_gy`` (pressure ``P``) and the X-ray ``cl_gX`` (density ``n_e``
+        and temperature ``T = P/n_e``) share the DPM gas parameters.
     z : float — effective redshift for the projected observables.
     rp_wp, rp_ds, ell : arrays — the observable abscissae.
     z_grid, nz_g : arrays — galaxy n(z) for the Limber projection.

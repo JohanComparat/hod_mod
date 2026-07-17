@@ -127,22 +127,40 @@ def load_thresholds(data_dir: str, surveys: list[str], rp_min: float, rp_max: fl
                     ng_frac_err_floor: float, log=print) -> tuple[list[dict], float]:
     """Load every threshold-sample HDF5 under *data_dir* into fit dictionaries.
 
-    Globs ``<data_dir>/BGS_Mstar*/LS10_VLIM_ANY_*_joint_*comb.h5``.  Each sample
+    The samples are resolved through sum_stat's ``summary.yaml`` manifest —
+    every BGS sample publishing a joint file (thresholds with only sz/cap
+    products carry no joint entry and are skipped) — falling back to globbing
+    ``<data_dir>/BGS_Mstar*/LS10_VLIM_ANY_*_joint_smf*comb.h5`` when the
+    manifest is absent (e.g. a locally re-measured copy).  Each sample
     contributes ``wp(rp)``, an integrated number density ``n(>thr)`` from its SMF,
     and (if *surveys* requested) per-survey ESD for plotting / optional fitting.
     """
     from hod_mod.data_io.sum_stat_reader import SumStatReader
+    from hod_mod.paths import sum_stat_manifest
 
-    # Threshold-sample files carry the SMF in their joint vector and are named
-    # ``..._joint_smf-...``; the mass-BIN campaign files are ``..._joint_nbar-...``
-    # (and have no smf slice), so the ``smf`` glob excludes them cleanly even when
-    # both live under the same data root (e.g. the BGS_Mstar10_massbins dir).
-    paths = sorted(glob.glob(os.path.join(
-        data_dir, "BGS_Mstar*", "LS10_VLIM_ANY_*_joint_smf*comb.h5")))
+    # Manifest-first: take every joint threshold file from summary.yaml; fall
+    # back to globbing so an arbitrary directory of threshold files keeps
+    # working.
+    paths: list[str] = []
+    try:
+        paths = sorted(
+            os.path.join(data_dir, s["files"]["joint"])
+            for s in sum_stat_manifest(data_dir)["samples"].values()
+            if "joint" in s["files"])
+    except FileNotFoundError:
+        pass
+    if not paths:
+        # Threshold-sample files carry the SMF in their joint vector and are named
+        # ``..._joint_smf-...``; the mass-BIN campaign files are ``..._joint_nbar-...``
+        # (and have no smf slice), so the ``smf`` glob excludes them cleanly even when
+        # both live under the same data root (e.g. the BGS_Mstar10_massbins dir).
+        paths = sorted(glob.glob(os.path.join(
+            data_dir, "BGS_Mstar*", "LS10_VLIM_ANY_*_joint_smf*comb.h5")))
     if not paths:
         raise FileNotFoundError(
-            f"No 'BGS_Mstar*/LS10_VLIM_ANY_*_joint_smf*comb.h5' files found under "
-            f"{data_dir}. Point --data-dir at the parent of the BGS_Mstar* dirs.")
+            f"No BGS threshold samples found under {data_dir} (neither via the "
+            "summary.yaml manifest nor by 'BGS_Mstar*/LS10_VLIM_ANY_*_joint_smf"
+            "*comb.h5' glob). Point --data-dir at the parent of the BGS_Mstar* dirs.")
 
     samples: list[dict] = []
     h_file = None

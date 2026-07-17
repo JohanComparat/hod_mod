@@ -305,12 +305,20 @@ class PressureProfileDPM:
         r200_arr: np.ndarray,
         z: float,
         theta_cosmo: dict,
+        c200_arr: np.ndarray | None = None,
     ) -> np.ndarray:
         """DPM pressure-profile Fourier transform ỹ(k|M) in (Mpc/h)².
 
         Same interface and unit convention as
         :meth:`PressureProfileA10.pressure_uk`.  The tSZ Compton-y prefactor
         σ_T/(m_e c²) × (Mpc_cm/h) is applied assuming P_0.3 is in keV cm⁻³.
+
+        The ``c200_arr`` argument is accepted for signature compatibility with
+        :meth:`PressureProfileA10.pressure_uk` /
+        :meth:`PressureProfileBattaglia12.pressure_uk` (so DPM is a drop-in for
+        the ``pressure_profile`` slot of
+        :class:`~hod_mod.observables.cross_spectra.HaloModelCrossSpectra`) but is
+        unused — the DPM scale radius is R₂₀₀/c_DPM with c_DPM fixed at 2.772.
 
         Parameters
         ----------
@@ -319,6 +327,7 @@ class PressureProfileDPM:
         r200_arr : (NM,) [Mpc/h]
         z        : redshift
         theta_cosmo : dict with keys 'h', 'Omega_m'
+        c200_arr : (NM,) unused (accepted for signature compatibility)
 
         Returns
         -------

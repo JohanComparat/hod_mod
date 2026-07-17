@@ -167,8 +167,8 @@ class HODAgnModel:
 
         # -- Power spectrum / HMF
         if pk_lin is None:
-            from hod_mod.core.power_spectrum import LinearPowerSpectrum
-            pk_lin = LinearPowerSpectrum()
+            from hod_mod.core.power_spectrum import default_pk_linear
+            pk_lin = default_pk_linear()
         # Reuse the caller's HMF (e.g. the CSST emulator used by the fit) for a
         # consistent abundance-match; fall back to Tinker08 only if none given.
         if hmf is not None:

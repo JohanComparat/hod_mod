@@ -21,6 +21,8 @@ dependencies:
   - ipython
   # Utilities
   - tqdm
+  # OS-correct results/cache directories (hod_mod.paths.results_root/cache_root)
+  - platformdirs
   # JAX ecosystem
   - jax
   - jaxlib
@@ -32,12 +34,24 @@ dependencies:
   - numpydoc
   - pip
   - pip:
-    # Linear power spectrum (Lewis, Challinor & Lasenby 2000)
+    # Linear power spectrum (Lewis, Challinor & Lasenby 2000).  Still required:
+    # it is the reference the emulator is validated against, is the backend
+    # behind HOD_MOD_PK_BACKEND=camb, and pk_camb_ratio.py needs it by design.
     - camb
+    # DEFAULT linear P(k): CAMB-accurate (<0.1% in shape) JAX-differentiable
+    # neural emulator (Piras & Spurio Mancini 2023).  Core dependency since it
+    # became the default backend — without it ForwardModel/default_pk_linear()
+    # raise ImportError.  The ~81 MB wheel BUNDLES its trained networks, so no
+    # download happens at runtime (compute nodes need no outbound network);
+    # install it on a node that can reach PyPI (e.g. a cluster login node).
+    - cosmopower-jax
     # Halo profiles, concentration–mass relations (Diemer 2018, ApJS..239...35D)
     - colossus
     # MCMC sampling
     - emcee
+    # Gradient-based NUTS sampling (fitting.jax_inference.run_nuts and
+    # hod_mod/scripts/forecasts/run_forecast_nuts.py)
+    - blackjax
     # On-demand Zenodo data fetcher (benchmark data + curated results)
     - pooch
     # Non-linear P(k) emulator — Aletheia (Sanchez 2025, arXiv:2511.13826)

@@ -31,8 +31,8 @@ import numpy as np
 import scipy.optimize as opt
 import jax.numpy as jnp
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
-from hod_mod.paths import results_root
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
+from hod_mod.paths import results_root, sum_stat_file_by_threshold, sum_stat_root
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.core.nonlinear import (
@@ -52,15 +52,17 @@ from hod_mod.data_io.sum_stat_reader import SumStatReader
 # Data file + shared constants
 # ---------------------------------------------------------------------------
 
-_DATA_FILE = os.path.abspath(
-    os.path.join(
-        os.path.dirname(__file__),
-        "..", "..", "..", "..", "sum_stat", "data",
-        "BGS_Mstar10.0",
-        "LS10_VLIM_ANY_10.0_Mstar_12.0_0.05_z_0.18_N_2759238_"
-        "joint_smf-wp-esd_hsc-esd_des-esd_kids-wtheta-knn-sys-comb.h5",
+# BGS M*>10 joint measurement, resolved through sum_stat's summary.yaml
+# manifest; falls back to the published filename under sum_stat_root() when
+# the manifest is absent (e.g. a locally re-measured copy).
+try:
+    _DATA_FILE = str(sum_stat_file_by_threshold(10.0, "joint"))
+except FileNotFoundError:
+    _DATA_FILE = str(
+        sum_stat_root() / "BGS_Mstar10.0"
+        / "LS10_VLIM_ANY_10.0_Mstar_12.0_0.05_z_0.18_N_2759238_"
+          "joint_smf-wp-esd_hsc-esd_des-esd_kids-wtheta-knn-sys-comb.h5"
     )
-)
 
 _THETA = LinearPowerSpectrum.default_cosmology()
 _COLOSSUS = {
@@ -380,7 +382,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     print("\nBuilding shared pipeline (HMF + halo profile)…")
-    pk_lin = LinearPowerSpectrum()
+    pk_lin = default_pk_linear()
     hmf    = make_hmf("csst")
     hp     = HaloProfile(_COLOSSUS, cm_relation="diemer19")
     print("  Done.")

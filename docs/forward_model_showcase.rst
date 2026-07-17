@@ -198,7 +198,8 @@ ZM16Q = ZuMandelbaum16Quenching.
      - ✓
 
 The cosmological steps shared by all models are:
-:class:`~hod_mod.core.power_spectrum.LinearPowerSpectrum` ``.pk_linear()`` (CAMB) →
+:func:`~hod_mod.core.power_spectrum.default_pk_linear` ``.pk_linear()``
+(CosmoPower-JAX emulator by default; CAMB via ``HOD_MOD_PK_BACKEND=camb``) →
 :class:`~hod_mod.core.halo_mass_function.HaloMassFunction` ``.dndm()`` / ``.bias()`` →
 :class:`~hod_mod.core.beyond_linear_bias.BeyondLinearBiasMead21` (beyond-linear :math:`\beta^{\rm NL}`) →
 :class:`~hod_mod.core.halo_profiles.HaloProfile` ``.concentration()`` / ``nfw_uk()`` / ``einasto_uk()`` →

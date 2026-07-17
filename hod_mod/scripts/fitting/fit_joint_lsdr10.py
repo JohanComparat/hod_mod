@@ -69,7 +69,7 @@ from scipy.integrate import trapezoid
 from scipy.optimize import minimize
 from scipy.special import j0
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum
+from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.gas import GasDensityDPM
@@ -141,7 +141,22 @@ _PSF_FWHM = 30.0
 # ---------------------------------------------------------------------------
 
 def _sum_stat_path(label: str) -> Path:
+    """Locate the joint HDF5 file for the given sample.
+
+    Resolved through sum_stat's ``summary.yaml`` manifest by the sample's
+    stellar-mass threshold — a deterministic lookup, unlike the historical
+    ``sorted(glob(...))[0]`` whose pick depended on lexicographic filename
+    order.  Falls back to that glob only when the sum_stat root carries no
+    manifest (e.g. a locally re-measured copy).
+    """
     s = SAMPLES[label]
+    from hod_mod.paths import sum_stat_file_by_threshold
+
+    try:
+        return sum_stat_file_by_threshold(
+            s["log10ms_min"], "joint", root=_SUM_STAT_DIR)
+    except FileNotFoundError:
+        pass
     d = _SUM_STAT_DIR / s["sum_stat_dir"]
     matches = sorted(d.glob(f"*_N_{s['N']:07d}_joint_smf-wp-esd*.h5"))
     if not matches:
@@ -241,9 +256,12 @@ class _Infrastructure:
     """One-time build of the halo model stack."""
 
     def __init__(self):
-        print("Building halo model infrastructure (CAMB + HMF) ...", flush=True)
         t0 = time.time()
-        pk_lin    = LinearPowerSpectrum()
+        pk_lin    = default_pk_linear()
+        # Name the actual backend: the default moved CAMB -> CosmoPower emulator,
+        # which shifts P(k) ~+2.5% in amplitude, so the log must not hard-code it.
+        print(f"Building halo model infrastructure (P(k)[{type(pk_lin).__name__}] "
+              f"+ HMF) ...", flush=True)
         hmf       = make_hmf("csst")
         hp        = HaloProfile(_COLOSSUS, cm_relation="diemer19")
         hod       = MoreHODModel(hmf, hmf.bias)

@@ -27,7 +27,14 @@ set -euo pipefail
 # --- user configuration (edit for your GRICAD account) ----------------------
 REPO="${HOME}/software/hod_mod"                       # repo location on the cluster
 CONDA_ENV="hod_mod"                                   # conda/mamba env name
-OUT_DIR="${HOME}/data/hod_mod_results/fits/comparat2025_fixedZM15_agn-lum_v0.3"  # v0.3 re-run
+# Optional campaign tag as $1: OAR does NOT propagate the submitting shell's
+# environment to the node, so `VTAG=v0.3 oarsub -S ./script.sh` would silently
+# run as the default.  Pass it as an argument instead:
+#   oarsub --project P -S "./oarsub/fit_comparat2025_agn_lum.sh v0.3"
+VTAG="${1:-${VTAG:-v0.31}}"
+source "$(dirname "${BASH_SOURCE[0]}")/_campaign_env.sh"
+campaign_require_zm15_json
+OUT_DIR="${HOD_MOD_RESULTS}/fits/comparat2025_fixedZM15_agn-lum_${VTAG}"
 
 # --- environment ------------------------------------------------------------
 # GRICAD provides conda via /applis; activate the project env.
@@ -57,7 +64,7 @@ mkdir -p oarsub/logs "${OUT_DIR}"
 echo "host=$(hostname)  job=${OAR_JOB_ID:-local}  cores=${NCORES}  start=$(date -Is)"
 
 python -m hod_mod.scripts.fitting.fit_comparat2025 \
-    --sample S1 --fix-zm15 --mode mcmc \
+    --sample S1 --fix-zm15 "${ZM15_JSON}" --mode map \
     --free-params agn-lum --agn-model ham \
     --out-dir "${OUT_DIR}"
 

@@ -29,8 +29,11 @@ jobs:
           pip install numpy scipy astropy matplotlib h5py pandas pyyaml tqdm
           pip install pooch platformdirs
           pip install "jax[cpu]"
-          pip install emcee
+          pip install emcee blackjax
           pip install camb colossus
+          # Default linear P(k) backend since 0.3.1 — ForwardModel and
+          # default_pk_linear() raise ImportError without it (no fallback).
+          pip install cosmopower-jax
           pip install pytest pytest-cov
 
       - name: Install package (no-deps to skip classy/AletheiaCosmo)
