@@ -89,9 +89,21 @@ _MODEL_LABELS_P = {
     3: r"DPM m.3 ($\beta^P=0.92$)",
 }
 
-print("Building APEC cooling table (takes ~10 s) ...")
-_APEC = ApecCoolingTable(emin=0.5, emax=2.0, n_T=40, n_Z=10)
-print("  APEC table ready.")
+# The APEC cooling table costs ~10 s and needs a real soxs, so it is built
+# lazily: this module's helpers (_make_density_variant, _r200, ...) are
+# imported by most fitting scripts and by autodoc (where soxs is mocked),
+# and none of those should pay for — or crash on — a table they never call.
+_APEC_CACHE = None
+
+
+def _get_apec():
+    """Build (once) and return the shared 0.5-2 keV ApecCoolingTable."""
+    global _APEC_CACHE
+    if _APEC_CACHE is None:
+        print("Building APEC cooling table (takes ~10 s) ...")
+        _APEC_CACHE = ApecCoolingTable(emin=0.5, emax=2.0, n_T=40, n_Z=10)
+        print("  APEC table ready.")
+    return _APEC_CACHE
 
 
 # ---------------------------------------------------------------------------
@@ -459,7 +471,7 @@ def fig_mass_scaling():
     ax = axes[1, 1]
     T_grid = np.logspace(-1.5, 1.5, 200)
     for Z_val, ls, color in [(0.1, ":", "C3"), (0.3, "--", "C2"), (1.0, "-", "C0")]:
-        Lambda = _APEC(T_grid, np.full_like(T_grid, Z_val))
+        Lambda = _get_apec()(T_grid, np.full_like(T_grid, Z_val))
         ax.loglog(T_grid, Lambda, ls=ls, lw=2, color=color,
                   label=rf"$Z={Z_val}\,Z_\odot$ (APEC 0.5–2 keV)")
     ax.set_xlabel(r"$T$ [keV]")
@@ -612,7 +624,7 @@ def _integrate_profile(m200, r200, r500, z, pp, dp, met, n_r=250, T_min=None):
     Z  = met.metallicity_3d(r_h, r200)
 
     T      = temperature_from_profiles(Pe, ne)     # keV
-    Lambda = _APEC(T, Z)
+    Lambda = _get_apec()(T, Z)
 
     xray_w = np.where(T > T_min, ne**2, 0.0) if T_min is not None else ne**2
     r2c    = r_cm**2
@@ -845,7 +857,7 @@ def _integrate_profile_pcorr(m200, r200, r500, z, pp, dp, met,
     Z  = met.metallicity_3d(r_h, r200)
 
     T      = temperature_from_profiles(Pe, ne)
-    Lambda = _APEC(T, Z)
+    Lambda = _get_apec()(T, Z)
 
     ne2 = ne**2
     r2c = r_cm**2
