@@ -2,7 +2,12 @@
 # backends (chain.h5), so submit this array with `-t besteffort -t idempotent`
 # for auto-restart on walltime kill (see submit_campaign.sh).  Out-dirs carry a
 # _v0.3 suffix so the 0.2.3 results survive for the before/after comparison.
-# $DATA_BGS / $HOD_MOD_SUMSTAT / $RESULTS are defined in run_job.sh.
-python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint --data-dir "$DATA_BGS" --rp-min 0.5 --rp-max 20 --surveys --mode both --n-walkers 32 --n-burnin 500 --n-steps 2000 --out-dir "$RESULTS/bgs_zm15_joint_wp_ngal_${VTAG}"
-python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_thresh_joint --data-dir "$HOD_MOD_SUMSTAT" --surveys HSC DES KIDS --fit-esd --mode both --out-dir "$RESULTS/bgs_zm15_thresh_joint_${VTAG}"
-python -m hod_mod.scripts.fitting.fit_joint_lsdr10 --sample S1 --mode both --out-dir "$RESULTS/bgs_comparat2025_${VTAG}"
+#
+# @TOKENS@, not $VARs: OAR's launcher shell-expands the param line BEFORE
+# run_job.sh receives it, where $DATA_BGS/$RESULTS/$VTAG are undefined — the
+# 2026-07-16 campaign crashed all 8 production jobs with empty --data-dir /
+# --out-dir=/bgs_... (argparse error / PermissionError on '/').  run_job.sh
+# substitutes the @TOKENS@ itself, immune to any number of quoting layers.
+python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint --data-dir "@DATA_BGS@" --rp-min 0.5 --rp-max 20 --surveys --mode both --n-walkers 32 --n-burnin 500 --n-steps 2000 --out-dir "@RESULTS@/bgs_zm15_joint_wp_ngal_@VTAG@"
+python -m hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_thresh_joint --data-dir "@HOD_MOD_SUMSTAT@" --surveys HSC DES KIDS --fit-esd --mode both --out-dir "@RESULTS@/bgs_zm15_thresh_joint_@VTAG@"
+python -m hod_mod.scripts.fitting.fit_joint_lsdr10 --sample S1 --mode both --out-dir "@RESULTS@/bgs_comparat2025_@VTAG@"

@@ -159,12 +159,15 @@ fragmentation) is the sweet spot. Walltimes follow from ~18 s/eval after a
 ~120 s first JIT trace, with margin because MAP is **not resumable** (no
 `besteffort`/`idempotent`). Max Dahu walltime is 48 h; all jobs fit.
 
-Known issue found during calibration: **the full-APEC gas path produced NaN**
-(activating pressure+metallicity+cooling made the whole `C_ℓ^{gX}` non-finite
-— a downstream normalisation bug; both emissivity functions are individually
-finite). The gas presets therefore use the robust density-only path
-(`emissivity_uk ∝ n_e²`); the pressure/temperature/metallicity params of
-`gas-temp`/`gas-full` are inert until that normalisation is fixed.
+Historical note: during the first calibration **the full-APEC gas path
+produced NaN** (float32 underflow of Λ~1e-24 inside `C_ℓ^{gX}`), and the gas
+presets were temporarily pinned to the density-only path. That is **fixed**
+(float32-safe `safe_log` floor + the `emissivity_full_uk / Λ_ref`
+renormalisation + a non-finite C_ℓ sanitizer in `fit_comparat2025`): the
+`gas-temp`/`gas-full` presets now run the full DPM stack and their
+pressure/temperature/metallicity parameters are live (they move `w_θ` by tens
+of %). Guarded by the `cross_gX_full` regression test in
+`tests/test_cross_spectra.py`.
 
 > **Security note.** Early campaign commits briefly carried live
 > `OAR_API_TOKEN` JWTs in this file. The token strings were scrubbed from the

@@ -82,11 +82,26 @@ export MKL_NUM_THREADS="${NCORES}"
 export XLA_FLAGS="--xla_cpu_multi_thread_eigen=true"
 export JAX_PLATFORMS=cpu
 export JAX_ENABLE_X64=1
+# The JAX persistent compilation cache is shared across heterogeneous nodes,
+# so XLA logs a multi-line AOT "machine feature mismatch" ERROR on every eval
+# — the 2026-07-16 campaign's .err files reached 150-264 MB of pure spew.
+# XLA falls back to recompiling (harmless); silence the C++ log noise.
+# Python tracebacks are unaffected.
+export TF_CPP_MIN_LOG_LEVEL=3
 
 cd "${REPO}"
 mkdir -p oarsub/logs "${HOD_MOD_RESULTS}"
 
 CMD="$*"
+# Substitute the @TOKENS@ used by the param files (production_mcmc.txt).
+# These are literal tokens, NOT $VARs: OAR's launcher shell-expands the param
+# line before this script runs — in an environment where DATA_BGS/RESULTS/VTAG
+# are undefined — so $-form variables arrive already emptied (the 2026-07-16
+# production-family crash).  Token substitution here is immune to that.
+CMD="${CMD//@DATA_BGS@/${DATA_BGS}}"
+CMD="${CMD//@RESULTS@/${RESULTS}}"
+CMD="${CMD//@HOD_MOD_SUMSTAT@/${HOD_MOD_SUMSTAT}}"
+CMD="${CMD//@VTAG@/${VTAG}}"
 echo "host=$(hostname)  job=${OAR_JOB_ID:-local}  array=${OAR_ARRAY_INDEX:-0}  cores=${NCORES}  start=$(date -Is)"
 echo "vtag=${VTAG}  results=${HOD_MOD_RESULTS}"
 # Record which linear P(k) actually produced these numbers: the default moved
