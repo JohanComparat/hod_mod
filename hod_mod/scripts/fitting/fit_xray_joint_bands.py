@@ -222,7 +222,10 @@ def _apply_candidate(cand, dc_fix=-1.8):
     mu  = np.array([mu_n[0], mu_n[1], mu_n[2], mu_n[3],
                     0.0, 0.0, 0.0, _Z_FID, _GAMMA_AGN])
     sig = np.array([inf, inf, inf, inf, inf, inf, inf, 0.005, 0.3])  # gas: covariant; DC flat
-    bnd = np.array([[-7.0, -3.0], [-0.4, 1.2], [-8.0, -3.5], [0.0, 1.8],
+    # log10_p03 upper bound is deliberately loose: the X-ray-only fit rails a
+    # tighter bound (the known "gas runs hot" pull), and a bound doing the
+    # constraining is not a fit — let the induced prior and the SZ leg decide.
+    bnd = np.array([[-7.0, -3.0], [-0.4, 1.2], [-8.0, -2.5], [0.0, 1.8],
                     [_P2_GRID[0], _P2_GRID[-1]], [_RMAX_GRID[0], _RMAX_GRID[-1]],
                     [_LOG10DC_LO, _LOG10DC_HI], [0.05, 1.0], [1.2, 2.6]])
     if cand == "agn_fixed":          # fix AGN duty cycle to the Phase-A broad-band value
@@ -571,6 +574,101 @@ def _precompute_sz(sample, hmf_backend, beam_fwhm_arcmin=_SZ_BEAM_FWHM_ARCMIN):
                 beta_ref=float(pp._beta), r200_eff=r200_eff, n_pts=int(y.size))
 
 
+# --- tSZ leg, sum_stat source (DEFAULT): the BGS_SZ stacked Sigma_y ----------
+#
+# Preferred over the digitized Das+2023 profiles above, on three counts:
+#
+#  * COVERAGE — the measurement exists for every fit sample (S1..S7), not just
+#    the two whose Das+2023 M* BIN happens to line up with a threshold sample;
+#  * NO BIN->THRESHOLD MAPPING — it is measured on the SAME threshold samples
+#    this fit uses (matched by N), so the "bin dominates the threshold counts"
+#    approximation documented above simply does not arise;
+#  * NO R200_EFF MAPPING — r_p is already comoving Mpc/h, so the kernel is built
+#    directly on the data grid; the occupation-weighted effective-R200 step (and
+#    its median-theta200 approximation) drops out entirely.
+#
+# It also carries a full covariance rather than symmetrised digitized error bars,
+# which matters: neighbouring r_p bins of a beam-smoothed stack are strongly
+# correlated, so a diagonal chi2 would over-count the information.
+#
+# Remaining approximation: the model is annulus-averaged over the r_p bin edges
+# (as for Das+2023), and the kernel is built at the sample's zmean rather than
+# integrated over n(z).
+_SZ_SOURCES = ("sumstat", "das23")
+_SZ_SUMSTAT_SUBDIR = "BGS_SZ"
+
+
+def _sz_sumstat_path(sample):
+    """BGS_SZ file for a fit sample; the galaxy count N is a unique key."""
+    n = int(F.SAMPLES[sample]["N"])
+    root = paths.sum_stat_root() / _SZ_SUMSTAT_SUBDIR
+    if not root.is_dir():
+        return None
+    cand = sorted(root.glob(f"*_N_{n:07d}_*sz*.h5"))
+    return cand[0] if cand else None
+
+
+def _load_sz_sumstat(sample):
+    """(r_p [Mpc/h comoving], Sigma_y, cov, bin edges, beam, z_eff) or None."""
+    fp = _sz_sumstat_path(sample)
+    if fp is None:
+        return None
+    from hod_mod.data_io.sum_stat_reader import SumStatReader
+    d = SumStatReader.from_hdf5(os.fspath(fp)).sz()
+    edges = np.asarray(d["bin_edges"], float)
+    return dict(rp=np.asarray(d["rp"], float), y=np.asarray(d["sigma_y"], float),
+                cov=np.asarray(d["cov"], float), rp_lo=edges[:-1], rp_hi=edges[1:],
+                beam=float(d["beam_fwhm_arcmin"]), z_eff=float(d["z_eff"]))
+
+
+def _precompute_sz_sumstat(sample, hmf_backend):
+    """Sigma_y kernel + data vector for the sum_stat BGS_SZ measurement."""
+    data = _load_sz_sumstat(sample)
+    if data is None:
+        return None
+    rp, y, cov = data["rp"], data["y"], data["cov"]
+    rp_lo, rp_hi, beam = data["rp_lo"], data["rp_hi"], data["beam"]
+    os.makedirs(_OUT_DIR, exist_ok=True)
+    cache = os.path.join(_OUT_DIR, f"{sample}_sz_sumstat_transfer.npz")
+    if os.path.exists(cache):
+        d = np.load(cache)
+        if (np.array_equal(d["rp"], rp) and int(d["n_annulus"]) == _SZ_N_ANNULUS
+                and float(d["beam"]) == beam):
+            return dict(G=d["G"], m200=d["m200"], y=y, cov=cov,
+                        icov=np.linalg.inv(cov), err=np.sqrt(np.diag(cov)),
+                        p03_ref=float(d["p03_ref"]), beta_ref=float(d["beta_ref"]),
+                        n_pts=int(y.size))
+        print(f"  [{sample}] cached sum_stat SZ kernel stale -> rebuild", flush=True)
+
+    from hod_mod.gas import PressureProfileDPM
+    th = F._THETA_COSMO
+    pk = default_pk_linear(); hmf = make_hmf(hmf_backend, pk_func=pk.pk_linear)
+    colo = dict(flat=True, H0=th["h"] * 100.0, Om0=th["Omega_m"], Ob0=th["Omega_b"],
+                sigma8=0.811, ns=th["n_s"])
+    hp = HaloProfile(colo, cm_relation="diemer19")
+    hod = ZuMandelbaum15HODModel(hmf, hmf.bias)
+    fhmp = FullHaloModelPrediction(pk, hod, hp)
+    pp = PressureProfileDPM(model=2, r_max_over_r200=3.0, n_gl=60)
+    cross = HaloModelCrossSpectra(fhmp, pressure_profile=pp)
+    hod_params = B._build_hod_params(sample)
+    zmean = float(F.SAMPLES[sample]["zmean"])
+
+    # r_p is already comoving Mpc/h -> the kernel is built straight on the data
+    # grid; annulus-average over the bin edges (both linear in G, so W folds in).
+    W, rp_nodes = _annulus_average_matrix(rp_lo, rp_hi)
+    t0 = time.time()
+    G_fine, m200 = build_sz_transfer(cross, zmean, th, hod_params, rp_nodes,
+                                     beam_fwhm_arcmin=beam)
+    G = W @ G_fine
+    np.savez(cache, G=G, m200=m200, rp=rp, n_annulus=_SZ_N_ANNULUS, beam=beam,
+             p03_ref=float(pp._P_03), beta_ref=float(pp._beta))
+    print(f"[{sample}] sum_stat SZ kernel built in {time.time()-t0:.0f}s "
+          f"({y.size} bins, beam={beam:.2f}') -> {cache}", flush=True)
+    return dict(G=G, m200=m200, y=y, cov=cov, icov=np.linalg.inv(cov),
+                err=np.sqrt(np.diag(cov)), p03_ref=float(pp._P_03),
+                beta_ref=float(pp._beta), n_pts=int(y.size))
+
+
 def _sigma_y_model(p, sz):
     """Sigma_y(r_p) at the native-DPM params ``p`` from the precomputed kernel."""
     return predict_sigma_y(sz["G"], sz["m200"], 10.0 ** p[2], p[3],
@@ -693,7 +791,14 @@ def _chi2_sample(p, S):
     sz = S.get("sz")
     if sz is not None:
         # the tSZ leg: same (P_0.3, beta_P) as T = P/n_e in the bands above
-        chi2 += float(np.sum(((_sigma_y_model(p, sz) - sz["y"]) / sz["err"]) ** 2))
+        r_sz = _sigma_y_model(p, sz) - sz["y"]
+        icov = sz.get("icov")
+        if icov is not None:
+            # neighbouring r_p bins of a beam-smoothed stack are strongly
+            # correlated; a diagonal chi2 would over-count the SZ information
+            chi2 += float(r_sz @ icov @ r_sz)
+        else:
+            chi2 += float(np.sum((r_sz / sz["err"]) ** 2))
     return chi2
 
 
@@ -835,11 +940,17 @@ def main(argv=None):
     ap.add_argument("--candidate", default="baseline", choices=_CANDIDATES,
                     help="hot-gas hypothesis to test; writes to its own subfolder")
     ap.add_argument("--sz", action="store_true",
-                    help="add the Das et al. 2023 Sigma_y leg (samples with a "
-                         "mapped data/das_2023 profile only; see _SZ_DATA_FILES)")
+                    help="add the tSZ Sigma_y leg, coupled to the X-ray bands "
+                         "through the shared (P_0.3, beta_P)")
+    ap.add_argument("--sz-source", default="sumstat", choices=_SZ_SOURCES,
+                    help="Sigma_y measurement: 'sumstat' = the BGS_SZ stack for "
+                         "ALL samples, measured on these same threshold samples, "
+                         "with a full covariance (default); 'das23' = the two "
+                         "digitized Das+2023 M*-bin profiles")
     ap.add_argument("--sz-beam-arcmin", type=float, default=_SZ_BEAM_FWHM_ARCMIN,
-                    help="Gaussian beam FWHM of the y-map the profiles were "
-                         "measured on (default %(default)s; MUST match the map)")
+                    help="das23 only: Gaussian beam FWHM of the y-map the profiles "
+                         "were measured on (default %(default)s; MUST match the map). "
+                         "The sumstat source reads its own beam from the file.")
     args = ap.parse_args(argv)
     tag = "_".join(args.samples)
 
@@ -884,19 +995,25 @@ def main(argv=None):
     if args.sz:
         n_sz = 0
         for s in args.samples:
-            sz = _precompute_sz(s, args.hmf, beam_fwhm_arcmin=args.sz_beam_arcmin)
+            if args.sz_source == "sumstat":
+                sz = _precompute_sz_sumstat(s, args.hmf)
+                miss = "no BGS_SZ measurement in $HOD_MOD_SUMSTAT"
+            else:
+                sz = _precompute_sz(s, args.hmf, beam_fwhm_arcmin=args.sz_beam_arcmin)
+                miss = f"no mapped das_2023 profile (mapped: {sorted(_SZ_DATA_FILES)})"
             if sz is not None:
                 samples[s]["sz"] = sz
                 samples[s]["n_pts"] += sz["n_pts"]
                 n_sz += 1
-                print(f"[{s}] SZ leg ready: {sz['n_pts']} Sigma_y pts "
-                      f"(beam {args.sz_beam_arcmin}', R200_eff={sz['r200_eff']:.3f} Mpc/h)",
-                      flush=True)
+                extra = (f", R200_eff={sz['r200_eff']:.3f} Mpc/h"
+                         if "r200_eff" in sz else ", full covariance")
+                print(f"[{s}] SZ leg ready ({args.sz_source}): {sz['n_pts']} "
+                      f"Sigma_y pts{extra}", flush=True)
             else:
-                print(f"[{s}] SZ leg: no mapped das_2023 profile — X-ray only", flush=True)
+                print(f"[{s}] SZ leg: {miss} — X-ray only", flush=True)
         if n_sz == 0:
-            print("WARNING: --sz given but no requested sample has a mapped "
-                  f"profile (mapped: {sorted(_SZ_DATA_FILES)})", flush=True)
+            print(f"WARNING: --sz given but no requested sample has a "
+                  f"{args.sz_source} Sigma_y measurement", flush=True)
 
     anchor_sample = "S1" if "S1" in samples else args.samples[0]
     samples[anchor_sample]["c_total"] = 1.0
