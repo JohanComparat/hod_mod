@@ -59,7 +59,17 @@ result trees already carry the tag.)
   y-map; 1.6' pre-deprojection) and area-weighted averaging over the
   beam-width annuli the paper reports.
 
-### Forecast posterior beyond Fisher
+### X-ray amplitude chain: opt-in physical ECF + S1 anchor (`--ecf`)
+
+- **`fit_comparat2025 --ecf`** folds the validated eROSITA TM0 flux→count ECF
+  (`ErositaResponse`; per-halo `ECF(kT(M))` on the gas leg, Γ=1.9 on the AGN
+  leg) into the cross-power, and anchors the remaining sample-independent
+  geometry on S1 (per-sample constants ∝ 1/S^R_X, the `fit_xray_joint`
+  convention).  `log10_A_gas`/`log10_A_AGN` become O(1) residuals centred on
+  0 instead of absorbing the entire ~1e8 model→counts chain (Λ_eff, Mpc→cm,
+  1/4π, ECF, sr→arcsec²).  Opt-in: non-ECF runs stay comparable to the
+  running campaign; the anchor is measured once per results tree and cached
+  (`ecf_anchor_<agn_model>.json`).
 
 - **New `hod_mod/scripts/forecasts/run_forecast_nuts.py`** — full NUTS posterior
   of the forecast forward model (blackjax, `--compare-fisher` validation loop).
