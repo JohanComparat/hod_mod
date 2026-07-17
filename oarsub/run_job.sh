@@ -103,7 +103,9 @@ CMD="${CMD//@RESULTS@/${RESULTS}}"
 CMD="${CMD//@HOD_MOD_SUMSTAT@/${HOD_MOD_SUMSTAT}}"
 CMD="${CMD//@VTAG@/${VTAG}}"
 echo "host=$(hostname)  job=${OAR_JOB_ID:-local}  array=${OAR_ARRAY_INDEX:-0}  cores=${NCORES}  start=$(date -Is)"
-echo "vtag=${VTAG}  results=${HOD_MOD_RESULTS}"
+# Exact code provenance: the version string cannot distinguish mid-campaign
+# commits, the SHA can.  (We are inside ${REPO} at this point.)
+echo "vtag=${VTAG}  results=${HOD_MOD_RESULTS}  commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 # Record which linear P(k) actually produced these numbers: the default moved
 # from CAMB to the CosmoPower-JAX emulator, which shifts P(k) by ~+2.5% in
 # amplitude (~+1.3% in sigma8), so "which backend ran" is provenance, not
