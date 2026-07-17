@@ -51,7 +51,21 @@
 set -euo pipefail
 
 # --- user configuration (edit for your GRICAD account) ----------------------
-REPO="${HOME}/software/hod_mod"
+# REPO is derived from THIS SCRIPT's location, not hard-coded to
+# ~/software/hod_mod, so the job runs the checkout it was submitted from.
+#
+# Why that matters: every job does `cd $REPO && python -m hod_mod...`, and
+# `python -m` puts the CWD first on sys.path — so the running branch of that
+# working tree IS the code being fitted.  Checking this branch out in the shared
+# ~/software/hod_mod would therefore change the code under any campaign job that
+# starts (or, for besteffort, RESTARTS) afterwards — full_joint in particular
+# imports fit_xray_joint_bands, which this branch edits.  Run it from a
+# `git worktree` instead and the campaign is untouched:
+#
+#   git worktree add ~/software/hod_mod_dpmsz feature/dpm-native-xray-sz
+#   cd ~/software/hod_mod_dpmsz
+#   oarsub --project your-oar-project -S "./oarsub/fit_xray_bands_dpm_sz.sh v0.31"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONDA_ENV="hod_mod"
 # OAR does NOT propagate the submitting shell's environment to the node, so pass
 # the campaign tag and the sample list as ARGUMENTS, not env vars:
