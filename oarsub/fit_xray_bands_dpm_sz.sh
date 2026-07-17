@@ -76,6 +76,12 @@ SAMPLES=("${@:-S1 S2 S3 S4 S5 S6 S7}")
 if [ "$#" -eq 0 ]; then SAMPLES=(S1 S2 S3 S4 S5 S6 S7); fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/_campaign_env.sh"
+# The band transfer needs the ZM15 MAP: _precompute calls B._build_hod_params()
+# and builds a DutyCycleAGNModel, whose _ZM15_MAP_JSON resolves through
+# results_root() AT IMPORT.  A versioned tree starts empty, so _campaign_env.sh
+# symlinks the reference in — guard anyway rather than discover it 20 min into
+# the transfer build, having already burned the slot.
+campaign_require_zm15_json
 OUT_DIR="${HOD_MOD_RESULTS}/fits/xray_bands_dpm_sz_${VTAG}"
 
 # --- environment ------------------------------------------------------------
