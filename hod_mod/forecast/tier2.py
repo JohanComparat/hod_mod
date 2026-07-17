@@ -4,7 +4,8 @@ Unlike :class:`~hod_mod.forecast.tomography.TomographicForecast` (per-bin HOD
 copies), the tier-2 design uses ONE shared global parameter vector — redshift
 evolution is carried by the explicit ``*_zs`` slope parameters inside each
 :class:`~hod_mod.forecast.forward_jax.ForwardModel` (``_theta_eff``) — so the
-global vector is simply ``PARAM_NAMES`` (61 entries) and the Jacobian is the
+global vector is simply ``PARAM_NAMES`` (``N_PARAM`` entries; it has grown with
+each wave, so never hard-code its length) and the Jacobian is the
 row-stack of independent per-block Jacobians:
 
 * **cell** blocks — volume-limited (z, M*) samples: Δz = 0.1 shells × 0.2-dex

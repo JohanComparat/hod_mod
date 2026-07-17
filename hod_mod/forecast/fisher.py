@@ -76,7 +76,7 @@ def constraints(F, ridge=0.0, rcond=1e-10, scale=None):
     dimensionless ``S F S`` (S = diag(scale)) instead of ``F`` — parameters
     spanning many decades of natural units (b_sat ~ 100 vs Ω_b ~ 5e-4) then
     contribute comparably to the eigenvalue floor.  Recommended for the
-    61-parameter tier-2 vector.
+    full tier-2 parameter vector (``PARAM_NAMES``).
     """
     F = 0.5 * (np.asarray(F, dtype=float) + np.asarray(F, dtype=float).T)
     if scale is not None:

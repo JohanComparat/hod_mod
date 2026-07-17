@@ -11,6 +11,12 @@ import pytest
 import jax
 import jax.numpy as jnp
 
+# Enable x64 at import, like every other x64-marked test module: without this the
+# module's x64-guarded tests depend on whether an earlier-collected sibling already
+# flipped the flag, and module-level jnp constants (e.g. pk_eisenstein_hu._K_INT)
+# can be materialised float32, degrading the finite-difference comparisons to ~rtol.
+jax.config.update("jax_enable_x64", True)
+
 _THETA_EH = {"Omega_m": 0.31, "Omega_b": 0.0493, "h": 0.6736,
              "n_s": 0.9649, "sigma8": 0.8111}
 _RP = jnp.logspace(-1.0, 1.3, 8)
