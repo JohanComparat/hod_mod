@@ -337,7 +337,10 @@ def test_tier2_forecast_smoke(fid, tmp_path):
     rel = sig[keep] / np.abs(d0[keep])
     F = fisher.fisher_matrix(d0[keep], J[keep], rel_err=rel,
                              prior_sigma=t2.prior())
-    cov, sigma, _ = fisher.constraints(F)
+    # scale= as in production (run_tier2_forecast, make_tier2_figures): without it the
+    # rcond floor -- set by the tiny p03_pressure prior -- drops every broad-prior
+    # direction and returns sigma = inf for most parameters.
+    cov, sigma, _ = fisher.constraints(F, scale=t2.prior())
     assert np.all(np.isfinite(sigma)) and np.all(sigma > 0)
     # the data must inform Omega_m beyond its broad prior
     from hod_mod.forecast.forward_jax import _IDX

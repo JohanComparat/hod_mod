@@ -3,6 +3,17 @@
 import os
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
+import jax
+
+# Enable x64 BEFORE the hod_mod imports below: module-level jnp constants (the
+# Gauss-Legendre nodes in core.halo_profiles, pk_eisenstein_hu._K_INT, ...) are
+# materialised at first import with whatever precision is active.  In any
+# multi-file run the x64-marked test modules flip the flag during collection
+# anyway, so tests already execute under x64 — but by then conftest has imported
+# core.halo_profiles and frozen its nodes at float32, silently degrading
+# finite-difference comparisons (see test_eh98_backend lifted-features).
+jax.config.update("jax_enable_x64", True)
+
 import pytest
 import jax.numpy as jnp
 
