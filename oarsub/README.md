@@ -166,10 +166,11 @@ finite). The gas presets therefore use the robust density-only path
 (`emissivity_uk ∝ n_e²`); the pressure/temperature/metallicity params of
 `gas-temp`/`gas-full` are inert until that normalisation is fixed.
 
-> **Security note.** Early campaign commits (e.g. `c4f2f14`) carried live
-> `OAR_API_TOKEN` JWTs in this file; they were removed at the tip
-> (`bccfb66` "token cleaned") but remain in git history — rotate them on the
-> GRICAD side if not already expired.
+> **Security note.** Early campaign commits briefly carried live
+> `OAR_API_TOKEN` JWTs in this file. The token strings were scrubbed from the
+> entire git history on 2026-07-17 (`git filter-repo --replace-text`), but any
+> token that was ever pushed must be treated as compromised — rotate it on the
+> GRICAD side if it has not already expired.
 
 Submit with `oarsub --project your-oar-project -S ./oarsub/fit_comparat2025_<preset>.sh`
 (smoke-test first with `-t devel`).
