@@ -222,22 +222,40 @@ def load_bins(data_dir: str, surveys: list[str], rp_min: float, rp_max: float,
               R_min: float, R_max: float,
               ng_frac_err_floor: float, log=print) -> tuple[list[dict], float]:
     """Load every mass-bin HDF5 in *data_dir* into per-bin fit dictionaries."""
-    from hod_mod.data_io.sum_stat_reader import SumStatReader
+    from pathlib import Path
 
-    paths = sorted(glob.glob(os.path.join(data_dir, "*_Mbin_*_joint_*.h5")))
-    if not paths:
+    from hod_mod.data_io.sum_stat_reader import SumStatReader
+    from hod_mod.paths import sum_stat_mass_bin_files
+
+    # Manifest-first: when data_dir is the published sum_stat mass-bin
+    # directory, take (lo, hi, path) from summary.yaml; fall back to globbing
+    # so an arbitrary directory of bin files keeps working.
+    data_dir_p = Path(data_dir).expanduser().resolve()
+    entries: list[tuple[float, float, str]] = []
+    try:
+        entries = [
+            (lo, hi, str(p))
+            for lo, hi, p in sum_stat_mass_bin_files(root=data_dir_p.parent)
+            if p.parent.resolve() == data_dir_p
+        ]
+    except FileNotFoundError:
+        pass
+    if not entries:
+        for path in sorted(glob.glob(os.path.join(data_dir, "*_Mbin_*_joint_*.h5"))):
+            edges = _parse_bin_edges(os.path.basename(path))
+            if edges is None:
+                log(f"  [skip] cannot parse bin edges: {os.path.basename(path)}")
+                continue
+            entries.append((*edges, path))
+    if not entries:
         raise FileNotFoundError(
-            f"No '*_Mbin_*_joint_*.h5' files found in {data_dir}. "
+            f"No mass-bin files found in {data_dir} (neither via the "
+            "summary.yaml manifest nor by '*_Mbin_*_joint_*.h5' glob). "
             "Run the sum_stat --mstar-binned campaign first.")
 
     bins: list[dict] = []
     h_file = None
-    for path in paths:
-        edges = _parse_bin_edges(os.path.basename(path))
-        if edges is None:
-            log(f"  [skip] cannot parse bin edges: {os.path.basename(path)}")
-            continue
-        lo, hi = edges
+    for lo, hi, path in entries:
         reader = SumStatReader.from_hdf5(path)
         h_file = reader.h() if h_file is None else h_file
 
@@ -795,10 +813,25 @@ def plot_hod_shmr(bins, map_result, out_dir, z_eff=0.13):
 def _discover_smf_file(smf_data_dir: str) -> str | None:
     """Locate the widest-coverage observed SMF file (lowest M* threshold).
 
-    Globs ``<smf_data_dir>/BGS_Mstar*/*joint_smf*.h5`` and returns the file whose
-    threshold (parsed from the ``BGS_Mstar<thr>`` directory name) is lowest — the
-    one spanning the largest stellar-mass range.  Returns ``None`` if none found.
+    Resolved through sum_stat's ``summary.yaml`` manifest: the joint file of
+    the sample with the lowest ``mstar_min`` — the one spanning the largest
+    stellar-mass range.  Falls back to the historical glob when the manifest
+    is absent (e.g. a locally re-measured copy); returns ``None`` if nothing
+    is found either way.
     """
+    from hod_mod.paths import sum_stat_manifest
+
+    try:
+        samples = sum_stat_manifest(smf_data_dir)["samples"]
+    except FileNotFoundError:
+        samples = None
+    if samples is not None:
+        joint = [s for s in samples.values() if "joint" in s["files"]]
+        if not joint:
+            return None
+        best = min(joint, key=lambda s: s["meta"]["mstar_min"])
+        return os.path.join(smf_data_dir, best["files"]["joint"])
+
     paths = glob.glob(os.path.join(smf_data_dir, "BGS_Mstar*", "*joint_smf*.h5"))
     if not paths:
         return None

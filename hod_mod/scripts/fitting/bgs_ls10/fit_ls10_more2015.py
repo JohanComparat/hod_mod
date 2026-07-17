@@ -64,10 +64,9 @@ from hod_mod.paths import results_root
 # format: mstar_lo → (mstar_hi, z_min, z_max, z_eff, log10mmin_init)
 # ---------------------------------------------------------------------------
 
-SUM_STAT_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..",
-                 "..", "sum_stat", "data")
-)
+from hod_mod.paths import sum_stat_root
+
+SUM_STAT_DIR = str(sum_stat_root())
 
 LS10_BINS = {
     9.0:  {"mstar_hi": 12.0, "z_min": 0.05, "z_max": 0.08, "z_eff": 0.065, "log10mmin_init": 11.5},
