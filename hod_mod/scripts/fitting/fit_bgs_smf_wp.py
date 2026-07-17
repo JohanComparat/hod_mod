@@ -184,6 +184,21 @@ def _params_to_hod(params: np.ndarray) -> dict:
 # --------------------------------------------------------------------------
 
 def _sum_stat_path(label: str) -> Path:
+    """Locate the joint HDF5 file for the given sample.
+
+    Resolved through sum_stat's ``summary.yaml`` manifest by the sample's
+    stellar-mass threshold — a deterministic lookup, unlike the historical
+    ``sorted(glob(...))[0]`` whose pick depended on lexicographic filename
+    order.  Falls back to that glob only when the sum_stat root carries no
+    manifest (e.g. a locally re-measured copy).
+    """
+    from hod_mod.paths import sum_stat_file_by_threshold
+
+    try:
+        return sum_stat_file_by_threshold(
+            SAMPLES[label]["mstar_thresh"], "joint", root=_SUM_STAT_DIR)
+    except FileNotFoundError:
+        pass
     d = _SUM_STAT_DIR / SAMPLES[label]["sum_stat_dir"]
     N_str = f"{SAMPLES[label]['N']:07d}"
     matches = sorted(d.glob(f"*_N_{N_str}_joint_smf-wp-esd*.h5"))

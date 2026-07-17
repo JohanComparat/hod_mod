@@ -141,7 +141,22 @@ _PSF_FWHM = 30.0
 # ---------------------------------------------------------------------------
 
 def _sum_stat_path(label: str) -> Path:
+    """Locate the joint HDF5 file for the given sample.
+
+    Resolved through sum_stat's ``summary.yaml`` manifest by the sample's
+    stellar-mass threshold — a deterministic lookup, unlike the historical
+    ``sorted(glob(...))[0]`` whose pick depended on lexicographic filename
+    order.  Falls back to that glob only when the sum_stat root carries no
+    manifest (e.g. a locally re-measured copy).
+    """
     s = SAMPLES[label]
+    from hod_mod.paths import sum_stat_file_by_threshold
+
+    try:
+        return sum_stat_file_by_threshold(
+            s["log10ms_min"], "joint", root=_SUM_STAT_DIR)
+    except FileNotFoundError:
+        pass
     d = _SUM_STAT_DIR / s["sum_stat_dir"]
     matches = sorted(d.glob(f"*_N_{s['N']:07d}_joint_smf-wp-esd*.h5"))
     if not matches:

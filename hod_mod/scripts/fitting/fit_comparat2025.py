@@ -278,12 +278,26 @@ def load_data(label: str) -> dict:
 # --------------------------------------------------------------------------
 
 def _sum_stat_path(label: str) -> Path:
-    """Locate sum_stat HDF5 file for the given sample."""
+    """Locate sum_stat HDF5 file for the given sample.
+
+    Resolved through sum_stat's ``summary.yaml`` manifest by the sample's
+    stellar-mass threshold — a deterministic lookup, unlike the historical
+    ``sorted(glob(...))[0]`` whose pick depended on lexicographic filename
+    order.  Falls back to that glob only when the sum_stat root carries no
+    manifest (e.g. a locally re-measured copy).
+    """
     if label not in _SUM_STAT_DIRS:
         raise FileNotFoundError(
             f"No sum_stat directory configured for sample {label}. "
             f"Available: {list(_SUM_STAT_DIRS)}"
         )
+    from hod_mod.paths import sum_stat_file_by_threshold
+
+    try:
+        return sum_stat_file_by_threshold(
+            SAMPLES[label]["log10ms_min"], "joint", root=_SUM_STAT_DIR)
+    except FileNotFoundError:
+        pass
     d = _SUM_STAT_DIR / _SUM_STAT_DIRS[label]
     N_str = f"{SAMPLES[label]['N']:07d}"
     matches = sorted(d.glob(f"*_N_{N_str}_joint_smf-wp-esd*.h5"))
