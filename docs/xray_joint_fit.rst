@@ -241,8 +241,17 @@ per stellar-mass bin, mapped onto the S4/S5 threshold samples) to the
 per-sample likelihood.  The :math:`\Sigma_y` prediction is a precomputed
 :func:`~hod_mod.fitting.sz_transfer.build_sz_transfer` kernel rescaled
 analytically in :math:`(P_{0.3}, \beta_P)` — exact to ~3e-6 and MCMC-fast;
-see :doc:`pipeline_gal_tsz` for the kernel derivation.  The y-map beam must
-be given via ``--sz-beam-arcmin`` (default 1.6) to match the measurement.
+see :doc:`pipeline_gal_tsz` for the kernel derivation.
+
+Two measurement conventions from Das et al. 2023 are built in: the digitized
+profiles (their Figs. 5/B1) come from the **CIB-deprojected** M20 ACT+Planck
+y-map, whose effective Gaussian beam is **FWHM = 2.4'**
+(``--sz-beam-arcmin``, default 2.4; the pre-deprojection map is 1.6'), and
+each data point is the **mean y over an annulus of beam-FWHM width** (their
+Eq. 4) — the model is therefore area-averaged over the same annuli (the
+wide r-columns of the data files), not evaluated at the bin centre.  Their
+fit also carries a free zero-point offset :math:`y_{zp}` that the halo-model
+prediction has no counterpart for — a stated approximation of the leg.
 
 ::
 

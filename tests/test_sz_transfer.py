@@ -106,15 +106,31 @@ def test_das2023_loader_units_and_shape():
     from hod_mod.scripts.fitting.fit_xray_joint_bands import (
         _SZ_DATA_FILES, _load_sz_data)
     for sample in _SZ_DATA_FILES:
-        x, y, err = _load_sz_data(sample)
-        assert x.shape == y.shape == err.shape and x.size >= 5
+        x, x_lo, x_hi, y, err = _load_sz_data(sample)
+        assert x.shape == x_lo.shape == x_hi.shape == y.shape == err.shape
+        assert x.size >= 5
         assert np.all(np.diff(x) > 0), "r/R200 must be increasing"
         assert np.all(x > 0) and np.all(x < 20), "r is in R200 units"
+        # annulus edges bracket the mid radius (beam-width annuli, Das+23 Eq. 4)
+        assert np.all(x_lo < x) and np.all(x < x_hi)
         # y1e8 columns were rescaled by 1e-8 -> stacked y is ~1e-8..1e-6
         assert np.all(y > 1e-10) and np.all(y < 1e-5)
         assert np.all(err > 0)
         # the digitized (up, low) envelope must bracket mid: err < y at these S/N
         assert np.all(err < y)
+
+
+def test_annulus_average_matrix_is_exact_on_powers():
+    """W must reproduce the analytic area-weighted mean of r^0 and r^1."""
+    from hod_mod.scripts.fitting.fit_xray_joint_bands import (
+        _annulus_average_matrix)
+    lo = np.array([0.1, 1.0]); hi = np.array([0.9, 2.0])
+    W, nodes = _annulus_average_matrix(lo, hi, n_nodes=64)
+    # constant: mean is exactly 1
+    np.testing.assert_allclose(W @ np.ones_like(nodes), 1.0, rtol=1e-12)
+    # f(r) = r: analytic 2D-area-weighted mean = (2/3)(hi^3-lo^3)/(hi^2-lo^2)
+    expect = 2.0 / 3.0 * (hi**3 - lo**3) / (hi**2 - lo**2)
+    np.testing.assert_allclose(W @ nodes, expect, rtol=1e-4)
 
 
 def test_unmapped_sample_returns_none():
