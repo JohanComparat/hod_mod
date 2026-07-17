@@ -202,6 +202,62 @@ constrain :math:`kT`.
 
    Reconstruction check: :math:`\Sigma`\ (15 bands) vs the zenodo broad band.
 
+Native-DPM re-base and back-propagated priors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Since 0.3.1 the band fit is parameterised by the **native DPM gas profiles**
+themselves (Oppenheimer+2025) instead of phenomenological
+:math:`L_X\!-\!M` / :math:`kT\!-\!M` power laws:
+
+.. math::
+
+   n_e(r,M,z) = n_{e,0.3}\, f_n(x)\, E(z)^{\gamma_n} M_{12}^{\beta_n},
+   \qquad
+   P(r,M,z) = P_{0.3}\, f_P(x)\, E(z)^{\gamma_P} M_{12}^{\beta_P},
+
+with the X-ray temperature :math:`T = P/n_e`.  Two modules carry the re-base:
+
+* :mod:`hod_mod.fitting.dpm_bands` — the band emissivity integral
+  :math:`J_b(T_0(M), Z)` over DPM's **radial** temperature profile (an exact
+  factorisation of the band luminosity; ~14 % different from a single
+  isothermal :math:`\Lambda_b(kT_{\rm ew})` — that difference is physics, not
+  a regression), tabulated per profile-shape node and interpolated.
+* :mod:`hod_mod.fitting.dpm_priors` — the GAS.py scaling-relation priors
+  mapped onto the native parameters through the model with JAX autodiff
+  (:math:`\Sigma_n = J^{-1}\Sigma_s J^{-T}`), yielding a full-covariance
+  Gaussian whose 0.71–0.95 correlations a diagonal prior cannot represent.
+
+The driver is :mod:`hod_mod.scripts.fitting.fit_xray_joint_bands` (9 shared
+parameters, free AGN photon index Γ as the 9th).
+
+The tSZ leg (``--sz``)
+~~~~~~~~~~~~~~~~~~~~~~
+
+The same :math:`(P_{0.3}, \beta_P)` that set :math:`T = P/n_e` in the bands
+also set the thermal-SZ Compton-:math:`y` amplitude, so the fit can take an
+SZ leg at zero extra parameters: ``--sz`` adds the Das et al. 2023 stacked
+Compton-y profiles (``data/das_2023/``, :math:`r` in :math:`R_{200}` units,
+per stellar-mass bin, mapped onto the S4/S5 threshold samples) to the
+per-sample likelihood.  The :math:`\Sigma_y` prediction is a precomputed
+:func:`~hod_mod.fitting.sz_transfer.build_sz_transfer` kernel rescaled
+analytically in :math:`(P_{0.3}, \beta_P)` — exact to ~3e-6 and MCMC-fast;
+see :doc:`pipeline_gal_tsz` for the kernel derivation.
+
+Two measurement conventions from Das et al. 2023 are built in: the digitized
+profiles (their Figs. 5/B1) come from the **CIB-deprojected** M20 ACT+Planck
+y-map, whose effective Gaussian beam is **FWHM = 2.4'**
+(``--sz-beam-arcmin``, default 2.4; the pre-deprojection map is 1.6'), and
+each data point is the **mean y over an annulus of beam-FWHM width** (their
+Eq. 4) — the model is therefore area-averaged over the same annuli (the
+wide r-columns of the data files), not evaluated at the bin centre.  Their
+fit also carries a free zero-point offset :math:`y_{zp}` that the halo-model
+prediction has no counterpart for — a stated approximation of the leg.
+
+::
+
+    JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.fit_xray_joint_bands \
+        --samples S1 S4 S5 --sz --mcmc
+
 ----
 
 Data & results layout (environment variables)

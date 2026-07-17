@@ -40,7 +40,19 @@ set -euo pipefail
 # --- user configuration (edit for your GRICAD account) ----------------------
 REPO="${HOME}/software/hod_mod"                        # repo location on the cluster
 CONDA_ENV="hod_mod"                                    # conda/mamba env name
-export HOD_MOD_RESULTS="${HOD_MOD_RESULTS:-${HOME}/data/hod_mod_results}"
+
+# --- campaign version (VTAG + HOD_MOD_RESULTS) ------------------------------
+# Optional leading `--vtag <tag>`. OAR does not propagate the submitting shell's
+# environment to the node, so `VTAG=v0.3 oarsub ...` is silently dropped — but it
+# DOES pass -S arguments through, appending the --array-param-file line after
+# them. submit_campaign.sh therefore submits
+#     -S "./oarsub/run_job.sh --vtag v0.3"
+# and OAR runs:  run_job.sh --vtag v0.3 <param line>
+# We consume the flag here so CMD below is just the command to eval.
+if [ "${1:-}" = "--vtag" ]; then
+    VTAG="${2:?--vtag needs a value}"; shift 2
+fi
+source "$(dirname "${BASH_SOURCE[0]}")/_campaign_env.sh"
 export HOD_MOD_DATA_DIR="${HOD_MOD_DATA_DIR:-${HOME}/data/hod_mod_data}"
 export HOD_MOD_SUMSTAT="${HOD_MOD_SUMSTAT:-${HOME}/software/sum_stat/data}"
 # convenience shortcuts referenced by the param files ------------------------
@@ -70,12 +82,36 @@ export MKL_NUM_THREADS="${NCORES}"
 export XLA_FLAGS="--xla_cpu_multi_thread_eigen=true"
 export JAX_PLATFORMS=cpu
 export JAX_ENABLE_X64=1
+# The JAX persistent compilation cache is shared across heterogeneous nodes,
+# so XLA logs a multi-line AOT "machine feature mismatch" ERROR on every eval
+# — the 2026-07-16 campaign's .err files reached 150-264 MB of pure spew.
+# XLA falls back to recompiling (harmless); silence the C++ log noise.
+# Python tracebacks are unaffected.
+export TF_CPP_MIN_LOG_LEVEL=3
 
 cd "${REPO}"
 mkdir -p oarsub/logs "${HOD_MOD_RESULTS}"
 
 CMD="$*"
+# Substitute the @TOKENS@ used by the param files (production_mcmc.txt).
+# These are literal tokens, NOT $VARs: OAR's launcher shell-expands the param
+# line before this script runs — in an environment where DATA_BGS/RESULTS/VTAG
+# are undefined — so $-form variables arrive already emptied (the 2026-07-16
+# production-family crash).  Token substitution here is immune to that.
+CMD="${CMD//@DATA_BGS@/${DATA_BGS}}"
+CMD="${CMD//@RESULTS@/${RESULTS}}"
+CMD="${CMD//@HOD_MOD_SUMSTAT@/${HOD_MOD_SUMSTAT}}"
+CMD="${CMD//@VTAG@/${VTAG}}"
 echo "host=$(hostname)  job=${OAR_JOB_ID:-local}  array=${OAR_ARRAY_INDEX:-0}  cores=${NCORES}  start=$(date -Is)"
+# Exact code provenance: the version string cannot distinguish mid-campaign
+# commits, the SHA can.  (We are inside ${REPO} at this point.)
+echo "vtag=${VTAG}  results=${HOD_MOD_RESULTS}  commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+# Record which linear P(k) actually produced these numbers: the default moved
+# from CAMB to the CosmoPower-JAX emulator, which shifts P(k) by ~+2.5% in
+# amplitude (~+1.3% in sigma8), so "which backend ran" is provenance, not
+# trivia.  Under `set -e` this also fails the job immediately (rather than deep
+# inside the fit) if cosmopower-jax is missing from the cluster env.
+echo "pk_backend=$(python -c 'from hod_mod.core.power_spectrum import default_pk_linear; print(type(default_pk_linear()).__name__)')"
 echo "cmd> ${CMD}"
 
 # The param line references $DATA_BGS / $RESULTS (defined above), so eval it.

@@ -269,7 +269,12 @@ Proposed implementation
 * **Bias**: Tinker10-through-ν is first-order cosmology-correct already; an
   emulated correction from DarkQuest/Aemulus [Nishimichi2019]_ is possible but
   **explicitly low priority** — the ingredient least in need of repair.
-* **CAMB-quality P(k)**: a *ratio* emulator
+* **CAMB-quality P(k)** — *superseded (0.3.1)*: the production stack now
+  defaults to the full CosmoPower-JAX emulator
+  (:mod:`hod_mod.forecast.pk_cosmopower`, see :doc:`cosmology`); the ratio
+  approach below was built as :mod:`hod_mod.forecast.pk_camb_ratio` and
+  remains the ``camb_linear`` Fisher correction.  Original plan: a *ratio*
+  emulator
   :math:`T_{\rm CAMB}(k)/T_{\rm EH98}(k)` over a Sobol design in
   :math:`(h, \Omega_b, \Omega_m, n_s, \Sigma m_\nu, w_0, w_a)`, stored as a
   multilinear table or a small dense MLP whose weights load from npz and

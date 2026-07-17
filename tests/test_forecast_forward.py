@@ -24,6 +24,10 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp  # noqa: E402
 import pytest  # noqa: E402
 
+# ForwardModel builds the default CosmoPower P(k) emulator unconditionally;
+# without the package these tests would error at fixture time, not skip.
+pytest.importorskip("cosmopower_jax")
+
 from hod_mod.forecast.forward_jax import (  # noqa: E402
     ForwardModel, OBSERVABLES, PARAM_NAMES, _IDX,
     _gl_nodes, _gnfw, _gnfw_sq, _gnfw_pressure, _profile_uk_normalized,

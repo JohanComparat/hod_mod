@@ -35,6 +35,37 @@ def rho_critical_0() -> float:
     return float(rho_SI * Mpc_m**3 / Msun_kg)
 
 
+def default_pk_linear(backend: str = None):
+    """Construct the default linear-P(k) backend for the production stack.
+
+    Returns a :class:`~hod_mod.forecast.pk_cosmopower.CosmoPowerJaxPkLinear` — the
+    CosmoPower-JAX neural emulator — which reproduces CAMB's *shape* to <0.1% while
+    being JAX-differentiable and ~instant (no 30 s CAMB call per cosmology).
+
+    .. warning::
+
+       The emulator is trained on **massless neutrinos**, whereas :class:`LinearPowerSpectrum`
+       runs CAMB with its default ``mnu=0.06`` eV.  In the A_s convention used here
+       nothing renormalises that away, so the emulator's P(k) is **~2.5% higher in
+       amplitude** (≈1.3% in σ8-equivalent) than the CAMB backend it replaced.  This
+       is a physics difference, not emulator error — the two agree to ~0.06% when CAMB
+       is also run massless.  Results produced before this became the default are not
+       directly comparable; see the emulator's ``TRAINING_BOX`` for its validity range.
+
+    ``backend`` (or ``$HOD_MOD_PK_BACKEND``) overrides: ``"cosmopower"`` (default) or
+    ``"camb"`` to restore the CAMB path.
+    """
+    import os
+    backend = (backend or os.environ.get("HOD_MOD_PK_BACKEND", "cosmopower")).lower()
+    if backend == "camb":
+        return LinearPowerSpectrum()
+    if backend == "cosmopower":
+        from hod_mod.forecast.pk_cosmopower import CosmoPowerJaxPkLinear
+        return CosmoPowerJaxPkLinear()
+    raise ValueError(
+        f"pk backend must be 'cosmopower' or 'camb', got {backend!r}")
+
+
 class LinearPowerSpectrum:
     """Linear P(k, z) computed with CAMB.
 

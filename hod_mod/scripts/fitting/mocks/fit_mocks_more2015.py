@@ -53,12 +53,9 @@ import numpy as np
 
 from hod_mod.fitting import WpFitConfig, WpFitter
 from hod_mod.fitting.planck_prior import PLANCK18_MEANS, PLANCK18_SIGMAS, PLANCK18_3SIGMA
-from hod_mod.paths import results_root
+from hod_mod.paths import results_root, sum_stat_root
 
-SUM_STAT_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..",
-                 "..", "sum_stat", "data")
-)
+SUM_STAT_DIR = str(sum_stat_root())
 
 # Uchuu mock stellar mass bins
 MOCK_BINS = {
@@ -75,10 +72,10 @@ MOCK_BINS = {
 
 
 def mock_wp_file(mstar_lo: float, info: dict, sum_stat_dir: str) -> str:
-    zlo  = f"{info['z_min']:.2f}"
-    zhi  = f"{info['z_max']:.2f}"
-    fname = f"MOCK_VLIM_ANY_Mstar{mstar_lo:.2f}_z{zlo}-{zhi}-wp-pimax100.h5"
-    return os.path.join(sum_stat_dir, "mocks", "twopcf", fname)
+    """Resolve the mock wp file through sum_stat's summary.yaml manifest."""
+    from hod_mod.paths import sum_stat_mock_file
+
+    return str(sum_stat_mock_file(mstar_lo, "wp", root=sum_stat_dir))
 
 
 def build_config(mstar_lo: float, info: dict, sum_stat_dir: str, output_root: str,

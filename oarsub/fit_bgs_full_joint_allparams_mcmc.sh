@@ -24,10 +24,16 @@ set -euo pipefail
 
 REPO="${HOME}/software/hod_mod"
 CONDA_ENV="hod_mod"
-OUT_DIR="${HOME}/data/hod_mod_results/bgs_full_joint_allparams_v0.3"  # v0.3 Hankel re-run (0.2.3 kept)
 
 export HOD_MOD_DATA_DIR="${HOME}/data/hod_mod_data"
-export HOD_MOD_RESULTS="${HOME}/data/hod_mod_results"
+# defines VTAG + HOD_MOD_RESULTS; must precede OUT_DIR, which uses both
+# Optional campaign tag as $1: OAR does NOT propagate the submitting shell's
+# environment to the node, so `VTAG=v0.3 oarsub -S ./script.sh` would silently
+# run as the default.  Pass it as an argument instead:
+#   oarsub --project P -S "./oarsub/fit_bgs_full_joint_allparams_mcmc.sh v0.3"
+VTAG="${1:-${VTAG:-v0.31}}"
+source "$(dirname "${BASH_SOURCE[0]}")/_campaign_env.sh"
+OUT_DIR="${HOD_MOD_RESULTS}/bgs_full_joint_allparams_${VTAG}"
 
 export MAMBA_EXE='/home/comparaj/miniforge3/bin/mamba'
 export MAMBA_ROOT_PREFIX='/home/comparaj/miniforge3'

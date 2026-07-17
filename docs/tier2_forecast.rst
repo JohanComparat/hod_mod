@@ -41,9 +41,9 @@ default and grow a ``--free-tier2`` flag.
 
 * **Promoted nuisances (16).**  Satellite HOD shape (``beta_sat, bcut,
   beta_cut, alpha_sat``), baryon-sector shape (``beta_b, log10_M_eta,
-  beta_eta``), gas emissivity slopes (``alpha_in_gas, alpha_tr_gas``), the A10
-  pressure shape (``p0_pressure, c500_pressure, gamma_pressure,
-  alpha_pressure, beta_out_pressure``) and the Powell "Model 2" internals
+  beta_eta``), gas emissivity slopes (``alpha_in_gas, alpha_tr_gas``), the DPM
+  pressure shape (``p03_pressure, c_dpm_pressure, alpha_in_pressure,
+  alpha_tr_pressure, alpha_out_pressure``) and the Powell "Model 2" internals
   (``agn_rho, agn_sig_mstar``).  Each fiducial equals the former constant, so
   the fiducial prediction is bit-identical to tier-1 (this is tested).
 * **Redshift-evolution slopes (7 + 2).**  Additive on the base parameter per
