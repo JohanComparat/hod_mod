@@ -527,6 +527,20 @@ class WpFitter:
     def sample(self, initial_pos: np.ndarray | None = None, progress: bool = True):
         """Run emcee ensemble sampler.
 
+        Burn-in and production are one continuous chain, checkpointed to
+        ``<output_dir>/chain.h5`` (emcee HDF backend, flushed every step) and
+        resumed automatically: a job killed by the cluster walltime picks up at
+        the step it reached instead of starting over.  Before this, the chain
+        lived only in memory until the single ``np.savez`` below, so an 8 h
+        walltime kill discarded ~8 h of sampling and left an empty output dir —
+        which is why seven of the ZM15 benchmarks never landed in the 2026-07
+        campaign.  The burn-in is discarded at read-out, never on disk, so the
+        saved ``flatchain.npz`` holds the same production samples as before.
+
+        To start a chain over rather than resume it, delete ``chain.h5``: the
+        backend is keyed only on (n_walkers, n_free), so it cannot tell that a
+        partial chain came from different physics.
+
         Parameters
         ----------
         initial_pos : array_like, shape (n_walkers, n_free), optional
@@ -541,16 +555,30 @@ class WpFitter:
         n_walkers = self.config.n_walkers
         if initial_pos is None:
             initial_pos = self._default_initial_pos(n_walkers, n_free)
-        sampler = emcee.EnsembleSampler(n_walkers, n_free, self._log_prob)
-        print(f"Burning in: {self.config.n_burnin} steps, {n_walkers} walkers …")
-        sampler.run_mcmc(initial_pos, self.config.n_burnin, progress=progress)
-        last_pos = sampler.get_last_sample()
-        sampler.reset()
-        print(f"Sampling: {self.config.n_steps} steps …")
-        sampler.run_mcmc(last_pos, self.config.n_steps, progress=progress)
+
         os.makedirs(self.config.output_dir, exist_ok=True)
+        backend_path = os.path.join(self.config.output_dir, "chain.h5")
+        backend = emcee.backends.HDFBackend(backend_path)
+        already = backend.iteration if os.path.exists(backend_path) else 0
+        total   = int(self.config.n_burnin) + int(self.config.n_steps)
+
+        sampler = emcee.EnsembleSampler(n_walkers, n_free, self._log_prob,
+                                        backend=backend)
+        if already >= total:
+            print(f"Chain already complete ({already} >= {total} steps) → {backend_path}")
+        elif already == 0:
+            print(f"Sampling {total} steps ({self.config.n_burnin} burn-in + "
+                  f"{self.config.n_steps} production), {n_walkers} walkers, "
+                  f"checkpointing to {backend_path} …")
+            sampler.run_mcmc(initial_pos, total, progress=progress)
+        else:
+            print(f"Resuming from step {already}/{total} "
+                  f"({total - already} left) → {backend_path}")
+            sampler.run_mcmc(None, total - already, progress=progress)
+
+        discard  = min(int(self.config.n_burnin), max(sampler.iteration - 1, 0))
         out_path = os.path.join(self.config.output_dir, "flatchain.npz")
-        np.savez(out_path, flatchain=sampler.get_chain(flat=True),
+        np.savez(out_path, flatchain=sampler.get_chain(discard=discard, flat=True),
                  param_names=np.array(self.config.free_params))
         print(f"Chain saved → {out_path}")
         return sampler
