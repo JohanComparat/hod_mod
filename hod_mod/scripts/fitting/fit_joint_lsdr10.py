@@ -607,7 +607,8 @@ def run_mcmc(label: str, infra: _Infrastructure,
              R_min: float = 0.1,  R_max: float = 30.0,
              theta_min: float = 8.0, theta_max: float = 300.0,
              esd_survey: str = "esd_hsc",
-             f_sys_wtheta: float = 0.05) -> dict:
+             f_sys_wtheta: float = 0.05,
+             out_dir: Path | None = None) -> dict:
     import emcee
 
     data_wp_esd = load_wp_esd(label, esd_survey=esd_survey)
@@ -629,18 +630,39 @@ def run_mcmc(label: str, infra: _Infrastructure,
     scales = np.array([0.05, 0.05, 0.05, 0.02, 0.05, 0.05, 0.05])
     pos = x_map[None, :] + scales[None, :] * np.random.randn(n_walkers, n_free)
 
-    sampler = emcee.EnsembleSampler(n_walkers, n_free, lp)
+    # Burn-in and production are ONE continuous chain, checkpointed to an emcee
+    # HDF backend after every step, and the burn-in is discarded at read-out
+    # rather than by sampler.reset().  Before this, the whole chain lived in
+    # memory until _save_chain() at the very end, so a walltime kill threw away
+    # everything: both 2026-07 campaign attempts (v0.3 and v0.31) left only
+    # S1_map.json in bgs_comparat2025_*/ after days of besteffort restarts.
+    # The backend file is separate from {label}_chain.h5, which keeps its own
+    # flat-chain layout for the corner plot and downstream readers.
+    backend = backend_path = None
+    if out_dir is not None:
+        backend_path = Path(out_dir) / f"{label}_backend.h5"
+        backend_path.parent.mkdir(parents=True, exist_ok=True)
+        backend = emcee.backends.HDFBackend(str(backend_path))
+    sampler = emcee.EnsembleSampler(n_walkers, n_free, lp, backend=backend)
 
-    print(f"  [{label}] MCMC burn-in {n_burnin} steps ...", flush=True)
-    pos, _, _ = sampler.run_mcmc(pos, n_burnin, progress=True)
-    sampler.reset()
+    total   = int(n_burnin) + int(n_steps)
+    already = backend.iteration if (backend is not None and backend_path.exists()) else 0
+    if already >= total:
+        print(f"  [{label}] chain already complete ({already} >= {total} steps) "
+              f"— skipping sampling  ({backend_path})", flush=True)
+    elif already == 0:
+        print(f"  [{label}] MCMC {total} steps ({n_burnin} burn-in + {n_steps} "
+              f"production) ...", flush=True)
+        sampler.run_mcmc(pos, total, progress=True)
+    else:
+        print(f"  [{label}] MCMC resuming from step {already}/{total} "
+              f"({total - already} left) ...", flush=True)
+        sampler.run_mcmc(None, total - already, progress=True)
 
-    print(f"  [{label}] MCMC production {n_steps} steps ...", flush=True)
-    sampler.run_mcmc(pos, n_steps, progress=True)
-
-    flat_chain = sampler.get_chain(flat=True)
+    discard = min(int(n_burnin), max(sampler.iteration - 1, 0))
+    flat_chain = sampler.get_chain(discard=discard, flat=True)
     try:
-        tau = sampler.get_autocorr_time(quiet=True)
+        tau = sampler.get_autocorr_time(discard=discard, quiet=True)
     except Exception:
         tau = np.full(n_free, np.nan)
 
@@ -942,6 +964,7 @@ def main():
                 R_min=args.R_min,   R_max=args.R_max,
                 theta_min=args.theta_min, theta_max=args.theta_max,
                 esd_survey=args.esd_survey, f_sys_wtheta=args.f_sys,
+                out_dir=out_dir,      # enables the resumable HDF backend
             )
             _save_chain(mcmc_res, out_dir)
 
