@@ -563,6 +563,19 @@ def run_benchmark(model_key: str, mcmc: bool = False, plot: bool = False,
             print(f"MCMC already done — skipping ({flatchain_path}).")
             print("  Pass --force-mcmc to rerun.")
         else:
+            # fitter.sample() now checkpoints to chain.h5 and resumes it, which
+            # is what lets a walltime-killed benchmark continue.  Distinguish
+            # the two states that checkpoint can be in:
+            #   flatchain.npz present -> the previous run FINISHED, so
+            #     --force-mcmc means "redo it": drop the checkpoint.
+            #   flatchain.npz absent  -> the previous run was KILLED mid-chain,
+            #     so resume it even under --force-mcmc (otherwise every
+            #     besteffort restart of a --force-mcmc param line would sample
+            #     from zero and never converge).
+            backend_path = os.path.join(config.output_dir, "chain.h5")
+            if os.path.exists(flatchain_path) and os.path.exists(backend_path):
+                print(f"  --force-mcmc on a completed chain → discarding {backend_path}")
+                os.remove(backend_path)
             print("Running MCMC (this may take several minutes)…")
             theta0 = np.asarray(map_result["theta"])
             n_walkers = fitter.config.n_walkers

@@ -46,9 +46,16 @@ oarsub --project your-oar-project -l /nodes=1/core=8,walltime=02:00:00 \
        --array-param-file oarsub/params/benchmarks_map.txt -S ./oarsub/run_job.sh
 ```
 
-When the chains land, sync the `_v0.3` out-dirs back and regenerate every figure
-with `./oarsub/collect_and_plot.sh`; then update the χ²/dof, best-fit params and
-the AUM-agreement line in the affected `docs/*.rst` pages.
+When the chains land, sync the `_v0.3` out-dirs back, audit with
+`./oarsub/campaign_status.sh` (per-fit and per-benchmark-model, so a
+walltime-killed chain or a family that never ran is named rather than counted as
+"OK, N files"; `SINCE=YYYY-MM-DD` also flags results predating the campaign),
+then regenerate every figure with `./oarsub/collect_and_plot.sh` — which refuses
+to run while anything is missing unless you pass `ALLOW_PARTIAL=1`, and refuses
+to collect a different `VTAG` on top of the last one unless you pass
+`FORCE_VTAG_SWITCH=1` (`docs/_images/.campaign_vtag` records which campaign the
+figures come from). Then update the χ²/dof, best-fit params and the
+AUM-agreement line in the affected `docs/*.rst` pages.
 
 ## Which machine?
 
@@ -118,6 +125,13 @@ killed by the walltime, **just re-submit the same script** — it reads
 `chain.h5`, sees how many steps survived, and runs only the remainder. Burn-in
 is discarded only at read-out (`flatchain.npz`). So the chosen walltime is not a
 correctness constraint, only a convenience.
+
+`--mode both` re-runs are cheap on restart: if `map_result.json` already exists
+the MAP optimisation and its figure set are **skipped** and the job goes straight
+to resuming the chain (`--force-map` to redo it, `--plot-only` for just the
+figures). Without that skip every besteffort restart spent its first hours
+re-fitting the same deterministic Powell MAP before touching the sampler, which
+is how the 2026-07 campaign reached only ~300/2500 steps in ten days.
 
 For hands-off auto-resubmission, uncomment the `#OAR -t besteffort` /
 `#OAR -t idempotent` directives: the resumable chain makes the job idempotent,

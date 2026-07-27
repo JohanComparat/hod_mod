@@ -303,6 +303,8 @@ def main():
         results_root(), "bgs_zm15_thresh_joint"))
     p.add_argument("--force-mcmc", action="store_true",
                    help="Rerun MCMC even if a chain already exists")
+    p.add_argument("--force-map", action="store_true",
+                   help="Rerun the MAP optimisation even if map_result.json exists")
     p.add_argument("--plot-only", action="store_true",
                    help="Skip fitting; load existing MAP result and generate plots")
     args = p.parse_args()
@@ -368,7 +370,15 @@ def main():
         print(f"\nAll done in {(time.time() - t0) / 60:.1f} min.")
         return
 
-    if args.mode in ("map", "both"):
+    if args.mode in ("map", "both") and os.path.exists(map_json) and not args.force_map:
+        # See fit_bgs_zm15_joint: a besteffort restart re-enters `--mode both`
+        # with a half-built chain, and redoing the Powell fit + figures first
+        # burns the walltime the MCMC needs, for an answer that cannot change.
+        with open(map_json) as fh:
+            map_result = json.load(fh)
+        print(f"\n[skip] MAP exists: {map_json} "
+              f"(chi2/dof={map_result['chi2_per_dof']:.3f}; --force-map to rerun)")
+    elif args.mode in ("map", "both"):
         print("\n=== MAP optimisation (Powell) ===")
         map_result = fitter.map_fit()
         with open(map_json, "w") as fh:
