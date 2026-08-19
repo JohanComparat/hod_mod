@@ -24,16 +24,16 @@ Two differentiable backends
   production amplitudes.  Differentiable observables, each validated against
   central finite differences:
 
-  ============================  =========================================  ===========
-  Observable                    Path                                       jacfwd vs FD
-  ============================  =========================================  ===========
-  ``wp`` / ``ΔΣ``               ``FullHaloModelPrediction``                ~1e-7
-  tSZ ``cl_gy(ℓ)``              ``HaloModelCrossSpectra``                  ~3e-8
-  X-ray ``cl_gX`` (density)     ``GasDensityDPM``                          ~4e-8
-  X-ray ``cl_gX`` (full-APEC)   ``GasDensityDPM`` + ``ApecCoolingTable``   ~7e-6
-  galaxy × AGN X-ray            ``XrayAGNModel``                           ~1e-7
-  cluster × galaxy ``w_p^{cg}`` ``ClusterGalaxyCrossCorrelation``          ~7e-7
-  ============================  =========================================  ===========
+  =============================  ========================================  ============
+  Observable                     Path                                      jacfwd vs FD
+  =============================  ========================================  ============
+  ``wp`` / ``ΔΣ``                ``FullHaloModelPrediction``               ~1e-7
+  tSZ ``cl_gy(ℓ)``               ``HaloModelCrossSpectra``                 ~3e-8
+  X-ray ``cl_gX`` (density)      ``GasDensityDPM``                         ~4e-8
+  X-ray ``cl_gX`` (full-APEC)    ``GasDensityDPM`` + ``ApecCoolingTable``  ~7e-6
+  galaxy × AGN X-ray             ``XrayAGNModel``                          ~1e-7
+  cluster × galaxy ``w_p^{cg}``  ``ClusterGalaxyCrossCorrelation``         ~7e-7
+  =============================  ========================================  ============
 
   Since 0.3.1 the package-wide default linear P(k) is the **CosmoPower-JAX
   emulator** (:func:`~hod_mod.core.power_spectrum.default_pk_linear`,

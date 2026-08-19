@@ -1,6 +1,22 @@
 Tier-4 forecast: the morphology observables
 ===========================================
 
+.. admonition:: Pending v0.3 re-run — the numbers below are superseded
+   :class: warning
+
+   *Status 2026-08-19.*  The v0.3 campaign job for this tier ran on 2026-07-16
+   but only refreshed its Jacobian block **cache**; it was killed before writing
+   ``tier4_forecast_nb6.npz``, so the numbers, ``SUMMARY_nb6.txt`` and every
+   ``tier4_forecast__*.png`` on this page are still from the **2026-07-04** run and predate
+   the 0.3.0 Hankel-transform fix.
+
+   The re-run needs the cache cleared first.  ``Tier2Forecast._cache_path``
+   (:mod:`hod_mod.forecast.tier2`) keys a cached block on
+   ``spec_repr + block.label + block.which + fiducial`` — with **no code
+   version** — and the Hankel fix changed the input→output map without changing
+   any input, so **417 of 603** cached blocks computed before 2026-07-16
+   would be silently reused.  See :doc:`oarsub_campaign`.
+
 Wave 4 gave the model a morphology *sector* (the conditional early-type
 fraction, the sample split, the BH–bulge coupling — see
 :doc:`missing_physics_implementation`, "Wave 4").  The tier-4 study adds the

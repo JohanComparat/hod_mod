@@ -644,10 +644,23 @@ Data digitised from ZM15 Figure 6 (WebPlotDigitizer);
 reference data also from Mandelbaum et al. 2006
 (`arXiv:astro-ph/0509702 <https://arxiv.org/abs/astro-ph/0509702>`_).
 
-:math:`\chi^2/\mathrm{dof} \approx 1.75 \times 10^{-6}` — effectively zero.
-This near-perfect agreement is by construction: the data are extracted from the
-published figure using the published model parameters, so the MAP recovers
-those parameters to within numerical precision.
+.. warning:: **This is not a parameter-recovery validation.**
+
+   The v0.3 re-run gives :math:`\chi^2/\mathrm{dof} = 0.8095/13 =
+   0.0623` — a good *fit*, but the parameters it fits with are not
+   the published ones.  ``delta`` and ``gamma`` sit **exactly on their prior
+   ceilings** (2.0 and 5.0), i.e. :math:`+39.5\sigma` and :math:`+19.0\sigma`
+   from ZM15, and ``eta`` is :math:`+5.9\sigma` off.  A near-zero
+   :math:`\chi^2` reached with two parameters railed against a bound is a
+   degenerate solution, not agreement.
+
+   The MCMC says the same thing more plainly: the marginal posteriors span
+   essentially the whole prior box (``lg_m1h`` 11.0–14.0, ``delta`` 0.1–2.0,
+   ``gamma`` 0.5–5.0), so these 13 digitised :math:`w_p` + :math:`\Delta\Sigma`
+   points do not constrain the nine iHOD parameters.  The earlier text here
+   claimed :math:`\chi^2/\mathrm{dof} \approx 1.75\times10^{-6}` and
+   ":math:`0.00\sigma` across the board"; that was measured before the 0.3.0
+   Hankel-transform fix and is superseded.
 
 .. list-table::
    :header-rows: 1
@@ -658,41 +671,41 @@ those parameters to within numerical precision.
      - Published (:math:`\pm 1\sigma`)
      - Deviation
    * - ``lg_m1h``
-     - 12.1000
+     - 12.2202
      - :math:`12.10 \pm 0.17`
-     - :math:`0.00\sigma`
+     - :math:`+0.71\sigma`
    * - ``lg_m0star``
-     - 10.3100
+     - 10.2426
      - :math:`10.31 \pm 0.10`
-     - :math:`0.00\sigma`
+     - :math:`-0.67\sigma`
    * - ``beta``
-     - 0.3300
+     - 0.2642
      - :math:`0.33 \pm 0.21`
-     - :math:`0.00\sigma`
+     - :math:`-0.31\sigma`
    * - ``delta``
-     - 0.4177
+     - 2.0000  ⚠ **at prior bound**
      - :math:`0.42 \pm 0.04`
-     - :math:`0.06\sigma`
+     - :math:`+39.50\sigma`
    * - ``gamma``
-     - 1.2106
+     - 5.0000  ⚠ **at prior bound**
      - :math:`1.21 \pm 0.20`
-     - :math:`0.00\sigma`
+     - :math:`+18.95\sigma`
    * - ``sigma_lnmstar``
-     - 0.5001
+     - 0.6266
      - :math:`0.50 \pm 0.04`
-     - :math:`0.00\sigma`
+     - :math:`+3.16\sigma`
    * - ``eta``
-     - −0.0400
+     - 0.0770
      - :math:`-0.04 \pm 0.02`
-     - :math:`0.00\sigma`
+     - :math:`+5.85\sigma`
    * - ``fc``
-     - 0.9066
+     - 0.5528
      - :math:`0.86 \pm 0.14`
-     - :math:`0.33\sigma`
+     - :math:`-2.19\sigma`
    * - ``bsat``
-     - 8.9801
+     - 8.7904
      - :math:`8.98 \pm 1.18`
-     - :math:`0.00\sigma`
+     - :math:`-0.16\sigma`
 
 .. figure:: _images/benchmarks__zumandelbaum2015_sdss__benchmark_zumandelbaum2015_combined.png
    :width: 95%

@@ -1,6 +1,16 @@
 Benchmark fit: MAP + MCMC on the multi-probe forecast
 =====================================================
 
+.. admonition:: Pending v0.3 re-run — the numbers below are superseded
+   :class: warning
+
+   *Status 2026-08-19.*  The recovery run behind this page
+   (``fits/benchmark/benchmark_map_mcmc_*``) is dated **2026-07-12**, four days
+   before the v0.3 campaign opened, so it predates the 0.3.0 Hankel-transform
+   fix.  It is a ``forecasts.txt`` line and is re-run with that family; until
+   then the numbers and both figures are pre-campaign.  See
+   :doc:`oarsub_campaign`.
+
 This page reports a worked MAP + MCMC inference run that wires the
 :doc:`benchmark-observables tree <sensitivity_benchmark>` into the
 differentiable multi-probe forward model.  It closes the loop of the sensitivity
