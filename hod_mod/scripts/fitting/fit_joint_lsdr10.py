@@ -748,10 +748,15 @@ def plot_bestfit(label: str, infra: _Infrastructure, params: list,
     if chi2_dict:
         ax.set_title(f"$\\chi^2/\\nu={chi2_dict['chi2_dof_wp']:.2f}$", fontsize=9)
     ax.legend(fontsize=8)
+    # The residual panels divide by the model, which goes negative outside the
+    # fitted range (the grey ~mask points): ESD at small R, w_theta at large
+    # theta.  matplotlib rejects a negative yerr outright, and this figure is
+    # drawn BEFORE the MCMC, so it aborted the whole fit -- both 2026-07
+    # campaign attempts left only S1_map.json.  An error bar is a length: |.|.
     ratio = wp / wp_mod
-    ax_r.errorbar(rp[~mk_wp], ratio[~mk_wp], yerr=wp_err[~mk_wp]/wp_mod[~mk_wp],
+    ax_r.errorbar(rp[~mk_wp], ratio[~mk_wp], yerr=np.abs(wp_err[~mk_wp]/wp_mod[~mk_wp]),
                   fmt="o", ms=3, color="0.65")
-    ax_r.errorbar(rp[mk_wp], ratio[mk_wp], yerr=wp_err[mk_wp]/wp_mod[mk_wp],
+    ax_r.errorbar(rp[mk_wp], ratio[mk_wp], yerr=np.abs(wp_err[mk_wp]/wp_mod[mk_wp]),
                   fmt="o", ms=4, color="k")
     ax_r.axhline(1.0, color="C0", lw=1)
     ax_r.axhline(1.1, color="gray", lw=0.7, ls="--")
@@ -775,9 +780,9 @@ def plot_bestfit(label: str, infra: _Infrastructure, params: list,
     if chi2_dict:
         ax.set_title(f"$\\chi^2/\\nu={chi2_dict['chi2_dof_esd']:.2f}$", fontsize=9)
     ratio = esd / esd_mod
-    ax_r.errorbar(R[~mk_esd], ratio[~mk_esd], yerr=esd_err[~mk_esd]/esd_mod[~mk_esd],
+    ax_r.errorbar(R[~mk_esd], ratio[~mk_esd], yerr=np.abs(esd_err[~mk_esd]/esd_mod[~mk_esd]),
                   fmt="o", ms=3, color="0.65")
-    ax_r.errorbar(R[mk_esd], ratio[mk_esd], yerr=esd_err[mk_esd]/esd_mod[mk_esd],
+    ax_r.errorbar(R[mk_esd], ratio[mk_esd], yerr=np.abs(esd_err[mk_esd]/esd_mod[mk_esd]),
                   fmt="o", ms=4, color="k")
     ax_r.axhline(1.0, color="C0", lw=1)
     ax_r.axhline(1.1, color="gray", lw=0.7, ls="--")
@@ -809,10 +814,10 @@ def plot_bestfit(label: str, infra: _Infrastructure, params: list,
     ratio = wt / wt_mod
     wt_err_eff = np.sqrt(wt_err**2 + (0.05 * np.abs(wt))**2)
     ax_r.errorbar(th[~mk_theta], ratio[~mk_theta],
-                  yerr=wt_err_eff[~mk_theta]/wt_mod[~mk_theta],
+                  yerr=np.abs(wt_err_eff[~mk_theta]/wt_mod[~mk_theta]),
                   fmt="o", ms=3, color="0.65")
     ax_r.errorbar(th[mk_theta], ratio[mk_theta],
-                  yerr=wt_err_eff[mk_theta]/wt_mod[mk_theta],
+                  yerr=np.abs(wt_err_eff[mk_theta]/wt_mod[mk_theta]),
                   fmt="o", ms=4, color="k")
     ax_r.axhline(1.0, color="C0", lw=1)
     ax_r.axhline(1.1, color="gray", lw=0.7, ls="--")
@@ -936,15 +941,23 @@ def main():
                     },
                     shape_cache=shape_cache, f_sys_wtheta=args.f_sys,
                 )
-                plot_bestfit(
-                    label, infra, map_res["params"],
-                    data_wp_esd, data_wtheta, shape_cache,
-                    out_dir / f"{label}_bestfit.pdf",
-                    chi2_dict=chi2_dict,
-                    rp_min=args.rp_min, rp_max=args.rp_max,
-                    R_min=args.R_min,   R_max=args.R_max,
-                    theta_min=args.theta_min, theta_max=args.theta_max,
-                )
+                # The MAP figure is drawn before the MCMC below, so anything
+                # raised here used to take the whole job with it -- a cosmetic
+                # step killing hours of sampling.  Report and carry on.
+                try:
+                    plot_bestfit(
+                        label, infra, map_res["params"],
+                        data_wp_esd, data_wtheta, shape_cache,
+                        out_dir / f"{label}_bestfit.pdf",
+                        chi2_dict=chi2_dict,
+                        rp_min=args.rp_min, rp_max=args.rp_max,
+                        R_min=args.R_min,   R_max=args.R_max,
+                        theta_min=args.theta_min, theta_max=args.theta_max,
+                    )
+                except Exception as exc:
+                    print(f"  [{label}] [warn] best-fit figure failed "
+                          f"({type(exc).__name__}: {exc}) -- continuing to MCMC",
+                          flush=True)
         else:
             # MCMC-only: run MAP first to seed walkers
             map_res, shape_cache = run_map(
