@@ -345,168 +345,27 @@ Full MAP results and MCMC corner plots are in :ref:`benchmark_more2015`.
 Data digitised from Figure 3 of More+2015 using WebPlotDigitizer;
 stored in ``data/more2015_boss_cmass/``.
 
-.. list-table::
-   :header-rows: 1
-   :widths: 30 15 20 15 20
+.. admonition:: Provenance — campaign ``VTAG=v0.3``
+   :class: note
 
-   * - Variant
-     - :math:`\log_{10} M_*^\mathrm{min}`
-     - :math:`\chi^2`
-     - dof
-     - :math:`\chi^2/\mathrm{dof}`
-   * - ``logM11_12``
-     - 11.1
-     - 71.06
-     - 36
-     - **1.967** (pub. 0.8)
-   * - ``logM11p3_12``
-     - 11.3
-     - 57.60
-     - 35
-     - **1.646** (pub. 1.3)
-   * - ``logM11p4_12``
-     - 11.4
-     - 63.30
-     - 35
-     - **1.809** (pub. 1.5)
-   * - ``logM11_12_freecosmo``
-     - 11.1 + free :math:`\Omega_m,S_8`
-     - 35.70
-     - 33
-     - **1.082**
+   These numbers come from the ``VTAG=v0.3`` campaign (0.3.0 Hankel-transform
+   fix, linear :math:`P(k)` pinned to CAMB).  The 0.3.1 package default is the
+   CosmoPower-JAX emulator — see :doc:`oarsub_campaign`.
 
-.. rubric:: Primary benchmark: ``logM11_12`` (MAP parameters)
+.. warning:: **The Hankel fix moved these benchmarks, and three of them now fail.**
 
-.. list-table::
-   :header-rows: 1
-   :widths: 22 16 24 18
+   The three fixed-cosmology variants went from
+   :math:`\chi^2/\mathrm{dof} = 1.65\text{--}1.97` before the 0.3.0 correction to
+   :func:`~hod_mod.core.power_spectrum._pk_to_xi` to **2.22–2.72** after it, which
+   ``run_benchmark`` scores as *FAILED* against its own
+   :math:`\chi^2/\mathrm{dof} < 2` criterion.  Only the free-cosmology variant
+   still passes (1.225).
 
-   * - Parameter
-     - MAP
-     - Published (:math:`\pm 1\sigma`)
-     - Deviation
-   * - ``log10mmin``
-     - 13.134
-     - :math:`13.13 \pm 0.13`
-     - :math:`+0.03\sigma`
-   * - ``sigma_logm``
-     - 0.458
-     - :math:`0.469 \pm 0.13`
-     - :math:`-0.09\sigma`
-   * - ``log10m1``
-     - 14.168
-     - :math:`14.21 \pm 0.13`
-     - :math:`-0.32\sigma`
-   * - ``alpha``
-     - 1.841
-     - :math:`1.13 \pm 0.15`
-     - :math:`+4.74\sigma`
-   * - ``kappa``
-     - 3.000
-     - :math:`1.25 \pm 0.45`
-     - :math:`+3.89\sigma`
+The tables below are generated from ``benchmark_result.json`` by
+:mod:`hod_mod.scripts.benchmarks.make_benchmark_tables` — the same fragment
+:doc:`benchmark_more2015` includes, so the two pages state one set of numbers.
 
-.. note::
-   ``alpha`` and ``kappa`` tensions are driven by a near-degenerate likelihood valley.
-   MCMC medians agree much better: ``alpha`` = 1.928 (±0.19), ``kappa`` = 1.862 (+0.79/−1.03).
-   All mass-scale parameters agree within :math:`0.32\sigma`.
-
-.. rubric:: Variant ``logM11p3_12`` (MAP)
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 16 24 18
-
-   * - Parameter
-     - MAP
-     - Published (:math:`\pm 1\sigma`)
-     - Deviation
-   * - ``log10mmin``
-     - 13.549
-     - :math:`13.45 \pm 0.15`
-     - :math:`+0.66\sigma`
-   * - ``sigma_logm``
-     - 0.616
-     - :math:`0.671 \pm 0.19`
-     - :math:`-0.29\sigma`
-   * - ``log10m1``
-     - 14.548
-     - :math:`14.51 \pm 0.17`
-     - :math:`+0.22\sigma`
-   * - ``alpha``
-     - 2.361
-     - :math:`1.14 \pm 0.49`
-     - :math:`+2.49\sigma`
-   * - ``kappa``
-     - 0.148
-     - not published
-     - —
-
-.. rubric:: Variant ``logM11p4_12`` (MAP)
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 16 24 18
-
-   * - Parameter
-     - MAP
-     - Published (:math:`\pm 1\sigma`)
-     - Deviation
-   * - ``log10mmin``
-     - 14.166
-     - :math:`13.68 \pm 0.16`
-     - :math:`+3.04\sigma`
-   * - ``sigma_logm``
-     - 0.875
-     - :math:`0.889 \pm 0.22`
-     - :math:`-0.06\sigma`
-   * - ``log10m1``
-     - 14.390
-     - :math:`14.56 \pm 0.25`
-     - :math:`-0.68\sigma`
-   * - ``alpha``
-     - 1.602
-     - :math:`1.00 \pm 0.44`
-     - :math:`+1.37\sigma`
-   * - ``kappa``
-     - 1.675
-     - not published
-     - —
-
-.. rubric:: Free-cosmology variant ``logM11_12_freecosmo`` (MAP)
-
-Three additional free parameters with Planck 2018 priors:
-:math:`\Omega_m = 0.310 \pm 0.020`, :math:`S_8 \equiv \sigma_8\sqrt{\Omega_m/0.3} = 0.798 \pm 0.044`,
-:math:`h = 0.703` (fixed at the published value).
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 16 24
-
-   * - Parameter
-     - MAP
-     - Planck prior centre
-   * - :math:`\Omega_m`
-     - 0.281
-     - :math:`0.310 \pm 0.020`
-   * - :math:`S_8`
-     - 0.778
-     - :math:`0.798 \pm 0.044`
-   * - ``log10mmin``
-     - 13.163
-     - —
-   * - ``sigma_logm``
-     - 0.508
-     - —
-   * - ``log10m1``
-     - 14.224
-     - —
-   * - ``alpha``
-     - 2.018
-     - —
-   * - ``kappa``
-     - 2.920
-     - —
+.. include:: _benchmark_more2015_auto.rst
 
 ----
 
@@ -534,7 +393,7 @@ Benchmark figures (``logM11_12``)
    :width: 95%
    :alt: more2015 MCMC corner plot
 
-   MCMC posterior corner plot (32 walkers × 2000 steps, 500 burn-in = 48 000 samples).
+   MCMC posterior corner plot (32 walkers × 2000 production steps after 500 burn-in = 64 000 samples).
    Contours: 68% and 95% credible regions.  Orange lines: published More+2015 values.
 
 ----

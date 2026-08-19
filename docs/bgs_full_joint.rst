@@ -70,13 +70,15 @@ handled two ways (each has its own OAR job):
    * - ``log10_M_star_cen``
      - :math:`\mathcal N(11.3, 0.3)`
      - ESD central point mass (:math:`\Delta\Sigma` inner boundary)
-   * - ``lx_norm`` / ``lx_slope``
-     - flat / :math:`\mathcal N`
-     - :math:`L_X`–:math:`M_{500c}` relation (normalisation, slope)
-   * - ``kt_norm`` / ``kt_slope``
-     - tight :math:`\mathcal N`
-     - :math:`k_BT`–:math:`M_{500c}` relation (:math:`\sigma=0.05/0.04` around the
-       observed 0.4/0.6 — see *Why the AGN index is free* below)
+   * - ``log10_ne03`` / ``beta_n``
+     - flat
+     - DPM electron-density normalisation at :math:`0.3\,r_{500c}` and its mass slope
+   * - ``log10_p03`` / ``beta_P``
+     - tight :math:`\mathcal N` (:math:`\sigma=0.05/0.04`)
+     - DPM electron-pressure normalisation at :math:`0.3\,r_{500c}` and its mass
+       slope.  :math:`L_X` and :math:`k_BT` are no longer free power laws: since
+       the native-DPM re-base they are *derived* by integrating the profiles, so
+       the scaling relations shown below are predictions, not fitted lines.
    * - ``p2`` / ``r_max``
      - flat
      - hot-gas density-profile shape (transfer grid)
@@ -158,6 +160,52 @@ panel decomposed into its physical components.
    :math:`\theta\lesssim20''` and the gas the outer profile.  The 9 X-ray
    parameters are fit jointly across all bands.
 
+Goodness of fit (campaign ``VTAG=v0.3``)
+----------------------------------------
+
+.. list-table:: Step-2 MAP, ``bgs_full_joint_fixedzm15_v0.3``
+   :header-rows: 1
+   :widths: 34 22 22 22
+
+   * - Sector
+     - :math:`\chi^2`
+     - share
+     - note
+   * - galaxies (:math:`n_{\rm gal}, w_p, \Delta\Sigma`)
+     - 2.11
+     - 0.002 %
+     - ZM15 held fixed
+   * - AGN (XLF + bias)
+     - 53.55
+     - 0.05 %
+     - —
+   * - X-ray (broad + 15 bands)
+     - 97 985.73
+     - **99.9 %**
+     - carries the entire misfit
+   * - **total**
+     - **98 041.40** / 526 dof
+     - —
+     - :math:`\chi^2/\mathrm{dof} = 186.4`
+
+Two things follow, and neither is cosmetic.
+
+* **The X-ray band sector is not fitted.**  The galaxy and AGN sectors are
+  essentially perfect (:math:`\chi^2 = 2.1` and :math:`53.6`); all 98 000 units of
+  :math:`\chi^2` sit in the X-ray bands.  A :math:`\chi^2/\mathrm{dof}` of 186 is
+  not a measurement — the band model is missing something, and the posterior
+  below should be read as "where the sampler went", not as a constraint.
+* **The MAP and the posterior disagree.**  Re-evaluating at the posterior median
+  gives :math:`\chi^2/\mathrm{dof} = 2805` (X-ray 1 475 528), a factor 15 worse
+  than the MAP.  The chain is not sampling a basin around the MAP; several
+  parameters sit on prior bounds (``p2`` at its 0.1 floor while the MAP is at
+  0.637; ``r_max``, ``agn_delta2`` and ``log10_M_star_cen`` at their ceilings;
+  ``agn_mu_bh`` at its floor).  ``agn_gamma`` is one of them: the chain rails on
+  its :math:`\Gamma=1.2` floor (median 1.224) while the MAP sits at 1.448, so
+  the ":math:`\Gamma` settles hard at :math:`\approx1.5`" reading below holds at
+  the MAP but not in the posterior.  Quote the MAP, and treat the 68 % intervals
+  in ``posterior_summary.json`` as prior-dominated.
+
 Why the AGN photon index is free
 --------------------------------
 
@@ -173,7 +221,9 @@ it at :math:`\sim3.6\sigma`).
 The fix is to give the **continuum** its own spectral degree of freedom: the AGN
 photon index ``agn_gamma`` (fixed at :math:`\Gamma=1.8`) is freed.  The AGN then
 absorbs the flat spectral shape (:math:`\Gamma` settles hard, :math:`\approx1.5`),
-the band :math:`\chi^2` drops by :math:`\sim210`, and with the tight
+the band :math:`\chi^2` drops by :math:`\sim210` — *these two numbers come from the
+2026-07 free-vs-fixed diagnostic pair, not from the v0.3 run archived here, which
+stores only the* :math:`\Gamma`-*free fit* — and with the tight
 :math:`k_BT`-prior the **posterior** :math:`k_BT`-:math:`M` relation tracks the
 resolved-cluster scaling instead of soaring an order of magnitude above it.  A
 residual remains: even :math:`\Gamma`-free, the bands cannot fully pin the

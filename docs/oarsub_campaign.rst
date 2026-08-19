@@ -105,3 +105,49 @@ VTAG       Physics                         ``HOD_MOD_PK_BACKEND`` pin   Results 
 The pin is derived from ``VTAG`` *inside the job* rather than exported by the
 caller because OAR does not propagate the submitting shell's environment to
 the node — an ``HOD_MOD_PK_BACKEND=camb oarsub …`` would be silently dropped.
+
+What a "v0.3 figure" is, and what it is not
+--------------------------------------------
+
+Pages refreshed from the ``VTAG=v0.3`` campaign carry a provenance note pointing
+here.  Three caveats, stated once:
+
+* **The package version is not the campaign version.**  ``conf.py`` takes
+  ``release`` from ``pyproject.toml`` (0.3.1), whose *default* linear
+  :math:`P(k)` is the CosmoPower-JAX emulator.  The v0.3 figures were produced
+  with ``HOD_MOD_PK_BACKEND=camb``, pinned inside the job from ``VTAG``.  0.3.1
+  in the sidebar and CAMB in the figures is deliberate, not a mismatch.
+
+* **The pin reaches Families A–C only.**  Family-D forecasts
+  (:doc:`sensitivity_fisher`, :doc:`stage4_forecast`, :doc:`tier2_forecast`,
+  :doc:`tier3_forecast`, :doc:`tier4_forecast`, :doc:`benchmark_map_mcmc`) build
+  :class:`~hod_mod.forecast.forward_jax.ForwardModel`, which chooses its
+  :math:`P(k)` correction from a driver flag and defaults to the emulator —
+  real CAMB is not JAX-traceable.  Those pages are campaign-fresh but
+  **emulator-based**, and a ``VTAG=v0.3`` re-run would not make them CAMB
+  products.
+
+* **Anything dated before 2026-07-16 is pre-campaign**, hence pre-Hankel-fix,
+  hence superseded.  Such pages carry a dated *Pending v0.3 re-run* admonition
+  naming the artifact they wait on.  ``campaign_status.sh`` finds them:
+  ``SINCE=2026-07-16`` makes it reject an artifact that merely *exists*, which
+  is how the three tier forecasts were caught still quoting their 2026-07-02/04
+  runs after a job that had refreshed only their Jacobian cache.
+
+Checking a campaign before trusting its figures
+------------------------------------------------
+
+.. code-block:: bash
+
+   # what landed, per artifact rather than per directory
+   SINCE=2026-07-16 VTAG=v0.3 HOD_MOD_RESULTS=~/data/hod_mod_results \
+       ./oarsub/campaign_status.sh
+
+   # refresh only what is complete; the rest is skipped with a reason
+   SINCE=2026-07-16 VTAG=v0.3 HOD_MOD_RESULTS=~/data/hod_mod_results \
+       ALLOW_PARTIAL=1 ./oarsub/collect_and_plot.sh
+
+``collect_and_plot.sh`` stamps ``docs/_images/.campaign_vtag`` with the campaign
+it collected and refuses to collect a different one on top without
+``FORCE_VTAG_SWITCH=1``: the two campaigns do not produce the same *set* of
+figures, so collecting one over the other leaves a silent mix.

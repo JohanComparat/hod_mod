@@ -3,6 +3,19 @@
 BGS Comparat+2025 — Joint :math:`w_p` + :math:`\Delta\Sigma` fit, M★ > 10\ :sup:`10` M☉
 ==========================================================================================
 
+.. admonition:: Pending v0.3 re-run — the numbers below are superseded
+   :class: warning
+
+   *Status 2026-08-19.*  The two joint fits and the six-test tension programme
+   below were run on **2026-06-10/11**, before the 0.3.0 Hankel-transform fix —
+   which moved :math:`w_p` by up to 19 % and :math:`\Delta\Sigma` by up to 20 %,
+   i.e. exactly the two observables whose disagreement this page is about.  The
+   campaign's replacement fit (``fit_joint_lsdr10``) reached its MAP only
+   (:math:`\chi^2/\mathrm{dof} = 5845.24/62 = 94.28`; wp 2519.05/11, ESD
+   485.56/15, :math:`w_\theta` 2840.63/29) — its MCMC aborted in a plotting call
+   until that was fixed.  Treat the tension conclusions as provisional.  See
+   :doc:`oarsub_campaign`.
+
 This page documents two joint HOD fits to the DESI Bright Galaxy Survey (BGS) LS10
 stellar-mass-selected sample using the :class:`~hod_mod.connection.hod.MoreHODModel`
 (More et al. 2015) with a full suite of astrophysical corrections.

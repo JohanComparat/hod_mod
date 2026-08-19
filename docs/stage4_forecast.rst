@@ -212,34 +212,34 @@ parameter inventory) with weakly-informative nuisance priors, and propagating to
      - :math:`\sigma(S_8)` +Planck
    * - 0.1
      - :math:`1.2\times10^{-3}` (0.38 %)
-     - :math:`1.5\times10^{-3}` (0.19 %)
+     - :math:`1.6\times10^{-3}` (0.19 %)
      - :math:`1.3\times10^{-3}` (0.15 %)
      - :math:`7.4\times10^{5}`
-     - :math:`1.3\times10^{-3}` (0.15 %)
+     - :math:`1.2\times10^{-3}` (0.15 %)
    * - 0.5
-     - :math:`1.7\times10^{-3}` (0.53 %)
+     - :math:`1.7\times10^{-3}` (0.54 %)
      - :math:`2.6\times10^{-3}` (0.32 %)
      - :math:`1.5\times10^{-3}` (0.18 %)
      - :math:`4.2\times10^{5}`
      - :math:`1.4\times10^{-3}` (0.17 %)
    * - 2.5
-     - :math:`2.3\times10^{-3}` (0.74 %)
-     - :math:`4.6\times10^{-3}` (0.56 %)
-     - :math:`2.7\times10^{-3}` (0.33 %)
-     - :math:`1.7\times10^{5}`
-     - :math:`2.4\times10^{-3}` (0.29 %)
+     - :math:`2.2\times10^{-3}` (0.72 %)
+     - :math:`4.6\times10^{-3}` (0.57 %)
+     - :math:`2.6\times10^{-3}` (0.31 %)
+     - :math:`2.0\times10^{5}`
+     - :math:`2.2\times10^{-3}` (0.27 %)
    * - 5.0
-     - :math:`2.5\times10^{-3}` (0.80 %)
-     - :math:`6.4\times10^{-3}` (0.78 %)
-     - :math:`4.6\times10^{-3}` (0.56 %)
-     - :math:`9.4\times10^{4}`
-     - :math:`3.5\times10^{-3}` (0.43 %)
+     - :math:`2.4\times10^{-3}` (0.78 %)
+     - :math:`6.3\times10^{-3}` (0.78 %)
+     - :math:`4.3\times10^{-3}` (0.52 %)
+     - :math:`1.1\times10^{5}`
+     - :math:`3.3\times10^{-3}` (0.39 %)
    * - 10.0
-     - :math:`2.6\times10^{-3}` (0.84 %)
-     - :math:`8.8\times10^{-3}` (1.08 %)
-     - :math:`7.1\times10^{-3}` (0.86 %)
-     - :math:`5.8\times10^{4}`
-     - :math:`4.5\times10^{-3}` (0.55 %)
+     - :math:`2.5\times10^{-3}` (0.82 %)
+     - :math:`8.3\times10^{-3}` (1.03 %)
+     - :math:`6.4\times10^{-3}` (0.78 %)
+     - :math:`6.9\times10^{4}`
+     - :math:`4.2\times10^{-3}` (0.51 %)
 
 .. figure:: _images/stage4_forecast.png
    :width: 100%
@@ -254,6 +254,17 @@ parameter inventory) with weakly-informative nuisance priors, and propagating to
    (:math:`w_p,\Delta\Sigma`) → abundances (:math:`n_{\rm gal},\Phi(M_*)`) → lensing
    / CMB-lensing → X-ray and SZ.
 
+.. admonition:: Provenance — campaign-fresh, but emulator-based
+   :class: note
+
+   These numbers are from the ``VTAG=v0.3`` campaign run of 2026-07-16.  Unlike
+   the benchmark and production-fit pages, they are **not** CAMB products: the
+   forecast stack builds :class:`~hod_mod.forecast.forward_jax.ForwardModel`,
+   which selects its :math:`P(k)` correction from a driver flag and defaults to
+   the CosmoPower-JAX emulator because real CAMB is not JAX-traceable.  The
+   ``HOD_MOD_PK_BACKEND=camb`` pin reaches Families A–C only, so a ``VTAG=v0.3``
+   re-run would not change that — see :doc:`oarsub_campaign`.
+
 Reading the forecast:
 
 * **Expected precision.**  The full combination reaches
@@ -267,7 +278,7 @@ Reading the forecast:
   full-shape + 3×2pt constraints "will rival CMB results."
 
 * **The scale cut is worth a factor of a few.**  Pushing :math:`R_{\min}` from 10 to
-  0.1 Mpc/h tightens :math:`\sigma(S_8)` by :math:`\sim5.6\times` and
+  0.1 Mpc/h tightens :math:`\sigma(S_8)` by :math:`\sim5.1\times` and
   :math:`\sigma(\Omega_m)` by :math:`\sim2.2\times` — the payoff of a model that can
   be trusted below :math:`\sim` Mpc scales, which is the whole motivation for the
   gas/AGN feedback modelling.
@@ -287,7 +298,7 @@ Reading the forecast:
 
 * **Adding a Planck prior** helps most where the LSS data are weakest (large scale
   cuts): at :math:`R_{\min}=10` Mpc/h it tightens :math:`\sigma(S_8)` by
-  :math:`\sim1.6\times`, but at :math:`R_{\min}=0.1` Mpc/h the LSS combination is
+  :math:`\sim1.5\times`, but at :math:`R_{\min}=0.1` Mpc/h the LSS combination is
   already within :math:`\sim1\%` of the joint result — i.e. the small-scale
   multi-wavelength data are self-sufficient.
 

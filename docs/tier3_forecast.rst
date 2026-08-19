@@ -1,6 +1,22 @@
 Tier-3 forecast: multi-wavelength maps, band LFs, z < 2, M* > 10⁹
 ==================================================================
 
+.. admonition:: Pending v0.3 re-run — the numbers below are superseded
+   :class: warning
+
+   *Status 2026-08-19.*  The v0.3 campaign job for this tier ran on 2026-07-16
+   but only refreshed its Jacobian block **cache**; it was killed before writing
+   ``tier3_forecast_nb6.npz``, so the numbers, ``SUMMARY_nb6.txt`` and every
+   ``tier3_forecast__*.png`` on this page are still from the **2026-07-04** run and predate
+   the 0.3.0 Hankel-transform fix.
+
+   The re-run needs the cache cleared first.  ``Tier2Forecast._cache_path``
+   (:mod:`hod_mod.forecast.tier2`) keys a cached block on
+   ``spec_repr + block.label + block.which + fiducial`` — with **no code
+   version** — and the Hankel fix changed the input→output map without changing
+   any input, so **307 of 511** cached blocks computed before 2026-07-16
+   would be silently reused.  See :doc:`oarsub_campaign`.
+
 The :doc:`tier-2 study <tier2_forecast>` freed every parameter of the
 X-ray/tSZ/lensing forward model on a z < 1, M* > 10¹⁰ galaxy grid.  The
 tier-3 study extends that design to the full multi-wavelength survey
