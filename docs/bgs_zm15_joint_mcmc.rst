@@ -3,6 +3,21 @@
 BGS × LS10 — Zu & Mandelbaum 2015 joint :math:`w_p` + :math:`n_{\rm gal}` MCMC
 ==============================================================================================
 
+.. admonition:: Pending v0.3 re-run — the numbers below are superseded
+   :class: warning
+
+   *Status 2026-08-19.*  This page is built on a chain produced with **hod_mod
+   0.2.1**, i.e. before the 0.3.0 Hankel-transform fix, so every number on it —
+   including the :math:`\chi^2/\mathrm{dof} = 0.44` headline, the 13-parameter
+   posterior table and the per-bin :math:`M_{\rm eff}`/:math:`b_{\rm eff}`/
+   :math:`f_{\rm sat}` table — is superseded.  The v0.3 re-run is under way:
+   its MAP already gives :math:`\chi^2/\mathrm{dof} = 59.70/99 = 0.603`, and the
+   chain stood at **1871/2500 steps** when this note was written, so
+   ``bgs_zm15_joint_wp_ngal_v0.3/flatchain.npz`` does not exist yet and the
+   figures cannot be regenerated.  Resume with
+   ``VTAG=v0.3 ./oarsub/submit_campaign.sh <project> production``; track it with
+   ``./oarsub/campaign_status.sh``.  See :doc:`oarsub_campaign`.
+
 This page exploits the finished MCMC posterior of the global inverse-HOD fit of
 :class:`~hod_mod.connection.hod.ZuMandelbaum15HODModel` (Zu & Mandelbaum 2015) to the
 DESI Bright Galaxy Survey (BGS) LS10 stellar-mass-binned campaign.  A **single** set of

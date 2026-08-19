@@ -67,7 +67,18 @@ check_fit() {
     local d="$1" art="$2" what="$3" p
     if [ ! -d "$RES/$d" ]; then bad "$d" "absent — $what"; return; fi
     if [ -f "$RES/$d/$art" ]; then
-        ok "$d" "$art, $(find "$RES/$d/$art" -printf '%TY-%Tm-%Td %TH:%TM\n' 2>/dev/null)"
+        local when; when="$(find "$RES/$d/$art" -printf '%TY-%Tm-%Td %TH:%TM\n' 2>/dev/null)"
+        # SINCE=YYYY-MM-DD also rejects an artifact that PREDATES the campaign.
+        # Not pedantry: the tier2/3/4 forecast jobs re-ran on 2026-07-16, filled
+        # cache/ with hundreds of Jacobian blocks and died before writing their
+        # npz.  The npz + SUMMARY + figures left on disk are 2026-07-02..07-04,
+        # and tier{2,3,4}_forecast.rst quoted them under a v0.3 heading.
+        if [ -n "${SINCE:-}" ] \
+           && [ "$(date -r "$RES/$d/$art" +%s)" -lt "$(date -d "$SINCE" +%s)" ]; then
+            bad "$d" "$art is $when — PREDATES $SINCE (pre-campaign result, run never finished)"
+        else
+            ok "$d" "$art, $when"
+        fi
     else
         # chain.h5 for the ZM15/full-joint fits; <sample>_backend.h5 for
         # fit_joint_lsdr10, which names its checkpoint after the sample.
@@ -168,9 +179,23 @@ fi
 
 echo
 echo "-- forecasts (forecasts.txt: written in place via results_root()) --"
-for d in sensitivity_fisher tier2_forecast tier3_forecast stage4_forecast; do
-    check_dir "$d" "forecasts family not finished/synced"
-done
+# check_dir is the wrong question here.  tier2/3/4 write hundreds of per-block
+# Jacobian caches under cache/ as they go, and the npz + SUMMARY + figures only
+# at the very end — so a run killed mid-Jacobian leaves a directory with ~450
+# files in it, which check_dir happily called OK.  That is exactly what happened
+# on 2026-07-16: all three tiers refreshed their cache and never wrote an npz,
+# so three doc pages kept quoting 2026-07-02..07-04 numbers as v0.3 results.
+# Check the artifact the figure script actually opens (make_tier2_figures takes
+# the npz as argv[1]); pass SINCE=YYYY-MM-DD to also catch a pre-campaign one.
+check_fit sensitivity_fisher fisher_study.npz       "run_sensitivity_study not finished/synced"
+check_fit stage4_forecast    stage4_forecast.npz    "run_stage4_forecast not finished/synced"
+check_fit tier2_forecast     tier2_forecast_nb6.npz "run_tier2_forecast not finished/synced"
+check_fit tier3_forecast     tier3_forecast_nb6.npz "run_tier3_forecast not finished/synced"
+# tier4 and fits/benchmark were never audited at all, though both are
+# forecasts.txt lines and both have doc pages embedding their figures.
+check_fit tier4_forecast     tier4_forecast_nb6.npz "run_tier4_forecast not finished/synced"
+check_fit fits/benchmark     benchmark_map_mcmc_mcmc_summary.json \
+                                                    "fit_benchmark_observables not finished/synced"
 
 echo
 if [ "$miss" -eq 0 ]; then

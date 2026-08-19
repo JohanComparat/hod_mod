@@ -114,10 +114,57 @@ for p in gas-shape gas-temp gas-full agn-occ agn-lum; do
 done
 
 echo "== D. forecasts + benchmark MAP+MCMC"
-JAX_ENABLE_X64=1 $PY -m hod_mod.scripts.forecasts.make_sensitivity_figures || true
-JAX_ENABLE_X64=1 $PY -m hod_mod.scripts.forecasts.make_tier2_figures || true
-JAX_ENABLE_X64=1 $PY -m hod_mod.scripts.fitting.plot_benchmark_fit --label benchmark_map_mcmc || true
-#   run_stage4_forecast already copies stage4_forecast.png into docs/_images.
+# NB: the writers in this section resolve docs/_images THEMSELVES (their own
+# _docs_images() / _save()), so unlike sections A-C they ignore $IMG.  An
+# IMG=/tmp/... rehearsal still overwrites the real figures.
+#
+# make_sensitivity_figures takes no arguments — it resolves
+# results_root()/sensitivity_fisher/fisher_study.npz itself.  It is slow (jax +
+# ForwardModel import alone is minutes) and it silently RECOMPUTES the Jacobian
+# whenever the npz's param_names no longer match forward_jax.PARAM_NAMES, which
+# is the case today (the pressure sector was re-parametrised after the run).
+# Recomputing would produce HEAD-derived figures under a v0.3 label, so it stays
+# off until run_sensitivity_study is re-run; see docs/sensitivity_fisher.rst.
+if [ "${REFRESH_SENSITIVITY:-0}" = "1" ]; then
+    JAX_ENABLE_X64=1 $PY -m hod_mod.scripts.forecasts.make_sensitivity_figures || true
+else
+    echo "   .. skip sensitivity figures (REFRESH_SENSITIVITY=1 to force — reads a"
+    echo "      fisher_study.npz whose param_names no longer match the code)"
+fi
+
+# make_tier2_figures takes a POSITIONAL npz (ap.add_argument("npz")).  Called
+# bare — as this line used to be — it exits 2 on argparse and `|| true` swallowed
+# it, which is why docs/_images/tier{2,3,4}_forecast__*.png had never once been
+# refreshed by this script.  One script serves all three tiers: it switches the
+# figure prefix off the npz basename.  Guarded on SINCE so a run that only
+# refreshed its cache/ cannot restamp 2026-07 science with today's date.
+for t in 2 3 4; do
+    npz="$RES/tier${t}_forecast/tier${t}_forecast_nb6.npz"
+    if [ ! -f "$npz" ]; then
+        echo "   .. skip tier${t} figures (no $(basename "$npz") — run never finished)"; continue
+    fi
+    if [ -n "${SINCE:-}" ] && [ "$(date -r "$npz" +%s)" -lt "$(date -d "$SINCE" +%s)" ]; then
+        echo "   .. skip tier${t} figures ($(basename "$npz") predates $SINCE)"; continue
+    fi
+    extra=""
+    [ "$t" = 2 ] && [ -f "$RES/tier2_forecast/tier2_forecast_nb1.npz" ] \
+        && extra="--compare $RES/tier2_forecast/tier2_forecast_nb1.npz"
+    JAX_ENABLE_X64=1 $PY -m hod_mod.scripts.forecasts.make_tier2_figures "$npz" $extra || true
+done
+
+# Same freshness gate: fits/benchmark/ last produced output on 2026-07-12, four
+# days before the campaign opened, so regenerating its figures now would stamp a
+# pre-campaign run with today's date on a page that claims to be v0.3.
+_bm="$RES/fits/benchmark/benchmark_map_mcmc_mcmc_summary.json"
+if [ -n "${SINCE:-}" ] && [ -f "$_bm" ] \
+   && [ "$(date -r "$_bm" +%s)" -lt "$(date -d "$SINCE" +%s)" ]; then
+    echo "   .. skip benchmark_map_mcmc figures (run predates $SINCE)"
+else
+    JAX_ENABLE_X64=1 $PY -m hod_mod.scripts.fitting.plot_benchmark_fit --label benchmark_map_mcmc || true
+fi
+#   run_stage4_forecast copies stage4_forecast.png into docs/_images — but it ran
+#   on dahu, so that copy landed in dahu's checkout.  Copy the pulled one here.
+cp -f "$RES/stage4_forecast/stage4_forecast.png" "$IMG/" 2>/dev/null || true
 
 printf '%s\n' "$VTAG" > "$STAMP"
 echo "== done.  Review with:  git status $IMG   &&   git diff --stat docs/"

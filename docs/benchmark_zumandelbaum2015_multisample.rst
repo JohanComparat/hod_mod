@@ -5,6 +5,18 @@
 Benchmark: Zu & Mandelbaum 2015 — Multi-Sample iHOD
 =====================================================
 
+.. admonition:: Pending v0.3 re-run — the numbers below are superseded
+   :class: warning
+
+   *Status 2026-08-19.*  The joint all-bins fit behind the tables below was run
+   on **2026-06-24**, before the 0.3.0 Hankel-transform fix.  It has not been
+   re-run because its driver, ``hod_mod/scripts/benchmarks/run_zm15_joint_all.py``,
+   is in none of the ``oarsub/params/*.txt`` campaign files — so no campaign has
+   ever refreshed this page.  Of the seven per-bin fits, two are v0.3
+   (9.4–9.8 and 9.8–10.2); the other five still carry 2026-06-23/24 results with
+   chains at 1128–1690 of 2500 steps.  The table is left whole rather than
+   updated two rows out of seven.  See :doc:`oarsub_campaign`.
+
 .. list-table::
    :widths: 25 75
 
