@@ -12,7 +12,7 @@
 # Submit:  oarsub --project your-oar-project -S ./oarsub/fit_bgs_full_joint_allparams_mcmc.sh
 # =============================================================================
 
-#OAR -n bgs_full_joint_allparams
+#OAR --name bgs_full_joint_allparams
 #OAR --project your-oar-project
 #OAR -l /nodes=1/core=16,walltime=48:00:00
 #OAR --stdout oarsub/logs/%jobid%.bgs_full_joint_allparams.out

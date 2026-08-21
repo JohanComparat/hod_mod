@@ -16,7 +16,7 @@
 # Smoke:   oarsub -t devel -S ./oarsub/fit_comparat2025_agn_lum.sh     (<=30 min)
 # =============================================================================
 
-#OAR -n c2025_agn_lum
+#OAR --name c2025_agn_lum
 #OAR --project your-oar-project
 #OAR -l /nodes=1/core=16,walltime=04:00:00
 #OAR --stdout oarsub/logs/%jobid%.c2025_agn_lum.out

@@ -25,7 +25,7 @@
 #          -p "network_address='<a devel node>'" -S ...   # or run the line locally
 # =============================================================================
 
-#OAR -n hodmod_v03_rerun
+#OAR --name hodmod_v03_rerun
 #OAR --project PROJECTNAME
 #OAR -l /nodes=1/core=8,walltime=02:00:00
 #OAR --stdout oarsub/logs/%jobid%.v03_rerun.out
