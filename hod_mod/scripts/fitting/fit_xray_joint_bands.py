@@ -163,6 +163,53 @@ _GAS_PRIOR_WIDEN = 1.5    # inflate the induced sigmas (Sigma scales as widen^2)
 _GAS_PRIOR = None         # dict(mu=(4,), icov=(4,4)), set by _apply_candidate
 
 
+def _scaling_ctx(z=None):
+    """ScalingCtx for the native-DPM -> scaling-relation map (see dpm_priors).
+
+    Extracted so the prior back-propagation and the forward projection
+    :func:`scaling_from_native` cannot drift apart: both must use the same mass
+    range, DPM shape and cooling table, or the prior would be expressed in
+    different coordinates from the values it is compared against.
+    """
+    import jax
+    jax.config.update("jax_enable_x64", True)   # emission integral carries r_cm^2 ~ 1e49
+    from hod_mod.fitting.dpm_priors import ScalingCtx
+    from hod_mod.scripts.validate_gas_profiles import _r200, _c200_approx, _ez
+
+    z = _PRIOR_Z if z is None else float(z)
+    h = float(F._THETA_COSMO["h"])
+    m200 = np.geomspace(3e13, 2e15, 12) * h      # the group->cluster range the priors describe
+    r200 = np.array([_r200(m, z) for m in m200])
+    c200 = np.array([_c200_approx(m) for m in m200])
+    m500c, r500c = m200_to_m500c(m200, c200, r200, _rho_crit_z(z))
+    shape = dict(a_in_n=1.0, a_tr_n=1.9, a_out_n=2.7, gamma_n=2.0,       # DPM model 2 density
+                 a_in_p=0.3, a_tr_p=1.3, a_out_p=4.1, gamma_p=8.0 / 3.0)  # DPM model 2 pressure
+    _, cool_broad = _band_cooling()
+    return ScalingCtx(m200, r200, np.asarray(m500c), np.asarray(r500c), cool_broad,
+                      shape, z, float(_ez(z)), h, z_metal=_Z_FID, t_min=_T_MIN_XRAY)
+
+
+def scaling_from_native(theta_n, z=None):
+    """``[log10_ne03, beta_n, log10_p03, beta_P]`` -> ``dict`` of the four
+    scaling-relation parameters ``lx_norm, lx_slope, kt_norm, kt_slope``.
+
+    The forward direction of the map that :func:`_induced_gas_prior` inverts.  It
+    exists because the native-DPM re-base removed those four as *fitted*
+    parameters while the Fisher forecast stack
+    (:mod:`hod_mod.forecast.forward_jax`) still uses them as its gas sector.
+    Without this projection the two parametrisations simply have no common
+    ground, and ``forecast.params.load_fiducial`` silently falls back to
+    hard-coded defaults the moment the band fit is re-run natively.
+
+    Not cheap (it builds the APEC cooling table), so call it once per fit and
+    persist the result, rather than per forecast evaluation.
+    """
+    from hod_mod.fitting.dpm_priors import scaling_map
+    out = np.asarray(scaling_map(np.asarray(theta_n, float), _scaling_ctx(z)), float)
+    return dict(zip(("lx_norm", "lx_slope", "kt_norm", "kt_slope"),
+                    (float(v) for v in out)))
+
+
 def _induced_gas_prior(widen=None):
     """(mu, cov) on [log10_ne03, beta_n, log10_p03, beta_P] from the GAS.py priors."""
     widen = _GAS_PRIOR_WIDEN if widen is None else float(widen)
@@ -181,28 +228,14 @@ def _induced_gas_prior(widen=None):
             return d["mu"], d["cov"] * widen ** 2
         print("  induced gas prior cache is stale (z/mu_s/sig_s changed) -> rebuild",
               flush=True)
-    import jax
-    jax.config.update("jax_enable_x64", True)   # emission integral carries r_cm^2 ~ 1e49
-    from hod_mod.fitting.dpm_priors import ScalingCtx, induced_gaussian_prior
-    from hod_mod.scripts.validate_gas_profiles import _r200, _c200_approx, _ez
-
-    z = _PRIOR_Z
-    h = float(F._THETA_COSMO["h"])
-    m200 = np.geomspace(3e13, 2e15, 12) * h          # the group->cluster range the priors describe
-    r200 = np.array([_r200(m, z) for m in m200])
-    c200 = np.array([_c200_approx(m) for m in m200])
-    m500c, r500c = m200_to_m500c(m200, c200, r200, _rho_crit_z(z))
-    shape = dict(a_in_n=1.0, a_tr_n=1.9, a_out_n=2.7, gamma_n=2.0,       # DPM model 2 density
-                 a_in_p=0.3, a_tr_p=1.3, a_out_p=4.1, gamma_p=8.0 / 3.0)  # DPM model 2 pressure
-    _, cool_broad = _band_cooling()
-    ctx = ScalingCtx(m200, r200, np.asarray(m500c), np.asarray(r500c), cool_broad,
-                     shape, z, float(_ez(z)), h, z_metal=_Z_FID, t_min=_T_MIN_XRAY)
+    from hod_mod.fitting.dpm_priors import induced_gaussian_prior
+    ctx = _scaling_ctx()
     theta0 = np.array([np.log10(_NE03_FID), _BETA_N_FID, np.log10(_P03_FID), _BETA_P_FID])
     # GAS.py scaling-relation priors (the v2 informative priors, unchanged).
     # mu_s / sig_s are defined at the top of this function so the cache check above
     # can compare against the values actually in force.
     mu_n, cov_n, J, f_at = induced_gaussian_prior(ctx, mu_s, sig_s, theta0)
-    np.savez(cache, mu=mu_n, cov=cov_n, J=J, f_at=f_at, z=z, mu_s=mu_s, sig_s=sig_s)
+    np.savez(cache, mu=mu_n, cov=cov_n, J=J, f_at=f_at, z=ctx.z, mu_s=mu_s, sig_s=sig_s)
     print(f"  induced native-DPM gas prior -> {cache}", flush=True)
     return mu_n, cov_n * widen ** 2
 
@@ -1144,8 +1177,22 @@ def main(argv=None):
     post = {p: dict(median=float(pct[1, i]), lo=float(pct[1, i] - pct[0, i]),
                     hi=float(pct[2, i] - pct[1, i])) for i, p in enumerate(_PARAMS)}
     with open(os.path.join(out_dir, f"{tag}_bands_summary.json"), "w") as fh:
-        json.dump(dict(samples=args.samples, map=out,
+        # Also record the MAP projected into scaling-relation coordinates.  The
+        # forecast stack's gas sector is still (lx_norm, lx_slope, kt_norm,
+        # kt_slope); without this the two parametrisations share no ground and
+        # forecast.params.load_fiducial silently reverts to hard-coded defaults
+        # the first time this fit is re-run natively.
+        try:
+            map_scaling = scaling_from_native([out[k] for k in _PARAMS[:4]])
+        except Exception as e:                      # APEC unavailable, etc.
+            print(f"  (scaling projection unavailable: {e.__class__.__name__}: {e})",
+                  flush=True)
+            map_scaling = None
+        json.dump(dict(samples=args.samples, map=out, map_scaling=map_scaling,
                        acceptance=acc, posterior=post), fh, indent=2)
+        if map_scaling:
+            print("  MAP in scaling-relation coords: "
+                  + ", ".join(f"{k}={v:+.4f}" for k, v in map_scaling.items()), flush=True)
     print("Posterior (median +hi -lo):", flush=True)
     for i, p in enumerate(_PARAMS):
         print(f"  {p:10s} = {pct[1,i]:.3f} +{pct[2,i]-pct[1,i]:.3f} -{pct[1,i]-pct[0,i]:.3f}",
