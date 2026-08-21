@@ -16,7 +16,7 @@
 # Devel:   oarsub -t devel -S ./oarsub/fit_bgs_full_joint_fixedzm15_mcmc.sh
 # =============================================================================
 
-#OAR -n bgs_full_joint_fixedzm15
+#OAR --name bgs_full_joint_fixedzm15
 #OAR --project pr-orphans
 #OAR -l /nodes=1/core=16,walltime=06:00:00
 #OAR --stdout oarsub/logs/%jobid%.bgs_full_joint_fixedzm15.out

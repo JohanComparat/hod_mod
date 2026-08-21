@@ -42,7 +42,7 @@
 # Smoke:   oarsub -t devel -S "./oarsub/fit_xray_bands_dpm_sz.sh v0.31 S1"   (<=30 min)
 # =============================================================================
 
-#OAR -n xband_dpm_sz
+#OAR --name xband_dpm_sz
 #OAR --project pr-orphans
 #OAR -l /nodes=1/core=16,walltime=24:00:00
 #OAR --stdout oarsub/logs/%jobid%.xband_dpm_sz.out

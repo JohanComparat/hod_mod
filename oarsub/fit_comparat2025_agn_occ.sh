@@ -15,7 +15,7 @@
 # Smoke:   oarsub -t devel -S ./oarsub/fit_comparat2025_agn_occ.sh     (<=30 min)
 # =============================================================================
 
-#OAR -n c2025_agn_occ
+#OAR --name c2025_agn_occ
 #OAR --project pr-orphans
 #OAR -l /nodes=1/core=16,walltime=10:00:00
 #OAR --stdout oarsub/logs/%jobid%.c2025_agn_occ.out

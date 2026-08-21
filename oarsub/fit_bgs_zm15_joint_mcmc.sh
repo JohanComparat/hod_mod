@@ -18,7 +18,7 @@
 #           oarsub -t devel -S ./oarsub/fit_bgs_zm15_joint_mcmc.sh
 # =============================================================================
 
-#OAR -n bgs_zm15_joint_mcmc
+#OAR --name bgs_zm15_joint_mcmc
 #OAR --project PROJECTNAME
 #OAR -l /nodes=1/core=16,walltime=24:00:00
 #OAR --stdout oarsub/logs/%jobid%.bgs_zm15_joint_mcmc.out

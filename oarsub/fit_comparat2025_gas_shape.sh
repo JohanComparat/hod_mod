@@ -14,7 +14,7 @@
 # Smoke:   oarsub -t devel -S ./oarsub/fit_comparat2025_gas_shape.sh   (<=30 min)
 # =============================================================================
 
-#OAR -n c2025_gas_shape
+#OAR --name c2025_gas_shape
 #OAR --project pr-orphans
 #OAR -l /nodes=1/core=16,walltime=06:00:00
 #OAR --stdout oarsub/logs/%jobid%.c2025_gas_shape.out
