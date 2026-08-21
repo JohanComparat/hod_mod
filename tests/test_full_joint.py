@@ -112,3 +112,107 @@ def test_sample_smoke(tmp_path):
     d2 = tmp_path / "mismatch"
     r3 = J.sample(d2, n_walkers=12, n_burnin=2, n_steps=3, x_start=np.zeros(J.ndim + 1))
     assert (d2 / "chain.h5").exists() and np.isfinite(r3["acceptance"])
+
+
+def test_gas_figure_reads_only_live_band_params():
+    """The gas figure's parameter names must stay in step with the band model.
+
+    The native-DPM re-base swapped the four gas parameters (lx_norm/lx_slope/
+    kt_norm/kt_slope -> log10_ne03/beta_n/log10_p03/beta_P) and the plotter kept
+    reading the old ones, which only surfaced as a KeyError once a chain was
+    plotted.  Pin the two lists together instead.
+    """
+    from hod_mod.scripts.fitting import plot_bgs_full_joint as P
+    from hod_mod.scripts.fitting import fit_xray_joint_bands as XB
+    assert set(P._GAS_KEYS) <= set(XB._PARAMS), (
+        f"plotter reads {sorted(set(P._GAS_KEYS) - set(XB._PARAMS))}, which the band "
+        f"model no longer fits ({XB._PARAMS})")
+    with pytest.raises(KeyError, match="native-DPM"):
+        P._gas({"lx_norm": 44.7, "lx_slope": 1.6})
+
+
+def test_revive_restores_rank_of_a_collapsed_ensemble():
+    """A resumed ensemble that emcee rejects must come back with its rank restored.
+
+    Regression guard for the failure that froze ``bgs_full_joint_allparams_v0.3``
+    at 1061/4000: a long stretch-move run collapsed the walkers onto a
+    lower-dimensional affine subspace, emcee's ``walkers_independent`` check
+    (cond > 1e8) refused the restart, and every resubmission died before its
+    first step.  ``skip_initial_state_check=True`` alone is not a fix -- the
+    stretch move cannot leave the affine hull of the walkers -- so the guard
+    asserts the ensemble is genuinely independent again, not merely accepted.
+    """
+    from emcee.ensemble import walkers_independent
+    from hod_mod.fitting.mcmc_resume import revive_ensemble
+
+    nw, nd = 64, 28
+    rng = np.random.default_rng(0)
+    # a rank-15-of-28 ensemble, i.e. the shape the real chain collapsed into
+    basis = rng.standard_normal((15, nd))
+    coords = rng.standard_normal((nw, 15)) @ basis * 0.01
+    assert not walkers_independent(coords)
+
+    class _Backend:                       # minimal stand-in for an emcee backend
+        def __init__(self, c): self._c = c
+        def get_last_sample(self): return type("S", (), {"coords": self._c})()
+
+    lo, hi = np.full(nd, -50.0), np.full(nd, 50.0)
+    revived = revive_ensemble(_Backend(coords), lo, hi)
+    assert revived is not None and revived.shape == coords.shape
+    assert walkers_independent(revived), "re-scatter did not restore rank"
+    # and it must stay in the neighbourhood: no walker moved by more than a few
+    # times the per-parameter spread it was re-scattered with
+    assert np.max(np.abs(revived - coords)) < 1.0
+
+    # a healthy ensemble is left alone (None => emcee continues from its state)
+    assert revive_ensemble(_Backend(rng.standard_normal((nw, nd))), lo, hi) is None
+
+
+@pytest.mark.slow
+def test_gas_sector_seed_and_prior_are_live():
+    """The gas sector must be seeded off its bounds and actually carry its prior.
+
+    Three regressions this pins, all of which shipped in the v0.3/v0.31 campaigns
+    because every existing JointFull test used observables=("ngal","wp","xlf") and
+    therefore never entered the X-ray branch at all:
+
+    * the seed was ``mu_s`` (the SCALING-RELATION prior centre) used as if it were
+      ``mu_n``, which clipped three of four gas params onto a bound and pinned the
+      MAP there (v0.3: log10_ne03 = -3.0002 against a bound of -3.0);
+    * the full-covariance induced gas prior was never added to ``log_prior`` -- the
+      diagonal ``pri_sig`` is inf for those four by design -- so the gas sector ran
+      on bounds alone and reached beta_P - beta_n = -0.41, an INVERTED kT-M relation;
+    * ``--kt-prior-sig`` wrote onto indices 2/3, which after the re-base are
+      log10_p03 and beta_P, not kt_norm/kt_slope.
+    """
+    if not _have_data():
+        pytest.skip("observation data not present")
+    from hod_mod.fitting.full_joint import JointFull
+    from hod_mod.scripts.fitting import fit_xray_joint_bands as XB
+
+    J = JointFull(free_zm15=False, observables=("ngal", "wp", "xray_bands"), verbose=False)
+
+    # (1) the four gas slots are where we think they are -- so an index-based
+    #     prior edit can never silently retarget another parameter again
+    assert J._gas_idx is not None
+    for k, i in enumerate(J._gas_idx):
+        assert J.names[i] == XB._PARAMS[k]
+
+    # (2) seeded at the induced-prior centre, strictly inside the bounds
+    for k, i in enumerate(J._gas_idx):
+        assert J.lo[i] + 1e-3 < J.x0[i] < J.hi[i] - 1e-3, f"{J.names[i]} seeded on a bound"
+        assert abs(J.x0[i] - XB._MU8[k]) < 1e-6
+
+    # (3) log_prior actually responds to the gas parameters.  Step 3 sigma along
+    #     the STIFFEST direction of the induced covariance; before the fix this
+    #     difference was exactly 0.0 for any gas displacement whatsoever.
+    icov = XB._GAS_PRIOR["icov"]
+    w, V = np.linalg.eigh(icov)
+    stiff = V[:, -1] / np.sqrt(w[-1])            # 1 sigma along the tightest direction
+    theta = J.x0.copy()
+    base = J.log_prior(theta)
+    theta[J._gas_idx] = theta[J._gas_idx] + 3.0 * stiff
+    shifted = J.log_prior(theta)
+    assert np.isfinite(base) and np.isfinite(shifted)
+    assert base - shifted > 1.0, "gas sector carries no prior (bounds-only)"
+    assert abs((base - shifted) - 4.5) < 0.5, "3 sigma should cost ~4.5 in log-prior"

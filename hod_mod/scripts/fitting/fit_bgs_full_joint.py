@@ -50,10 +50,13 @@ def _parse_args(argv=None):
     p.add_argument("--agn-bias-refs", nargs="+", default=None,
                    help="restrict the AGN halo-bias compilation to these references "
                         "(e.g. Comparat23 Krumpe15); default keeps all")
-    p.add_argument("--kt-prior-sig", nargs=2, type=float, default=None,
-                   metavar=("SIG_NORM", "SIG_SLOPE"),
-                   help="tighten the kt_norm / kt_slope Gaussian prior widths (default "
-                        "0.2 0.15) to keep kT-M near the cluster scaling, e.g. 0.10 0.06")
+    p.add_argument("--gas-prior-widen", type=float, default=None, metavar="W",
+                   help="inflate the induced native-DPM gas prior by a factor W "
+                        "(default 1.5, from fit_xray_joint_bands._GAS_PRIOR_WIDEN; "
+                        "W=8 reproduces the 'flat_kt' candidate). Replaces the old "
+                        "--kt-prior-sig, whose indices 2/3 stopped meaning "
+                        "kt_norm/kt_slope at the native-DPM re-base and silently "
+                        "pinned P_0.3 / beta_P instead.")
     p.add_argument("--f-sys", type=float, default=0.05)
     p.add_argument("--hmf", default="tinker08")
     p.add_argument("--n-walkers", type=int, default=48)
@@ -76,7 +79,7 @@ def main(argv=None):
                    esd_surveys=list(a.esd_surveys), esd_rp_max=a.esd_rp_max,
                    xlf_z=list(a.xlf_z), xlf_lx_min=a.xlf_lx_min,
                    agn_bias_refs=(list(a.agn_bias_refs) if a.agn_bias_refs else None),
-                   kt_prior_sig=(list(a.kt_prior_sig) if a.kt_prior_sig else None),
+                   gas_prior_widen=a.gas_prior_widen,
                    f_sys=a.f_sys, hmf=a.hmf),
               open(out / "fit_config.json", "w"), indent=2)
 
@@ -84,7 +87,7 @@ def main(argv=None):
                   rp_min_wp=a.rp_min_wp, rp_min_esd=a.rp_min_esd, f_sys=a.f_sys,
                   hmf_backend=a.hmf, esd_surveys=a.esd_surveys, esd_rp_max=a.esd_rp_max,
                   xlf_z=a.xlf_z, xlf_lx_min=a.xlf_lx_min, agn_bias_refs=a.agn_bias_refs,
-                  kt_prior_sig=a.kt_prior_sig)
+                  gas_prior_widen=a.gas_prior_widen)
     print(f"[fit] ndim={J.ndim}  n_data={J.n_data()}  free_zm15={a.free_zm15}", flush=True)
     print(f"[fit] free params: {J.names}", flush=True)
 

@@ -79,6 +79,7 @@ from hod_mod.observables.cross_spectra import HaloModelCrossSpectra
 from hod_mod.agn.xray import XrayAGNModel
 from hod_mod.data_io.sum_stat_reader import SumStatReader
 from hod_mod.paths import data_root, results_root, sum_stat_root
+from hod_mod.fitting.mcmc_resume import revive_ensemble
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -657,7 +658,10 @@ def run_mcmc(label: str, infra: _Infrastructure,
     else:
         print(f"  [{label}] MCMC resuming from step {already}/{total} "
               f"({total - already} left) ...", flush=True)
-        sampler.run_mcmc(None, total - already, progress=True)
+        # A collapsed ensemble makes emcee refuse the resume outright; see
+        # hod_mod.fitting.mcmc_resume for why skipping the check is not enough.
+        _start = revive_ensemble(backend, None, None, label=label)
+        sampler.run_mcmc(_start, total - already, progress=True, skip_initial_state_check=True)
 
     discard = min(int(n_burnin), max(sampler.iteration - 1, 0))
     flat_chain = sampler.get_chain(discard=discard, flat=True)

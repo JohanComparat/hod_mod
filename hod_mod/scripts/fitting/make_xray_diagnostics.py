@@ -169,11 +169,35 @@ def fig_band_params_vs_mass():
         return
     ss = list(rows)
     ms = [F.SAMPLES[s]["log10ms_min"] for s in ss]
-    # v2: the 4 free scaling-relation params + p2/r_max/log10DC; mark GAS.py centrals.
+    # The 4 native-DPM gas params + p2/r_max/log10DC/z_metal/agn_gamma.
     keys = [k for k in JB._PARAMS if k in rows[ss[0]]["posterior"]]
+    if not keys:
+        print("  (band summaries carry none of JB._PARAMS - they predate the "
+              "native-DPM re-base; re-run fit_xray_joint_bands)", flush=True)
+        return
+    if not set(JB._PARAMS[:4]) <= set(keys):
+        # Shape/DC params are named the same in both parametrisations, so a stale
+        # summary still yields a plausible-looking 3-panel figure with the entire
+        # gas sector missing.  Say so on the figure itself, not just in stdout.
+        print(f"  (band summaries carry only {keys} - the four native-DPM gas "
+              f"params are absent, so this figure shows the shape sector only)",
+              flush=True)
+        _stale = True
+    else:
+        _stale = False
     ncol = 4; nrow = int(np.ceil(len(keys) / ncol))
-    ref = dict(zip(["lx_norm", "lx_slope", "kt_norm", "kt_slope"], JB._PRIOR_MU)) \
-        if hasattr(JB, "_PRIOR_MU") else {}
+    # Reference line = the induced prior CENTRE in native coordinates.  The old
+    # code looked for JB._PRIOR_MU, which does not exist any more (it was the
+    # scaling-relation prior of the pre-re-base model), so `ref` silently fell
+    # back to {} and every reference line vanished from this figure without a
+    # word.  _induced_gas_prior() returns mu in native coordinates by construction.
+    try:
+        mu_n, _ = JB._induced_gas_prior()
+        ref = dict(zip(JB._PARAMS[:4], np.asarray(mu_n, float)))
+    except Exception as e:                       # cache missing / APEC unavailable
+        print(f"  (induced gas prior unavailable: {e.__class__.__name__}; "
+              f"drawing no reference lines)", flush=True)
+        ref = {}
     fig, axs = plt.subplots(nrow, ncol, figsize=(3 * ncol, 3 * nrow))
     for a, key in zip(axs.ravel(), keys):
         med = [rows[s]["posterior"][key]["median"] for s in ss]
@@ -186,8 +210,12 @@ def fig_band_params_vs_mass():
         a.set_xlabel(r"$\log_{10}(M_\star^{\rm thr}/M_\odot)$"); a.set_ylabel(key, fontsize=9)
     for a in axs.ravel()[len(keys):]:
         a.axis("off")
-    fig.suptitle("Energy-band fit: free LX-M & kT-M relation params vs sample "
-                 "(dashed = GAS.py central)", fontsize=11)
+    title = ("Energy-band fit: free native-DPM gas params vs sample "
+             "(dashed = induced-prior centre, back-propagated from GAS.py)")
+    if _stale:
+        title += ("\nSTALE INPUT: summaries predate the native-DPM re-base — "
+                  "gas sector absent, shape params only")
+    fig.suptitle(title, fontsize=11)
     fig.tight_layout(); _save(fig, "bands_params_vs_mass")
 
 
@@ -231,6 +259,64 @@ def fig_phaseA_vs_B():
     fig.tight_layout(); _save(fig, "phaseA_vs_B")
 
 
+def _native_lx_kt(samples, idx, tr, ez, z, sel=None, n_x=160):
+    """(L_X, kT) predicted by native-DPM chain samples, on the transfer mass grid.
+
+    Since the native-DPM re-base the band fit has no free L_X-M / kT-M power laws
+    to read off -- the relations are a PREDICTION of (n_e,0.3, beta_n, P_0.3,
+    beta_P), obtained by integrating each sampled profile inside R_500c.  This is
+    the same routine the full-joint gas figure uses
+    (:func:`hod_mod.fitting.dpm_bands.lx_kt_of_mass`), so the two figures cannot
+    drift apart.
+
+    R_500c is derived from the transfer file's own ``log10_m500c`` rather than
+    re-deriving it from a c(M) relation, so the radii match the mass grid the
+    emission weighting is computed on, exactly.
+
+    Returns (Nsample, NM) arrays; ``sel`` optionally restricts the mass grid.
+    """
+    from hod_mod.fitting.dpm_bands import lx_kt_of_mass
+    from hod_mod.gas.conversions import _MPC_CM
+    from hod_mod.scripts import validate_gas_profiles as v
+
+    need = ("log10_ne03", "beta_n", "log10_p03", "beta_P", "p2", "r_max")
+    missing = [k for k in need if k not in idx]
+    if missing:
+        raise KeyError(
+            f"band chain lacks {missing}: it predates the native-DPM re-base of the "
+            f"band model (its gas params are now {JB._PARAMS[:4]}). Re-run "
+            f"fit_xray_joint_bands to regenerate it.")
+
+    m200 = np.asarray(tr["m200"], float)
+    r200 = np.asarray(tr["r200"], float)
+    lm = np.asarray(tr["log10_m500c"], float)                 # physical Msun
+    rho_c = float(v._rho_crit_z(float(z)))                    # (Msun/h)/(Mpc/h)^3
+    m500_h = 10.0 ** lm * v._H
+    r500c = (3.0 * m500_h / (4.0 * np.pi * 500.0 * rho_c)) ** (1.0 / 3.0)
+    if sel is not None:
+        m200, r200, r500c = m200[sel], r200[sel], r500c[sel]
+
+    cool = JB._band_cooling()[1]                              # broad 0.5-2 keV
+    lx_out, kt_out = [], []
+    for th in np.atleast_2d(np.asarray(samples, float)):
+        dp = v._make_density_variant(
+            model=2, ne_03=10.0 ** th[idx["log10_ne03"]], beta=th[idx["beta_n"]],
+            alpha_in=JB._ALPHA_PROF, alpha_tr=2.0,
+            alpha_out=JB._ALPHA_PROF + 2.0 * th[idx["p2"]])
+        dp._r_max_factor = float(th[idx["r_max"]])
+        pp = v._make_pressure_variant(model=2, P_03=10.0 ** th[idx["log10_p03"]],
+                                      beta=th[idx["beta_P"]])
+        zmet = float(th[idx["z_metal"]]) if "z_metal" in idx else JB._Z_FID
+        lx, kt = lx_kt_of_mass(
+            m200, r200, r500c, dp, pp, cool,
+            ne03=10.0 ** th[idx["log10_ne03"]], beta_n=th[idx["beta_n"]],
+            p03=10.0 ** th[idx["log10_p03"]], beta_P=th[idx["beta_P"]],
+            ez=ez, h=v._H, mpc_cm=_MPC_CM,
+            z_metal=float(np.clip(zmet, 0.05, 3.0)), t_min=JB._T_MIN_XRAY, n_x=n_x)
+        lx_out.append(lx); kt_out.append(kt)
+    return np.asarray(lx_out), np.asarray(kt_out)
+
+
 def fig_scaling_relations():
     """Posterior GAS (LX-M500c, kT-M500c) and AGN (duty cycle) scaling relations
     from the energy-band fit, each drawn over the sample's applicable halo-mass
@@ -250,6 +336,12 @@ def fig_scaling_relations():
         ch = np.load(os.path.join(rr, f"{s}_bands_chain.npz"), allow_pickle=True)
         flat = ch["flatchain"]; par = [str(p) for p in ch["params"]]
         idx = {p: par.index(p) for p in par}
+        if "log10_ne03" not in idx:
+            # A pre-re-base chain: its gas params are the removed phenomenological
+            # power law.  Skip this sample rather than aborting every other figure.
+            print(f"  ({s}: pre-native-DPM chain (params {par[:4]}) - skipping; "
+                  f"re-run fit_xray_joint_bands to regenerate it)", flush=True)
+            continue
         tr = np.load(os.path.join(rr, f"{s}_transfer.npz"))
         lm = tr["log10_m500c"]; ez = float(tr["ez"]); Ggrid = tr["G_grid"]
         th = JB.load_band_data(s)["theta_arcsec"]; m = (th >= 8) & (th <= 300)
@@ -259,15 +351,15 @@ def fig_scaling_relations():
                                      Ggrid.reshape(tr["p2_grid"].size, tr["rmax_grid"].size, -1),
                                      bounds_error=False, fill_value=None)
         G = Gi([[med[idx["p2"]], med[idx["r_max"]]]])[0].reshape(th.size, lm.size)
-        LXm = JB.LX_of_M(lm, ez, med[idx["lx_norm"]], med[idx["lx_slope"]])
-        contrib = np.abs(LXm * np.sum(np.abs(G[m]), axis=0))
+        zs = float(F.SAMPLES[s]["zmean"])
+        LXm, _ = _native_lx_kt(med[None, :], idx, tr, ez, zs)
+        contrib = np.abs(LXm[0] * np.sum(np.abs(G[m]), axis=0))
         cdf = np.cumsum(contrib) / np.sum(contrib)
         lo, hi = lm[np.searchsorted(cdf, 0.02)], lm[min(np.searchsorted(cdf, 0.98), lm.size - 1)]
         sel = (lm >= lo) & (lm <= hi); x = lm[sel]
         # posterior bands from the chain (pivot-consistent relation helpers)
-        sub = flat[rng.choice(len(flat), size=min(800, len(flat)), replace=False)]
-        kT = JB.kT_of_M(x[None, :], ez, sub[:, idx["kt_slope"]][:, None], sub[:, idx["kt_norm"]][:, None])
-        LX = JB.LX_of_M(x[None, :], ez, sub[:, idx["lx_norm"]][:, None], sub[:, idx["lx_slope"]][:, None])
+        sub = flat[rng.choice(len(flat), size=min(200, len(flat)), replace=False)]
+        LX, kT = _native_lx_kt(sub, idx, tr, ez, zs, sel=sel)
         for a, Y in [(axs[0], kT), (axs[1], LX)]:
             q = np.percentile(Y, [16, 50, 84], axis=0)
             a.fill_between(x, q[0], q[2], color=cols[s], alpha=0.25)
@@ -281,8 +373,9 @@ def fig_scaling_relations():
     axs[0].plot(xr, JB.kT_of_M(xr, 1.069, 0.6, 0.4), "k--", lw=1, label="GAS.py")   # 0.6·logM−8 ⇒ +0.4 @10^14
     axs[1].plot(xr, JB.LX_of_M(xr, 1.069, 44.7, 1.61), "k--", lw=1, label="GAS.py")
     axs[0].set_yscale("log"); axs[0].set_ylabel("kT [keV]"); axs[0].set_ylim(0.3, 60)
-    axs[0].set_title("Gas kT-M500c (posterior; note: runs hot vs GAS.py)")
-    axs[1].set_yscale("log"); axs[1].set_ylabel(r"$L_X$ 0.5-2 keV [erg/s]"); axs[1].set_title("Gas LX-M500c (posterior)")
+    axs[0].set_title(r"Gas kT-M500c (posterior, integrated in $R_{500c}$)")
+    axs[1].set_yscale("log"); axs[1].set_ylabel(r"$L_X$ 0.5-2 keV [erg/s]")
+    axs[1].set_title(r"Gas LX-M500c (posterior, integrated in $R_{500c}$)")
     for a in axs[:2]:
         a.set_xlabel(r"$\log_{10}(M_{500c}/M_\odot)$"); a.legend(fontsize=7)
     de = np.array(dc_e).T
@@ -292,7 +385,7 @@ def fig_scaling_relations():
     axs[2].set_xlabel(r"$\log_{10}(M_{500c}^{\rm eff}/M_\odot)$")
     axs[2].set_ylabel(r"$\log_{10}$ DC (AGN duty cycle)")
     axs[2].set_title("AGN duty-cycle scaling (posterior)")
-    fig.suptitle("Posterior scaling relations from the energy-band fit "
+    fig.suptitle("Posterior scaling relations PREDICTED by the native-DPM gas params "
                  "(bands = 16-84%, over each sample's applicable mass range)", fontsize=11)
     fig.tight_layout(); _save(fig, "scaling_relations")
 

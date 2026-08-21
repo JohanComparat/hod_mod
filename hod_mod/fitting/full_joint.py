@@ -40,6 +40,7 @@ from hod_mod.connection.hod import ZuMandelbaum15HODModel
 from hod_mod.observables.clustering import FullHaloModelPrediction
 from hod_mod.agn.powell import PowellAGNModel
 from hod_mod.paths import data_root, results_root
+from hod_mod.fitting.mcmc_resume import revive_ensemble
 
 from hod_mod.scripts.fitting import fit_xray_joint_bands as XB
 from hod_mod.scripts.fitting.fit_comparat2025 import (
@@ -114,7 +115,7 @@ class JointFull:
                  hmf_backend="tinker08", ngal_frac_err=0.05, verbose=True,
                  esd_surveys=("DES", "HSC", "KIDS"), esd_rp_max=np.inf,
                  xlf_z=(0.1, 0.4), xlf_lx_min=-np.inf, agn_bias_refs=None,
-                 kt_prior_sig=None):
+                 gas_prior_widen=None):
         self.sample_name = sample
         self.free_zm15 = bool(free_zm15)
         self.obs = set(observables)
@@ -125,7 +126,8 @@ class JointFull:
         self.xlf_z = tuple(float(z) for z in xlf_z)
         self.xlf_lx_min = float(xlf_lx_min)
         self.agn_bias_refs = tuple(agn_bias_refs) if agn_bias_refs is not None else None
-        self.kt_prior_sig = tuple(kt_prior_sig) if kt_prior_sig is not None else None
+        self.gas_prior_widen = (float(gas_prior_widen)
+                                if gas_prior_widen is not None else None)
         self.f_sys = f_sys
         self.ngal_frac_err = ngal_frac_err
         self.z = float(SAMPLES[sample]["zmean"])
@@ -157,6 +159,17 @@ class JointFull:
         if {"xray_bands", "xray_broad"} & self.obs:
             self._log("[joint] building X-ray transfer grid (cached) ...", flush=True)
             XB._apply_candidate("baseline")
+            if self.gas_prior_widen is not None:
+                # Rebuild the induced gas prior at a caller-chosen width.  The
+                # scaling-relation information lives in the CORRELATIONS of this
+                # 4x4 covariance (rho = -0.95 .. +0.84), so the only meaningful
+                # knob is a scalar inflation of the whole matrix -- tightening
+                # individual entries by index is what the old --kt-prior-sig did,
+                # and after the native-DPM re-base those indices are P_0.3 and
+                # beta_P, not kt_norm/kt_slope.
+                mu_n, cov_n = XB._induced_gas_prior(widen=self.gas_prior_widen)
+                XB._GAS_PRIOR = dict(mu=np.asarray(mu_n, float),
+                                     icov=np.linalg.inv(np.asarray(cov_n, float)))
             self._xb_params = XB._PARAMS
             (G_grid, log10_m500c, ez, agn_dc1, bd, mask,
              m200, r200) = XB._precompute(sample, hmf_backend)
@@ -253,14 +266,18 @@ class JointFull:
             add(n, l, h, mu, mu, sig)
         if {"xray_bands", "xray_broad"} & self.obs:
             mu8, sig8, bnd8 = XB._MU8, np.array(XB._SIG8, float), XB._BND8
-            if self.kt_prior_sig is not None:
-                # tighten the kt_norm (idx 2) / kt_slope (idx 3) Gaussian priors so
-                # the kT-M relation cannot extrapolate far from the cluster scaling
-                sig8[2], sig8[3] = float(self.kt_prior_sig[0]), float(self.kt_prior_sig[1])
-            # In-bounds start: the band-fit's canonical seed.  _MU8 carries 0.0
-            # placeholders for the flat-prior shape/DC params (p2, r_max, log10DC),
-            # which are OUTSIDE their bounds — never use _MU8 as x0 for those.
-            xb_x0 = [44.7, 1.61, 0.40, 0.60, 0.6, 4.0, -1.5, 0.30, 1.8]
+            # Seed the four native-DPM gas params at the induced-prior centre
+            # _MU8[:4], which is what the standalone band fit uses.  The previous
+            # seed [44.7, 1.61, 0.40, 0.60] was mu_s -- the SCALING-RELATION prior
+            # centre, i.e. the *input* to the Jacobian in _induced_gas_prior used
+            # as if it were the *output*.  In native coordinates it is 474 units
+            # of prior chi2 away and clips onto three bounds, and Nelder-Mead did
+            # not escape: the v0.3 MAPs sit at log10_ne03 = -3.0002 / -3.0872
+            # against a bound of -3.0.  _MU8 still carries 0.0 placeholders for
+            # the flat-prior shape/DC params (p2, r_max, log10DC), which are
+            # OUTSIDE their bounds — never use _MU8 as x0 for those.
+            xb_x0 = [float(mu8[0]), float(mu8[1]), float(mu8[2]), float(mu8[3]),
+                     0.6, 4.0, -1.5, 0.30, 1.8]
             for i, pn in enumerate(self._xb_params):
                 init = float(np.clip(xb_x0[i], bnd8[i, 0] + 1e-6, bnd8[i, 1] - 1e-6))
                 add(pn, float(bnd8[i, 0]), float(bnd8[i, 1]), init,
@@ -276,6 +293,11 @@ class JointFull:
         self.pri_mu = np.array(pri_mu); self.pri_sig = np.array(pri_sig)
         self.ndim = len(names)
         self._idx = {n: i for i, n in enumerate(names)}
+        # Positions of the four native-DPM gas params, for the full-covariance
+        # prior applied in log_prior (their entries in pri_sig are inf by design:
+        # a diagonal prior cannot represent a 0.95-correlated 4x4).
+        self._gas_idx = (np.array([self._idx[pn] for pn in self._xb_params[:4]])
+                         if {"xray_bands", "xray_broad"} & self.obs else None)
 
     def _hod_params(self, zm15: dict, log10_M_star_cen=None) -> dict:
         hp = ZuMandelbaum15HODModel.default_params()
@@ -507,7 +529,19 @@ class JointFull:
             return -np.inf
         fin = np.isfinite(self.pri_sig)
         d = (theta[fin] - self.pri_mu[fin]) / self.pri_sig[fin]
-        return -0.5 * float(np.sum(d ** 2))
+        lp = -0.5 * float(np.sum(d ** 2))
+        if self._gas_idx is not None and XB._GAS_PRIOR is not None:
+            # Full-covariance native-DPM gas prior, back-propagated from the
+            # GAS.py L_X-M / kT-M relations by JAX autodiff (XB._induced_gas_prior).
+            # It is NOT in pri_sig -- that vector is diagonal -- so without this
+            # term the gas sector of the joint fit ran on bounds alone, which is
+            # how the v0.3 posterior reached beta_P - beta_n = -0.41 (an INVERTED
+            # kT-M relation) against a prior of +0.6.  Do not delegate to
+            # XB._log_prior: it re-applies the bounds and would double-count the
+            # z_metal / agn_gamma diagonal terms already summed above.
+            dg = theta[self._gas_idx] - XB._GAS_PRIOR["mu"]
+            lp -= 0.5 * float(dg @ XB._GAS_PRIOR["icov"] @ dg)
+        return lp
 
     def log_prob(self, theta) -> float:
         lp = self.log_prior(theta)
@@ -581,13 +615,16 @@ class JointFull:
             backend.reset(nw, self.ndim)
             start = p0
         else:
-            start = None
             nw = backend.shape[0]
+            start = revive_ensemble(backend, self.lo, self.hi, label="sample")
         sampler = emcee.EnsembleSampler(nw, self.ndim, self.log_prob, backend=backend)
         total = n_burnin + n_steps
         remaining = total - backend.iteration
         if remaining > 0:
-            sampler.run_mcmc(start, remaining, progress=False)
+            # skip_initial_state_check: revive_ensemble has already restored rank
+            # could; the check would otherwise abort a resume that is now fine.
+            sampler.run_mcmc(start, remaining, progress=False,
+                             skip_initial_state_check=True)
         flat = sampler.get_chain(discard=min(n_burnin, backend.iteration // 2), flat=True)
         np.savez(out / "flatchain.npz", flatchain=flat, param_names=np.array(self.names))
         pct = np.percentile(flat, [16, 50, 84], axis=0)

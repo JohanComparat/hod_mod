@@ -38,7 +38,13 @@
 set -euo pipefail
 
 # --- user configuration (edit for your GRICAD account) ----------------------
-REPO="${HOME}/software/hod_mod"                        # repo location on the cluster
+# Derived from THIS script's location, not hard-coded to $HOME, so a job submitted
+# from a `git worktree` runs that worktree's code.  With the old hard-coded path,
+# `cd "${REPO}"` + `python -m` (CWD first on sys.path) silently executed the shared
+# ~/software/hod_mod checkout no matter where the job was submitted from -- i.e. a
+# worktree looked like it was isolating the code and was not.  Same treatment commit
+# 536c867 already gave the standalone fit_*.sh scripts.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # repo location on the cluster
 CONDA_ENV="hod_mod"                                    # conda/mamba env name
 
 # --- campaign version (VTAG + HOD_MOD_RESULTS) ------------------------------

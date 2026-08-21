@@ -69,7 +69,8 @@ from __future__ import annotations
 import numpy as np
 
 __all__ = ["t_shape_g", "t0_of_mass", "build_j_table", "JTable",
-           "emission_measure_factor", "shape_integral", "v_shape_of_mass"]
+           "emission_measure_factor", "shape_integral", "v_shape_of_mass",
+           "lx_kt_of_mass"]
 
 _M_PIVOT = 1.0e12          # DPM M_12 pivot [Msun/h]
 _X_REF_FRAC = 0.3          # the DPM reference radius, r = 0.3 R_200
@@ -150,6 +151,68 @@ def v_shape_of_mass(r200, c_dpm: float, shape_int: float, mpc_cm: float, h: floa
     """
     r_s_cm = (np.asarray(r200, float) / float(c_dpm)) * (float(mpc_cm) / float(h))
     return 4.0 * np.pi * r_s_cm ** 3 * float(shape_int)
+
+
+def lx_kt_of_mass(m200, r200, r500c, dp, pp, cooling, *, ne03, beta_n, p03, beta_P,
+                  ez, h, mpc_cm, z_metal=0.3, t_min=None, n_x=200):
+    """:math:`R_{500c}`-integrated ``L_X`` [erg/s] and emission-weighted ``kT`` [keV].
+
+    The band model above returns the luminosity integrated over the WHOLE profile
+    (out to ``r_max R_200``), because that is what the angular cross-correlation
+    sees.  The literature scaling relations — and the priors in
+    :mod:`hod_mod.fitting.dpm_priors` — are instead defined inside
+    :math:`R_{500c}`, so a plot comparing the fit against Lovisari/Bulbul must use
+    this quantity, not ``_weight_bands``.
+
+    Same exact factorisation as :func:`build_j_table`: :math:`T = T_0(M) g(x)` with
+    a radial shape *g* that none of the four native parameters touch, so only the
+    mass-dependent upper limit needs a per-mass quadrature.  Integration limits
+    (:math:`0.01 R_{200}` to :math:`R_{500c}`) and the :math:`n_e^2` weighting match
+    ``validate_gas_profiles._integrate_profile``, which is the definition the
+    literature relations use.
+
+    Kept in numpy end-to-end: the emission integral carries :math:`r_{\rm cm}^2
+    \sim 10^{49}`, which overflows float32, so routing it through jnp would need
+    ``JAX_ENABLE_X64=1``.  Only ``cooling`` is jnp, and its output is O(1e-23).
+
+    Parameters
+    ----------
+    m200, r200, r500c : (NM,) [Msun/h, Mpc/h, Mpc/h]
+    dp, pp : GasDensityDPM / PressureProfileDPM — supply the fixed f_n, g(x) shapes
+    cooling : ApecCoolingTable for the band of interest (0.5-2 keV for L_X)
+    ne03, beta_n, p03, beta_P : the four native DPM gas parameters
+    ez, h, mpc_cm : E(z), little h, and the Mpc->cm conversion
+    z_metal : gas metallicity [Z_sun]; t_min : X-ray selection cut [keV] or None
+
+    Returns
+    -------
+    (lx, kt) : each (NM,)
+    """
+    m200 = np.asarray(m200, float)
+    r200 = np.asarray(r200, float)
+    r500c = np.asarray(r500c, float)
+    c = dp._C_DPM
+
+    x_lo = 0.01 * c                                  # r = 0.01 R_200, in R_s units
+    x_hi = c * r500c / r200                          # r = R_500c
+    x = x_lo + (x_hi - x_lo)[:, None] * np.linspace(0.0, 1.0, int(n_x))[None, :]
+
+    f_n = _gnfw(x, dp._alpha_in, dp._alpha_tr, dp._alpha_out)
+    f_ref = _gnfw(_X_REF_FRAC * c, dp._alpha_in, dp._alpha_tr, dp._alpha_out)
+    t0 = t0_of_mass(m200, p03, ne03, beta_P, beta_n, ez)
+    T = t0[:, None] * t_shape_g(x, dp, pp)                       # (NM, n_x) [keV]
+
+    w = (f_n / f_ref) ** 2 * x ** 2
+    if t_min is not None:
+        w = np.where(T > float(t_min), w, 0.0)
+
+    lam = np.asarray(cooling(T, np.full_like(T, float(z_metal))), float)
+    em = emission_measure_factor(m200, ne03, beta_n, ez)
+    r_s_cm = (r200 / c) * (float(mpc_cm) / float(h))
+    lx = 4.0 * np.pi * r_s_cm ** 3 * em * np.trapezoid(w * lam, x, axis=1)
+    denom = np.trapezoid(w, x, axis=1)
+    kt = np.trapezoid(w * T, x, axis=1) / np.maximum(denom, 1e-300)
+    return lx, kt
 
 
 class JTable:
