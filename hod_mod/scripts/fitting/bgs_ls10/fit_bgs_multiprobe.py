@@ -112,6 +112,7 @@ from hod_mod.fitting.planck_prior import (
 )
 from hod_mod.data_io.sum_stat_reader import SumStatReader
 from hod_mod.paths import results_root, sum_stat_root
+from hod_mod.fitting.mcmc_resume import revive_ensemble
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -1159,14 +1160,17 @@ class MultiProbeFitter:
                 bi_backend.reset(n_walkers, n_free)
                 print(f"Burn-in: {self.n_burnin} steps, {n_walkers} walkers …")
             else:
-                initial_pos = None  # resume from last saved position
+                # resume from the last saved position, re-scattering first if the
+                # ensemble has collapsed (see hod_mod.fitting.mcmc_resume)
+                initial_pos = revive_ensemble(bi_backend, label="burn-in")
                 remaining = self.n_burnin - bi_done
                 print(f"Resuming burn-in from step {bi_done} ({remaining} steps remaining) …")
 
             bi_sampler = emcee.EnsembleSampler(
                 n_walkers, n_free, self._log_prob, backend=bi_backend
             )
-            bi_sampler.run_mcmc(initial_pos, self.n_burnin - bi_done, progress=progress)
+            bi_sampler.run_mcmc(initial_pos, self.n_burnin - bi_done, progress=progress,
+                                skip_initial_state_check=True)
             last_pos = bi_sampler.get_last_sample()
         else:
             print(f"Burn-in already complete ({bi_done} steps found).")
@@ -1184,14 +1188,15 @@ class MultiProbeFitter:
                 start_pos = last_pos
                 print(f"Sampling: {self.n_steps} steps …")
             else:
-                start_pos = None  # resume
+                start_pos = revive_ensemble(prod_backend, label="production")
                 remaining = self.n_steps - prod_done
                 print(f"Resuming production from step {prod_done} ({remaining} steps remaining) …")
 
             prod_sampler = emcee.EnsembleSampler(
                 n_walkers, n_free, self._log_prob, backend=prod_backend
             )
-            prod_sampler.run_mcmc(start_pos, self.n_steps - prod_done, progress=progress)
+            prod_sampler.run_mcmc(start_pos, self.n_steps - prod_done, progress=progress,
+                                  skip_initial_state_check=True)
 
         # Export flat chain as npz for downstream tools
         prod_backend = emcee.backends.HDFBackend(prod_h5, read_only=True)

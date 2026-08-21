@@ -77,7 +77,6 @@ python -m hod_mod.scripts.fitting.fit_bgs_full_joint \
     --esd-surveys HSC --esd-rp-max 8.0 \
     --xlf-z 0.1 --xlf-lx-min 41.0 \
     --agn-bias-refs Comparat23 Krumpe15 \
-    --kt-prior-sig 0.05 0.04 \
     --n-walkers 48 --n-burnin 500 --n-steps 2000 \
     --out-dir "${OUT_DIR}"
 

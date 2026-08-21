@@ -147,6 +147,7 @@ import sys
 import time
 
 import numpy as np
+from hod_mod.fitting.mcmc_resume import revive_ensemble
 
 _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -545,7 +546,10 @@ class JointZM15:
             remaining = total - already
             print(f"  resuming from step {already}/{total} "
                   f"({remaining} steps left) ...")
-            sampler.run_mcmc(None, remaining, progress=True)
+            # A collapsed ensemble makes emcee refuse the resume outright; see
+            # hod_mod.fitting.mcmc_resume for why skipping the check is not enough.
+            _start = revive_ensemble(backend, self.lo, self.hi, label="sample")
+            sampler.run_mcmc(_start, remaining, progress=True, skip_initial_state_check=True)
 
         # Discard the burn-in only when reading the chain back out.
         n_done  = sampler.iteration

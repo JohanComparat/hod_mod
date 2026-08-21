@@ -29,6 +29,7 @@ from hod_mod.connection.clf import CLFModel
 
 from .config import FitConfig
 from .models import HOD_MODELS
+from hod_mod.fitting.mcmc_resume import revive_ensemble
 
 
 
@@ -574,7 +575,10 @@ class WpFitter:
         else:
             print(f"Resuming from step {already}/{total} "
                   f"({total - already} left) → {backend_path}")
-            sampler.run_mcmc(None, total - already, progress=progress)
+            # A collapsed ensemble makes emcee refuse the resume outright; see
+            # hod_mod.fitting.mcmc_resume for why skipping the check is not enough.
+            _start = revive_ensemble(backend, None, None, label="fit")
+            sampler.run_mcmc(_start, total - already, progress=progress, skip_initial_state_check=True)
 
         discard  = min(int(self.config.n_burnin), max(sampler.iteration - 1, 0))
         out_path = os.path.join(self.config.output_dir, "flatchain.npz")
