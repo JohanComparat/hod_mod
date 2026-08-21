@@ -241,58 +241,93 @@ def _mp(names, theta):
     return {n: float(theta[i]) for i, n in enumerate(names)}
 
 
-def _calibrate_ne03_to_fit(J, mp, z, T_min=0.3, n_bisect=24, n_outer=3):
-    """DPM central density n_e,0.3 & P_0.3 calibrated so the integrated soft-X-ray
-    L_X and kT at the pivot mass match the FIT's L_X-M / kT-M relations (analogue of
-    validate_gas_profiles._calibrate_ne03_P03 with the fit as the target).  The
-    band model fixes the density mass slope beta=0.5; pressure is self-similar."""
+# The gas-sector parameters the figures below read out of the chain.  They must all
+# be free parameters of the band model (fit_xray_joint_bands._PARAMS) — test_full_joint
+# pins that, because a silent drift here (the native-DPM re-base replaced lx_norm/
+# lx_slope/kt_norm/kt_slope) only shows up as a KeyError at plotting time.
+_GAS_KEYS = ("log10_ne03", "beta_n", "log10_p03", "beta_P", "p2", "r_max", "z_metal")
+
+
+def _gas(mp):
+    """The gas subset of a parameter dict, with a message that names the cause."""
+    missing = [k for k in _GAS_KEYS if k not in mp]
+    if missing:
+        raise KeyError(f"gas parameters {missing} are absent from this chain — it "
+                       f"predates the native-DPM re-base of the band model and cannot "
+                       f"be plotted with the current code; re-run the fit.")
+    return {k: float(mp[k]) for k in _GAS_KEYS}
+
+
+def _dpm_profiles(mp):
+    """(density, pressure) DPM profiles for the fit's native gas parameters.
+
+    The band model varies the four native DPM parameters directly — ``n_e,0.3``,
+    ``beta_n`` (density) and ``P_0.3``, ``beta_P`` (pressure, and hence
+    ``T = P/n_e``) — so nothing has to be calibrated here: the posterior *is* the
+    profile.  ``p2``/``r_max`` deform only the density (outer slope
+    ``alpha_out = alpha_prof + 2 p2``, truncated at ``r_max R_200``); the pressure
+    keeps the native DPM model-2 shape, exactly as in the likelihood.
+    """
     from hod_mod.scripts import validate_gas_profiles as v
     from hod_mod.scripts.fitting import fit_xray_joint_bands as XB
-    beta_n, beta_P = 0.5, 0.5 + 2.0 / 3.0
-    p2, r_max = mp["p2"], mp["r_max"]
-    ez = float(J._S["ez"])
-    m_piv = 4e14 * v._H
-    r_piv = v._r200(m_piv, z); c2 = v._c200_approx(m_piv)
-    m500_p, r500_p = v.m200_to_m500c(np.array([m_piv]), np.array([c2]),
-                                     np.array([r_piv]), v._rho_crit_z(z))
-    M_piv_msun = float(m500_p[0]) / v._H
-    Lx_t = float(XB.LX_of_M(np.log10(M_piv_msun), ez, mp["lx_norm"], mp["lx_slope"]))
-    kT_t = float(XB.kT_of_M(np.log10(M_piv_msun), ez, mp["kt_slope"], mp["kt_norm"]))
-    met = v.MetallicityProfileDPM()
+    mp = _gas(mp)
+    dp = v._make_density_variant(model=2, ne_03=10.0 ** mp["log10_ne03"],
+                                 beta=mp["beta_n"], alpha_in=XB._ALPHA_PROF,
+                                 alpha_tr=2.0,
+                                 alpha_out=XB._ALPHA_PROF + 2.0 * mp["p2"])
+    dp._r_max_factor = float(mp["r_max"])
+    pp = v._make_pressure_variant(model=2, P_03=10.0 ** mp["log10_p03"],
+                                  beta=mp["beta_P"])
+    return dp, pp
 
-    def _dp(ne):
-        d = v._make_density_variant(model=2, ne_03=ne, beta=beta_n, alpha_in=XB._ALPHA_PROF,
-                                    alpha_tr=2.0, alpha_out=XB._ALPHA_PROF + 2.0 * p2)
-        d._r_max_factor = float(r_max)
-        return d
 
-    # Target the fit's pivot kT directly (P_03/n_e,0.3 = kT).  The per-iteration
-    # correction is capped so a hot-extrapolating fit kT can't make P_03 diverge.
-    ratio = max(float(kT_t), 0.1)
-    ne_03 = 4.87e-5
-    for _ in range(n_outer):
-        lo, hi = 1e-9, 1e-2
-        for _ in range(n_bisect):
-            mid = np.sqrt(lo * hi)
-            pp = v._make_pressure_variant(model=2, P_03=ratio * mid, beta=beta_P)
-            lx, _, _ = v._integrate_profile(m_piv, r_piv, float(r500_p[0]), z,
-                                            pp, _dp(mid), met, T_min=T_min)
-            lo, hi = (lo, mid) if lx > Lx_t else (mid, hi)
-        ne_03 = np.sqrt(lo * hi)
-        pp = v._make_pressure_variant(model=2, P_03=ratio * ne_03, beta=beta_P)
-        _, kt_chk, _ = v._integrate_profile(m_piv, r_piv, float(r500_p[0]), z,
-                                            pp, _dp(ne_03), met, T_min=T_min)
-        ratio *= float(np.clip(kT_t / max(kt_chk, 0.05), 0.5, 2.0))
-    P_03 = ratio * ne_03
-    if not (np.isfinite(P_03) and P_03 > 0):
-        P_03 = max(float(kT_t), 0.1) * ne_03            # isothermal fallback
-    return ne_03, P_03, beta_n, beta_P, Lx_t, kT_t
+def _gas_mass_grid(z, n_m=45, lm_range=(13.0, 15.4)):
+    """(m200, r200, r500c, log10 M500c) for the scaling-relation panels.
+
+    m200/r200/r500c are in the DPM's h-units [Msun/h, Mpc/h]; the returned
+    log10 M500c is physical (Msun), the abscissa the literature relations use.
+    """
+    from hod_mod.scripts import validate_gas_profiles as v
+    m200 = np.geomspace(1.2e13, 5e15, n_m) * v._H
+    r200 = v._r200(m200, z)
+    c200 = v._c200_approx(m200)
+    m500c, r500c = v.m200_to_m500c(m200, c200, r200, v._rho_crit_z(z))
+    lm = np.log10(np.asarray(m500c, float) / v._H)
+    sel = (lm >= lm_range[0]) & (lm <= lm_range[1])
+    return m200[sel], r200[sel], np.asarray(r500c, float)[sel], lm[sel]
+
+
+def _lx_kt_of_mass(mp, grid, ez, cool, n_x=200):
+    """R_500c-integrated L_X (0.5-2 keV) [erg/s] and emission-weighted kT [keV].
+
+    Thin adapter over :func:`hod_mod.fitting.dpm_bands.lx_kt_of_mass`, which is the
+    same routine ``make_xray_diagnostics`` uses — the scaling relations plotted
+    here and there must be the one quantity, computed one way.
+    """
+    from hod_mod.fitting.dpm_bands import lx_kt_of_mass
+    from hod_mod.gas.conversions import _MPC_CM
+    from hod_mod.scripts import validate_gas_profiles as v
+    from hod_mod.scripts.fitting import fit_xray_joint_bands as XB
+
+    mp = _gas(mp)
+    dp, pp = _dpm_profiles(mp)
+    return lx_kt_of_mass(grid[0], grid[1], grid[2], dp, pp, cool,
+                         ne03=10.0 ** mp["log10_ne03"], beta_n=mp["beta_n"],
+                         p03=10.0 ** mp["log10_p03"], beta_P=mp["beta_P"],
+                         ez=ez, h=v._H, mpc_cm=_MPC_CM,
+                         z_metal=float(np.clip(mp["z_metal"], 0.05, 3.0)),
+                         t_min=XB._T_MIN_XRAY, n_x=n_x)
 
 
 def fig_gas(J, chain, names, theta_map, theta_med, path):
-    """Hot-gas scaling relations (L_X-M, kT-M, L_X-kT) from the fit's analytic
-    relations + posterior band + literature, and radial profiles (n_e, T, P_e)
-    from the DPM gas model calibrated to the fit's L_X-M."""
+    """Hot-gas scaling relations (L_X-M, kT-M, L_X-kT) integrated from the fitted
+    DPM profiles + posterior band + literature, and the radial profiles (n_e, T,
+    P_e) those same parameters describe.
+
+    Since the native-DPM re-base of the band model there are no free L_X-M / kT-M
+    power laws to read off: the relations are *predictions* of the four gas
+    parameters (n_e,0.3, beta_n, P_0.3, beta_P), obtained here by integrating the
+    posterior's own profiles inside R_500c."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -301,24 +336,33 @@ def fig_gas(J, chain, names, theta_map, theta_med, path):
 
     z = J.z
     ez = float(J._S["ez"])
-    idx = {n: i for i, n in enumerate(names)}
+    cool = J._S["cool_broad"]                      # APEC 0.5-2 keV, the fit's own table
     mp_med = _mp(names, theta_med)
     mp_map = _mp(names, theta_map) if theta_map is not None else None
-    lm = np.linspace(13.0, 15.4, 60)
+    grid = _gas_mass_grid(z)
+    lm = grid[3]
     m500 = 10.0 ** lm
 
-    def _LXkT(mp):
-        return (XB.LX_of_M(lm, ez, mp["lx_norm"], mp["lx_slope"]),
-                XB.kT_of_M(lm, ez, mp["kt_slope"], mp["kt_norm"]))
-    LX_med, kT_med = _LXkT(mp_med)
-    LX_map, kT_map = (_LXkT(mp_map) if mp_map else (None, None))
+    LX_med, kT_med = _lx_kt_of_mass(mp_med, grid, ez, cool)
+    LX_map, kT_map = (_lx_kt_of_mass(mp_map, grid, ez, cool) if mp_map else (None, None))
 
     rng = np.random.default_rng(0)
     sub = chain[rng.choice(len(chain), size=min(400, len(chain)), replace=False)]
-    LXs = np.array([XB.LX_of_M(lm, ez, s[idx["lx_norm"]], s[idx["lx_slope"]]) for s in sub])
-    kTs = np.array([XB.kT_of_M(lm, ez, s[idx["kt_slope"]], s[idx["kt_norm"]]) for s in sub])
+    curves = [_lx_kt_of_mass(_mp(names, th), grid, ez, cool) for th in sub]
+    LXs = np.array([c[0] for c in curves])
+    kTs = np.array([c[1] for c in curves])
     LX_lo, LX_hi = np.percentile(LXs, [16, 84], axis=0)
     kT_lo, kT_hi = np.percentile(kTs, [16, 84], axis=0)
+
+    # A halo whose gas is everywhere below the X-ray selection cut has L_X = kT = 0.
+    # On a log axis that must read as a GAP, not as a plunge to the bottom of the
+    # frame, so blank the zeros and say out loud how much of the posterior is cold.
+    def _pos(a):
+        return None if a is None else np.where(np.asarray(a, float) > 0, a, np.nan)
+    LX_med, kT_med, LX_map, kT_map = (_pos(LX_med), _pos(kT_med), _pos(LX_map), _pos(kT_map))
+    LX_lo, LX_hi, kT_lo, kT_hi = (_pos(LX_lo), _pos(LX_hi), _pos(kT_lo), _pos(kT_hi))
+    f_cold = float(np.mean(~np.any(LXs > 0, axis=1)))
+    map_cold = LX_map is not None and not np.any(np.isfinite(LX_map))
 
     def _try(loader):  # literature scatter data is optional (may be unstaged on dahu)
         try:
@@ -350,6 +394,14 @@ def fig_gas(J, chain, names, theta_map, theta_med, path):
     ax.set(xlabel=r"$M_{500c}$ [$M_\odot$]", ylabel=r"$L_X$ (0.5-2 keV) [erg/s]",
            ylim=(1e40, 1e46)); ax.set_title(r"$L_X$-$M_{500c}$")
     ax.legend(fontsize=6.5); ax.grid(alpha=.2)
+    if f_cold > 0 or map_cold:
+        note = (f"{100 * f_cold:.0f}% of posterior samples: "
+                rf"$T<T_{{\rm min}}$ ({XB._T_MIN_XRAY:g} keV) at every mass" "\n"
+                "(no X-ray-emitting gas; blanks are $L_X=0$)")
+        if map_cold:
+            note += "\nMAP is one of them — no MAP curve to draw"
+        ax.text(0.02, 0.02, note, transform=ax.transAxes, fontsize=6.5,
+                style="italic", va="bottom")
 
     ax = axes[0, 1]
     ax.fill_between(m500, kT_lo, kT_hi, color="tab:blue", alpha=.2)
@@ -372,13 +424,9 @@ def fig_gas(J, chain, names, theta_map, theta_med, path):
     ax.set(xlabel=r"$kT$ [keV]", ylabel=r"$L_X$ [erg/s]"); ax.set_title(r"$L_X$-$kT$")
     ax.legend(fontsize=6.5); ax.grid(alpha=.2)
 
-    # radial profiles from the DPM model, density calibrated to the fit L_X-M
+    # radial profiles straight from the fitted native-DPM parameters
     mp_prof = mp_map or mp_med
-    ne_cal, P_cal, beta_n, beta_P, _, _ = _calibrate_ne03_to_fit(J, mp_prof, z)
-    dp = v._make_density_variant(model=2, ne_03=ne_cal, beta=beta_n, alpha_in=XB._ALPHA_PROF,
-                                 alpha_tr=2.0, alpha_out=XB._ALPHA_PROF + 2.0 * mp_prof["p2"])
-    dp._r_max_factor = float(mp_prof["r_max"])
-    pp = v._make_pressure_variant(model=2, P_03=P_cal, beta=beta_P)
+    dp, pp = _dpm_profiles(mp_prof)
     a10 = v.PressureProfileA10()
     x = np.logspace(-2, np.log10(3), 200)
     cols = plt.cm.viridis(np.linspace(.1, .85, 3))
@@ -403,8 +451,9 @@ def fig_gas(J, chain, names, theta_map, theta_med, path):
     ax_p.set(xlabel=r"$r/R_{200}$", ylabel=r"$P_e$ [keV cm$^{-3}$]")
     ax_p.set_title("Electron pressure (dotted = A10)"); ax_p.legend(fontsize=7); ax_p.grid(alpha=.2)
 
-    fig.suptitle("BGS S1 full-joint: hot-gas scaling relations (top) and radial profiles "
-                 r"(bottom; $n_e$ calibrated to the fit $L_X$-$M$)", fontsize=13)
+    fig.suptitle("BGS S1 full-joint: hot-gas scaling relations (top; integrated inside "
+                 r"$R_{500c}$) and radial profiles (bottom) — both from the fitted "
+                 "native-DPM gas parameters", fontsize=13)
     fig.tight_layout(); fig.savefig(path, dpi=130, bbox_inches="tight"); plt.close(fig)
     return path
 
@@ -504,12 +553,23 @@ def main(argv=None):
                   xlf_z=cfg.get("xlf_z", (0.1, 0.4)),
                   xlf_lx_min=cfg.get("xlf_lx_min", float("-inf")),
                   agn_bias_refs=cfg.get("agn_bias_refs"),
-                  kt_prior_sig=cfg.get("kt_prior_sig"),
+                  # Pre-0.4 runs recorded kt_prior_sig, a flag whose indices stopped
+                  # meaning kt_norm/kt_slope at the native-DPM re-base.  It is not
+                  # reconstructible as a widen factor, so old configs plot against the
+                  # default prior; the chain itself is unaffected.
+                  gas_prior_widen=cfg.get("gas_prior_widen"),
                   f_sys=cfg.get("f_sys", 0.05), hmf_backend=cfg.get("hmf", "tinker08"),
                   verbose=False)
-    if theta_med.size != J.ndim:
-        raise SystemExit(f"[plot] chain has {theta_med.size} params but the model has "
-                         f"{J.ndim} (names={J.names}); wrong --observables/--free-zm15?")
+    if theta_med.size != J.ndim or list(names) != list(J.names):
+        # The commonest cause is a chain that predates the native-DPM re-base of the
+        # band model (lx_norm/lx_slope/kt_norm/kt_slope -> log10_ne03/beta_n/
+        # log10_p03/beta_P + agn_gamma): those parameters no longer exist, so the
+        # model cannot be evaluated at that theta at all.
+        raise SystemExit(f"[plot] chain params do not match the model.\n"
+                         f"        chain ({theta_med.size}): {list(names)}\n"
+                         f"        model ({J.ndim}): {list(J.names)}\n"
+                         f"        wrong --observables/--free-zm15, or a pre-DPM chain "
+                         f"that must be re-fitted.")
     if theta_map is not None and theta_map.size != J.ndim:
         print(f"[plot] map_result.json has {theta_map.size} params != model {J.ndim}; "
               f"ignoring the MAP overlay", flush=True)

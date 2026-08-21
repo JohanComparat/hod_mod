@@ -40,6 +40,7 @@ from hod_mod.fitting import (
 )
 from hod_mod.core.power_spectrum import default_pk_linear
 from hod_mod.fitting import HOD_MODELS
+from hod_mod.fitting.mcmc_resume import revive_ensemble
 from hod_mod.scripts.benchmarks.benchmark_plots import (
     _COL_DATA, _COL_MAP, _COL_PUB,
     _PARAM_LATEX,
@@ -374,7 +375,10 @@ class MultiSampleJointFitter:
                       f"{remaining} remaining…")
                 sampler = emcee.EnsembleSampler(
                     n_walkers, n_free, self._log_prob, backend=backend)
-                sampler.run_mcmc(None, remaining, progress=progress)
+                # A collapsed ensemble makes emcee refuse the resume outright; see
+                # hod_mod.fitting.mcmc_resume for why skipping the check is not enough.
+                _start = revive_ensemble(backend, None, None, label="lange25")
+                sampler.run_mcmc(_start, remaining, progress=progress, skip_initial_state_check=True)
             np.savez(flatchain_path,
                      flatchain=backend.get_chain(flat=True),
                      param_names=np.array(self.free_params))

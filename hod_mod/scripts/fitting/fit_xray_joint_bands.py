@@ -168,10 +168,19 @@ def _induced_gas_prior(widen=None):
     widen = _GAS_PRIOR_WIDEN if widen is None else float(widen)
     os.makedirs(_OUT_DIR, exist_ok=True)
     cache = os.path.join(_OUT_DIR, "dpm_induced_prior.npz")
+    mu_s = np.array([44.7, 1.61, 0.4, 0.6])
+    sig_s = np.array([0.3, 0.3, 0.2, 0.15])
     if os.path.exists(cache):
         d = np.load(cache)
-        if float(d["z"]) == _PRIOR_Z:
+        # Validate everything the mapping depends on, not just z: the cache stores
+        # mu_s/sig_s precisely so a change to the GAS.py priors cannot be silently
+        # ignored.  (Before this, editing mu_s or sig_s below reused a stale prior.)
+        if (float(d["z"]) == _PRIOR_Z
+                and "mu_s" in d.files and np.array_equal(d["mu_s"], mu_s)
+                and "sig_s" in d.files and np.array_equal(d["sig_s"], sig_s)):
             return d["mu"], d["cov"] * widen ** 2
+        print("  induced gas prior cache is stale (z/mu_s/sig_s changed) -> rebuild",
+              flush=True)
     import jax
     jax.config.update("jax_enable_x64", True)   # emission integral carries r_cm^2 ~ 1e49
     from hod_mod.fitting.dpm_priors import ScalingCtx, induced_gaussian_prior
@@ -189,9 +198,9 @@ def _induced_gas_prior(widen=None):
     ctx = ScalingCtx(m200, r200, np.asarray(m500c), np.asarray(r500c), cool_broad,
                      shape, z, float(_ez(z)), h, z_metal=_Z_FID, t_min=_T_MIN_XRAY)
     theta0 = np.array([np.log10(_NE03_FID), _BETA_N_FID, np.log10(_P03_FID), _BETA_P_FID])
-    # GAS.py scaling-relation priors (the v2 informative priors, unchanged)
-    mu_s = np.array([44.7, 1.61, 0.4, 0.6])
-    sig_s = np.array([0.3, 0.3, 0.2, 0.15])
+    # GAS.py scaling-relation priors (the v2 informative priors, unchanged).
+    # mu_s / sig_s are defined at the top of this function so the cache check above
+    # can compare against the values actually in force.
     mu_n, cov_n, J, f_at = induced_gaussian_prior(ctx, mu_s, sig_s, theta0)
     np.savez(cache, mu=mu_n, cov=cov_n, J=J, f_at=f_at, z=z, mu_s=mu_s, sig_s=sig_s)
     print(f"  induced native-DPM gas prior -> {cache}", flush=True)
@@ -1080,15 +1089,52 @@ def main(argv=None):
         return out
 
     import emcee
+    from hod_mod.fitting.mcmc_resume import revive_ensemble
     ndim = len(_PARAMS); nw = args.nwalkers
     rng = np.random.default_rng(42)
-    p0 = map_p + 1e-3 * rng.standard_normal((nw, ndim)) * np.ptp(_bounds(), axis=1)
-    p0 = np.clip(p0, _bounds()[:, 0] + 1e-6, _bounds()[:, 1] - 1e-6)
-    sampler = emcee.EnsembleSampler(nw, ndim, lambda p: -nlp(p) if nlp(p) < 1e29 else -np.inf)
-    print(f"\nBAND MCMC: {nw} walkers × {args.nsteps} steps ({tag}) ...", flush=True)
-    t0 = time.time(); sampler.run_mcmc(p0, args.nsteps, progress=False)
-    print(f"MCMC done in {time.time()-t0:.0f}s; acceptance={np.mean(sampler.acceptance_fraction):.2f}",
-          flush=True)
+
+    # Checkpoint to an HDF backend and resume from it.  Without this the whole run
+    # was lost to any walltime kill or preemption -- and this fit pays ~3 h of
+    # precompute (dpm_j_grid + per-sample transfer + SZ kernels) before the first
+    # step, inside a 24 h job.  Same failure mode fit_joint_lsdr10 documents as
+    # having destroyed two attempts in 2026-07.
+    backend_path = os.path.join(out_dir, f"{tag}_bands_backend.h5")
+    backend = emcee.backends.HDFBackend(backend_path)
+    try:
+        already = backend.iteration
+    except (AttributeError, OSError, KeyError):
+        already = 0
+    if already and backend.shape != (nw, ndim):
+        print(f"  existing backend is {backend.shape}, need {(nw, ndim)} -> fresh chain",
+              flush=True)
+        already = 0
+    def _lnp(p):
+        # nlp() was being called TWICE per proposal (once for the test, once for the
+        # value), which doubled the cost of every band MCMC for no benefit --
+        # measured at 2.04 nlp calls per walker-step.
+        v = nlp(p)
+        return -v if v < 1e29 else -np.inf
+
+    sampler = emcee.EnsembleSampler(nw, ndim, _lnp, backend=backend)
+    t0 = time.time()
+    if already >= args.nsteps:
+        print(f"\nBAND MCMC: chain already complete ({already} >= {args.nsteps} steps) "
+              f"-> {backend_path}", flush=True)
+    elif already == 0:
+        p0 = map_p + 1e-3 * rng.standard_normal((nw, ndim)) * np.ptp(_bounds(), axis=1)
+        p0 = np.clip(p0, _bounds()[:, 0] + 1e-6, _bounds()[:, 1] - 1e-6)
+        backend.reset(nw, ndim)
+        print(f"\nBAND MCMC: {nw} walkers × {args.nsteps} steps ({tag}), "
+              f"checkpointing to {backend_path} ...", flush=True)
+        sampler.run_mcmc(p0, args.nsteps, progress=False)
+    else:
+        print(f"\nBAND MCMC: resuming {tag} from step {already}/{args.nsteps} "
+              f"({args.nsteps - already} left) -> {backend_path}", flush=True)
+        _start = revive_ensemble(backend, _bounds()[:, 0], _bounds()[:, 1], label=tag)
+        sampler.run_mcmc(_start, args.nsteps - already, progress=False,
+                         skip_initial_state_check=True)
+    acc = float(np.mean(backend.accepted / max(backend.iteration, 1)))
+    print(f"MCMC done in {time.time()-t0:.0f}s; acceptance={acc:.2f}", flush=True)
     flat = sampler.get_chain(discard=args.nburn, flat=True)
     np.savez(os.path.join(out_dir, f"{tag}_bands_chain.npz"), flatchain=flat,
              log_prob=sampler.get_log_prob(discard=args.nburn, flat=True),
@@ -1099,8 +1145,7 @@ def main(argv=None):
                     hi=float(pct[2, i] - pct[1, i])) for i, p in enumerate(_PARAMS)}
     with open(os.path.join(out_dir, f"{tag}_bands_summary.json"), "w") as fh:
         json.dump(dict(samples=args.samples, map=out,
-                       acceptance=float(np.mean(sampler.acceptance_fraction)), posterior=post),
-                  fh, indent=2)
+                       acceptance=acc, posterior=post), fh, indent=2)
     print("Posterior (median +hi -lo):", flush=True)
     for i, p in enumerate(_PARAMS):
         print(f"  {p:10s} = {pct[1,i]:.3f} +{pct[2,i]-pct[1,i]:.3f} -{pct[1,i]-pct[0,i]:.3f}",

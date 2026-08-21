@@ -306,6 +306,28 @@ def _results_root() -> str:
         return os.environ.get("HOD_MOD_RESULTS", "")
 
 
+_WARNED_NATIVE_BANDS = False
+
+
+def _warn_native_band_summary(missing):
+    """Warn once that the band summary cannot feed the forecast fiducial."""
+    global _WARNED_NATIVE_BANDS
+    if _WARNED_NATIVE_BANDS:
+        return
+    _WARNED_NATIVE_BANDS = True
+    import warnings
+    warnings.warn(
+        "xray_joint_bands/S1_bands_summary.json does not carry "
+        f"{missing} -- it is a native-DPM band fit, whose gas parameters are "
+        "(log10_ne03, beta_n, log10_p03, beta_P). The forecast's gas sector is "
+        "still the phenomenological power law, so the whole X-ray block is left "
+        "at _FIDUCIAL_DEFAULT rather than mixing the two parametrisations. To "
+        "use the native fit, project its MAP through "
+        "hod_mod.fitting.dpm_priors.scaling_map and write the resulting "
+        "(lx_norm, lx_slope, kt_norm, kt_slope) into the summary.",
+        RuntimeWarning, stacklevel=3)
+
+
 def load_fiducial() -> dict:
     """Return the fiducial parameter dict, preferring the on-disk MAP JSONs."""
     fid = dict(_FIDUCIAL_DEFAULT)
@@ -320,15 +342,29 @@ def load_fiducial() -> dict:
                 fid[n] = float(p[n])
     except Exception:
         pass
-    # X-ray MAP
+    # X-ray MAP.
+    #
+    # The forecast's gas sector is still the phenomenological L_X-M / kT-M power
+    # law (lx_norm, lx_slope, kt_norm, kt_slope; see forward_jax), but the band
+    # fit was re-based onto native DPM parameters (log10_ne03, beta_n, log10_p03,
+    # beta_P).  A native summary therefore satisfies none of the four amplitude
+    # names while STILL matching p2/r_max/log10DC -- so a per-name loop would
+    # quietly take the shape from the new fit and the amplitude from
+    # _FIDUCIAL_DEFAULT, i.e. from a fit that no longer exists.  That mix is
+    # worse than either source alone and is invisible downstream, so take the
+    # gas block all-or-nothing.
+    _XRAY_KEYS = ("lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max", "log10DC")
     try:
         with open(os.path.join(root, "xray_joint_bands", "S1_bands_summary.json")) as fh:
             m = json.load(fh)["map"]
-        for n in ("lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max", "log10DC"):
-            if n in m:
-                fid[n] = float(m[n])
     except Exception:
-        pass
+        m = None
+    if m is not None:
+        if all(n in m for n in _XRAY_KEYS):
+            for n in _XRAY_KEYS:
+                fid[n] = float(m[n])
+        else:
+            _warn_native_band_summary(sorted(set(_XRAY_KEYS) - set(m)))
     return fid
 
 
