@@ -1,21 +1,19 @@
-Tier-2 forecast: nothing fixed (90 parameters)
-==============================================
+Tier-2 forecast: nothing fixed (98 free parameters)
+===================================================
 
-.. admonition:: Pending v0.3 re-run — the numbers below are superseded
-   :class: warning
+.. admonition:: Provenance — campaign-fresh, but emulator-based
+   :class: note
 
-   *Status 2026-08-19.*  The v0.3 campaign job for this tier ran on 2026-07-16
-   but only refreshed its Jacobian block **cache**; it was killed before writing
-   ``tier2_forecast_nb6.npz``, so the numbers, ``SUMMARY_nb6.txt`` and every
-   ``tier2_forecast__*.png`` on this page are still from the **2026-07-03** run and predate
-   the 0.3.0 Hankel-transform fix.
-
-   The re-run needs the cache cleared first.  ``Tier2Forecast._cache_path``
-   (:mod:`hod_mod.forecast.tier2`) keys a cached block on
-   ``spec_repr + block.label + block.which + fiducial`` — with **no code
-   version** — and the Hankel fix changed the input→output map without changing
-   any input, so **377 of 445** cached blocks computed before 2026-07-16
-   would be silently reused.  See :doc:`oarsub_campaign`.
+   Numbers and figures are from the **VTAG=v0.31** campaign run of 2026-07-16 —
+   the only campaign in which this tier completed.  That is not a mixed-campaign
+   citation: the ``HOD_MOD_PK_BACKEND`` pin reaches Families A–C only, because
+   the forecast stack builds
+   :class:`~hod_mod.forecast.forward_jax.ForwardModel`, which selects its
+   :math:`P(k)` correction from a driver flag and defaults to the CosmoPower-JAX
+   emulator (real CAMB is not JAX-traceable).  A v0.3 and a v0.31 forecast are
+   therefore the same physics — their tier :math:`\sigma`'s agree to 3–4 % —
+   and the v0.3 tree holds only the pre-campaign 2026-07-02/04 leftovers.  See
+   :doc:`oarsub_campaign`.
 
 The :doc:`tier-1 studies <stage4_forecast>` ask what a Stage-IV survey
 combination measures when the model keeps its historically fixed nuisance
@@ -281,19 +279,32 @@ cosmological application; and (iii) the information gained per sector in bits,
 :math:`\tfrac12\log_2\det C_{\rm prior}/\det C_{\rm post}`.
 
 Headline numbers of the production run (6 bands, :math:`R_{\min}=0.1` Mpc/h,
-22,539 data rows, all 90 parameters free):
+22,539 data rows, **98 of the 111 shared parameters free**):
+
+.. note::
+
+   The page title's "nothing fixed" is unchanged in meaning, but the shared
+   parameter vector has grown since the study was first written: it was 90
+   entries, and the missing-physics waves took it to 111
+   (:data:`hod_mod.forecast.params.PARAM_NAMES`).  Tier-2 still frees every
+   parameter it has an observable for.  The 13 it pins are the retired
+   ``log10DC`` plus the 12 radio / IR / UV entries of
+   ``params.TIER3_EXTENSION`` — parameters no tier-2 observable constrains, so
+   leaving them free would only add prior volume.  They are freed in
+   :doc:`tier3_forecast`, which does have the maps and band LFs to speak to
+   them.
 
 * **Cosmology is cheap to keep honest.**  :math:`\sigma(\Omega_m) =
-  1.8\times10^{-4}` (0.06%), :math:`\sigma(\sigma_8) = 2.9\times10^{-4}`
-  (0.04%), :math:`\sigma(S_8) = 1.8\times10^{-4}` — only factors 2.3 / 2.4 /
-  1.4 above the astrophysics-pinned limit.  The optimistic data scenario pays
+  1.9\times10^{-4}` (0.06%), :math:`\sigma(\sigma_8) = 3.0\times10^{-4}`
+  (0.04%) — factors 2.3 / 2.4 above the astrophysics-pinned limit
+  (:math:`8.1\times10^{-5}` / :math:`1.2\times10^{-4}`).  The optimistic data scenario pays
   for full marginalization: the cumulative build-up gives
   :math:`\sigma(\Omega_m)` = 3.1 → 2.7 → 1.9 :math:`\times10^{-4}` for the
   galaxy grid → +lensing → +X-ray/tSZ; the AGN probes and the new radio / IR /
   HI legs add little *to cosmology* (their value is the astrophysical sectors
   themselves).  The extended-cosmology block is measured alongside:
   :math:`\sigma(w_0) = 3.2\times10^{-3}`, :math:`\sigma(w_a) = 1.4\times10^{-2}`,
-  :math:`\sigma(\sum m_\nu) = 3.2\times10^{-5}` eV (growth-only, EH98 shape —
+  :math:`\sigma(\sum m_\nu) = 5.0\times10^{-5}` eV (growth-only, EH98 shape —
   see the caveats).
 * **Astrophysics dominates the information budget**: 178 bits in the SHMR
   sector, 153 in the gas, 149 in the SF/quenched sector, 127 in the baryon

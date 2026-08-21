@@ -160,6 +160,36 @@ panel decomposed into its physical components.
    :math:`\theta\lesssim20''` and the gas the outer profile.  The 9 X-ray
    parameters are fit jointly across all bands.
 
+.. admonition:: Correction (2026-08-21) — the gas sector of this fit is invalid
+   :class: warning
+
+   The X-ray/gas numbers below were written from the v0.3 posterior in good
+   faith.  Three defects in :mod:`hod_mod.fitting.full_joint`, found while
+   preparing v0.4, mean that posterior does not constrain the gas sector:
+
+   * **The informative gas prior was never applied.**  ``pri_sig`` is diagonal
+     by construction and carries ``inf`` for the four native-DPM gas
+     parameters, so the full-covariance prior — whose information lives almost
+     entirely in its correlations (ρ from −0.95 to +0.84) — contributed
+     nothing.  The gas sector ran on its uniform bounds alone.  Where this page
+     says the intervals are *prior-dominated*, the sharper and worse truth is
+     that they are **bounds-dominated**.
+   * **The gas seed was the wrong distribution's centre** — the
+     scaling-relation prior centre used where the induced-prior centre belongs,
+     474 units of prior :math:`\chi^2` away and clipped onto three bounds,
+     which Nelder-Mead did not escape.
+   * **``--kt-prior-sig`` pinned the wrong parameters.**  After the native-DPM
+     re-base the two slots it wrote onto are ``log10_p03`` and ``beta_P``, not
+     ``kt_norm``/``kt_slope``.  It is replaced in v0.4 by ``--gas-prior-widen``,
+     a scalar inflation of the whole 4×4.
+
+   The visible symptom is an **inverted** :math:`k_BT`–:math:`M` relation:
+   :math:`\beta_P - \beta_n = -0.41` at the posterior median against a prior
+   centred on :math:`+0.6`.  The galaxy and AGN sectors are unaffected.  This
+   page will be rewritten once the fit is re-run with the corrected prior and
+   seed; until then treat every gas-sector number and the
+   *Hot-gas scaling relations* figures below as withdrawn.
+
 Goodness of fit (campaign ``VTAG=v0.3``)
 ----------------------------------------
 

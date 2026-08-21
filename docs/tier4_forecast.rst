@@ -1,21 +1,19 @@
 Tier-4 forecast: the morphology observables
 ===========================================
 
-.. admonition:: Pending v0.3 re-run — the numbers below are superseded
-   :class: warning
+.. admonition:: Provenance — campaign-fresh, but emulator-based
+   :class: note
 
-   *Status 2026-08-19.*  The v0.3 campaign job for this tier ran on 2026-07-16
-   but only refreshed its Jacobian block **cache**; it was killed before writing
-   ``tier4_forecast_nb6.npz``, so the numbers, ``SUMMARY_nb6.txt`` and every
-   ``tier4_forecast__*.png`` on this page are still from the **2026-07-04** run and predate
-   the 0.3.0 Hankel-transform fix.
-
-   The re-run needs the cache cleared first.  ``Tier2Forecast._cache_path``
-   (:mod:`hod_mod.forecast.tier2`) keys a cached block on
-   ``spec_repr + block.label + block.which + fiducial`` — with **no code
-   version** — and the Hankel fix changed the input→output map without changing
-   any input, so **417 of 603** cached blocks computed before 2026-07-16
-   would be silently reused.  See :doc:`oarsub_campaign`.
+   Numbers and figures are from the **VTAG=v0.31** campaign run of 2026-07-16 —
+   the only campaign in which this tier completed.  That is not a mixed-campaign
+   citation: the ``HOD_MOD_PK_BACKEND`` pin reaches Families A–C only, because
+   the forecast stack builds
+   :class:`~hod_mod.forecast.forward_jax.ForwardModel`, which selects its
+   :math:`P(k)` correction from a driver flag and defaults to the CosmoPower-JAX
+   emulator (real CAMB is not JAX-traceable).  A v0.3 and a v0.31 forecast are
+   therefore the same physics — their tier :math:`\sigma`'s agree to 3–4 % —
+   and the v0.3 tree holds only the pre-campaign 2026-07-02/04 leftovers.  See
+   :doc:`oarsub_campaign`.
 
 Wave 4 gave the model a morphology *sector* (the conditional early-type
 fraction, the sample split, the BH–bulge coupling — see
@@ -392,8 +390,8 @@ Operational record
   ``max_tasks_per_child`` respawn deadlocks; batching gives the same
   per-worker memory bound), ~4.5 h wall on 6 workers / 64 GB.
 
-Results (2026-07-04 run)
-------------------------
+Results (``VTAG=v0.31`` run, 2026-07-16)
+----------------------------------------
 
 396 blocks, 65 431 rows (260 SF/Q cells + **104** morph-split blocks — the
 wide-tier completeness gate trims the naive 156: at z_hi = 1.2 imaging
