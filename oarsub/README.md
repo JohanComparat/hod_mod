@@ -115,6 +115,26 @@ Before first submission, edit the config block at the top of the script:
 `REPO`, `DATA_DIR`, `CONDA_ENV`, and the `--project` directive. Logs land in
 `oarsub/logs/`.
 
+## OAR dialect and node heterogeneity
+
+Two things this GRICAD build does differently, both learned the hard way:
+
+* **`--name`, not `-n`.**  This `oarsub` rejects the short form; every script
+  under `oarsub/` uses `#OAR --name`.
+* **`[ANTIFRAG] resources may be heterogeneous.**  A job can land on any node
+  in the default queue, and they are not the same machine.  Wall-clock is
+  therefore **not comparable between jobs** unless you pin the CPU model:
+  prefix the resource string with `/cpumodel=1/`, e.g.
+
+  ```bash
+  oarsub -l /cpumodel=1/nodes=1/core=8,walltime=24:00:00 ...
+  ```
+
+  Concretely: the full-joint MAP re-run of 2026-08-21 landed on `dahu-fat4`, a
+  16-core Gold 6244 fat node, so its wall-clock cannot be compared against the
+  8 h 30 m measured for the same fit on `dahu189`.  Pin the model whenever the
+  timing is the measurement; leave it unpinned when throughput is.
+
 ## Walltime and restart (resumable chains)
 
 The script sets a short `walltime=04:00:00` (re-submit to continue — see below).

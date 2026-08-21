@@ -2,6 +2,184 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] — 2026-08-21
+
+**Behaviour-changing release — minor bump, not a patch.** Two independent errors
+are corrected, and both *invalidate* previously published numbers rather than
+shifting them. (i) The 1-halo cluster×galaxy term tabulated a Dirac delta at
+`r = 0`, which rang through the Ogata quadrature and drove `ξ_cg` **negative and
+oscillating** everywhere below ~5 Mpc/h. (ii) The full-joint gas sector ran with
+**no informative prior at all** and a seed clipped onto three bounds, which is
+why the v0.3/v0.31 posteriors return an *inverted* kT–M relation. Any
+`ξ_cg`/`w_p^{CG}` prediction at `r ≲ 5` Mpc/h and **every** v0.3/v0.31
+full-joint gas-sector posterior are superseded; both need re-running. There is
+no pin that reproduces the old numbers, because in both cases the old numbers
+were wrong rather than differently-calibrated — which is also why this is a
+minor bump under the same argument 0.3.0 made for itself.
+
+Results above ~6 Mpc/h are unaffected (<0.2%), as are the galaxy and AGN sectors
+of the joint fit.
+
+### Cluster×galaxy 1-halo term: the coincident central is not a tabulated mode
+
+- **Fixed `HaloModelCrossClustering`**: the 1-halo integrand dropped its
+  `⟨N_cen⟩` contribution. Cluster and central both sit at the halo centre, so
+  that term is `k`-independent — a Dirac delta at `r = 0` contributing nothing
+  at any `r > 0`. Tabulating it flattened the high-`k` tail to a constant, and
+  the Hankel transform's capped-slope continuation past the table then rang
+  through the quadrature.
+- **Size.** `P_old/P_new` grows from 1.011 at `k = 0.01` to ~1.8×10³ at
+  `k = 200`. In configuration space the old `ξ_cg` was not merely biased but
+  **negative** across the whole 1-halo/2-halo transition: −22× at
+  `r = 0.05` Mpc/h, −10× at 0.18, −8× at 0.65, crossing back through zero near
+  1.7, and converging to 1.000 ± 0.0005 only beyond ~8 Mpc/h.
+- This is a second symptom of the Ogata-continuation weakness that 0.3.0
+  addressed, not a regression introduced since.
+
+### Full-joint gas sector: prior, seed, and the flag that pinned the wrong slots
+
+Three defects, all in `hod_mod.fitting.full_joint`, all invalidating:
+
+- **The full-covariance gas prior was never applied.** `pri_sig` is diagonal by
+  construction and carried `inf` for the four native-DPM gas parameters, so the
+  prior — whose information lives almost entirely in its correlations, ρ from
+  −0.95 to +0.84 — contributed nothing and the sector ran on its uniform bounds.
+  The visible symptom is an **inverted kT–M relation**: `beta_P − beta_n =
+  −0.41` at the v0.3 posterior median against a prior centred on **+0.6**.
+- **The gas seed was the wrong distribution's centre** — `mu_s`, the
+  *scaling-relation* prior centre, used where the *induced* prior centre
+  belongs, i.e. the input to the Jacobian in `_induced_gas_prior` used as its
+  output. That start point is 474 units of prior χ² away and clips onto three
+  bounds, and Nelder-Mead did not escape: the v0.3 MAPs sit at
+  `log10_ne03 = −3.0872` against a bound of −3.0.
+- **`--kt-prior-sig` pinned the wrong parameters.** It wrote onto `sig8[2]`,
+  `sig8[3]`, which after the 0.3.1 native-DPM re-base are `log10_p03` and
+  `beta_P`, not `kt_norm`/`kt_slope`. Replaced by **`--gas-prior-widen`**, a
+  scalar inflation of the whole 4×4 (`XB._induced_gas_prior(widen=…)`), which
+  is the only meaningful knob when the information is in the correlations.
+  Default 1.5; `W = 8` reproduces the old `flat_kt` candidate.
+- Guarded by `test_gas_sector_seed_and_prior_are_live`, which steps 3σ along the
+  stiffest eigendirection of the induced covariance and asserts the log-prior
+  actually moves. Before the fix that difference was exactly 0.0 for *any* gas
+  displacement. Every pre-existing `JointFull` test used
+  `observables=("ngal","wp","xlf")` and so never entered the X-ray branch.
+
+### New: `hod_mod.fitting.mcmc_resume` — surviving walker collapse
+
+- **`revive_ensemble(backend, lo, hi, jitter, seed, label)`.** A long
+  stretch-move run can collapse the ensemble onto a lower-dimensional affine
+  subspace; `emcee` then rejects the stored state with *"Initial state has a
+  large condition number"* **before its first step**. Because the collapsed
+  state is what the HDF backend checkpointed, this is permanent — every
+  resubmission dies identically regardless of walltime. Two production chains
+  had been frozen this way since mid-July (`bgs_full_joint_allparams_v0.3` at
+  1061/4000, `bgs_zm15_thresh_joint_v0.3` at 1909/2500).
+- `skip_initial_state_check=True` alone is **not** the fix: the stretch move
+  proposes only along lines joining walker pairs, so it cannot leave the affine
+  hull. Skipping the check on a rank-15-of-28 ensemble silently samples a
+  15-dimensional slice of the posterior while looking healthy. Rank is restored
+  explicitly, by re-scattering at `jitter ×` the per-parameter spread.
+- Strictly additive: the existing `backend.iteration` / `total − already`
+  bookkeeping in `WpFitter.sample` and `JointZM15.sample` is unchanged; the
+  revived coordinates are passed where those methods used to pass `None`.
+  Wired into six call sites.
+- **Caveat, stated in the module:** reviving restarts convergence for the
+  affected segment. Treat post-revive samples as a fresh burn-in, not a seamless
+  continuation.
+
+### Gas scaling relations are now derived, not read
+
+- **`plot_bgs_full_joint.fig_gas` rewritten.** Since the 0.3.1 native-DPM
+  re-base there are no fitted `L_X`–`M` / `kT`–`M` power-law coefficients to
+  read — `lx_norm` and friends are not in the chain — so the old
+  `_calibrate_ne03_to_fit` inversion was solving against parameters that no
+  longer exist. `L_X` and `kT` are now obtained by integrating the posterior's
+  own DPM profiles to `R_500c` with `n_e²` weighting and the `T > 0.3` keV
+  hot-phase cut, reusing the likelihood's own factorisation from
+  `hod_mod.fitting.dpm_bands`. The 68 % band is 400 posterior draws pushed
+  through the same integrator. The plotted relations are therefore
+  **predictions**, not fitted lines.
+- A cold-halo blanker turns `L_X = kT = 0` into a gap on the log axis and
+  annotates the fraction of samples affected, rather than drawing a misleading
+  zero.
+- The chain/model consistency check now compares parameter *name lists*, not
+  just `ndim`, so a pre-DPM chain fails with an explanation instead of a
+  silent mismatch.
+
+### Forecast fiducials: all-or-nothing X-ray block
+
+- **`params.load_fiducial`** now takes the seven X-ray fiducial entries from a
+  band summary only if *all* of them are present. A native-DPM summary on disk
+  matches none of the four amplitude names but still matched
+  `p2`/`r_max`/`log10DC`, so the forecast silently took shape from the new fit
+  and amplitude from the defaults — a chimera of two fits, worse than either
+  source alone and invisible downstream. Emits a once-only `RuntimeWarning`
+  pointing at `dpm_priors.scaling_map`. `PARAM_NAMES` is unchanged at 111.
+
+### Differentiability
+
+- **`PressureProfileDPM.pressure_uk`** drops `float()`/`np.asarray` for
+  pass-through and `jnp.asarray`, so the tSZ cross-power is differentiable
+  w.r.t. cosmology, matching `PressureProfileA10`. `jax.grad` w.r.t. `h`
+  previously raised `ConcretizationTypeError`. Numerically identical to float32
+  noise (max relative difference 3.3e-5, median 0.0) — enabling only, no science
+  shift.
+
+### X-ray amplitude chain: opt-in physical ECF + S1 anchor (`--ecf`)
+
+- **`fit_comparat2025 --ecf`** folds the validated eROSITA TM0 flux→count ECF
+  (`ErositaResponse`; per-halo `ECF(kT(M))` on the gas leg, Γ=1.9 on the AGN
+  leg) into the cross-power, and anchors the remaining sample-independent
+  geometry on S1 (per-sample constants ∝ 1/S^R_X, the `fit_xray_joint`
+  convention).  `log10_A_gas`/`log10_A_AGN` become O(1) residuals centred on
+  0 instead of absorbing the entire ~1e8 model→counts chain (Λ_eff, Mpc→cm,
+  1/4π, ECF, sr→arcsec²).  Opt-in: non-ECF runs stay comparable to the
+  running campaign; the anchor is measured once per results tree and cached
+  (`ecf_anchor_<agn_model>.json`).
+
+- **New `hod_mod/scripts/forecasts/run_forecast_nuts.py`** — full NUTS posterior
+  of the forecast forward model (blackjax, `--compare-fisher` validation loop).
+### Campaign tooling and documentation
+
+- **`campaign_status.sh` checks artifacts, not directories.** Each production
+  fit writes its MAP figures and a per-step `chain.h5` as it goes, but
+  `flatchain.npz` — the only file the plotters open — appears once the sampler
+  reaches its full step budget. A walltime-killed MCMC therefore left a
+  directory full of files that the old check called OK, and `collect_and_plot.sh`
+  died on `FileNotFoundError`. `SINCE=YYYY-MM-DD` additionally rejects an
+  artifact that merely exists but predates the campaign: the tier2/3/4 forecast
+  jobs had refreshed only their Jacobian caches, so three doc pages were quoting
+  pre-campaign numbers under a v0.3 heading. `tier4_forecast` and
+  `fits/benchmark` were never audited at all and are now covered.
+- **`collect_and_plot.sh`**: `make_tier2_figures` takes a positional npz and was
+  being called bare, so it exited 2 on argparse and `|| true` swallowed it — the
+  tier figures had never once been refreshed by this script. Now run per tier and
+  gated on `SINCE`. `RES_FAMILY_D` allows Family D to be read from the campaign
+  that actually ran it, which is not mixing campaigns: the
+  `HOD_MOD_PK_BACKEND` pin reaches Families A–C only, so v0.3 and v0.31
+  forecasts are the same physics (their tier σ's agree to 3–4 %).
+- **`fit_joint_lsdr10`**: the MAP figure is drawn before the MCMC and was
+  unguarded, so `ValueError: 'yerr' must not contain negative values` — the
+  residual panels divide by a model that goes negative outside the fitted range
+  — discarded the whole run. Two campaign attempts left only `S1_map.json`.
+  Error bars take the magnitude, and the figure call cannot abort the fit.
+- **Resumable chains for the benchmark and lsdr10 samplers.** `WpFitter.sample`
+  and `fit_joint_lsdr10.run_mcmc` kept the chain in memory until a single save
+  at the end, so an 8 h walltime kill discarded 8 h of sampling; seven ZM15
+  benchmarks never landed for that reason. Both now use an emcee HDF backend
+  with burn-in discarded at read-out, so `flatchain.npz` holds the same
+  production samples as before.
+- **`--force-map`** on the ZM15 joint fitters: a `--mode both` besteffort
+  restart re-ran the deterministic Powell MAP and its whole figure set before
+  touching the chain, which is why a chain sat at 304/2500 steps after ten days.
+- **Documentation** refreshed against the campaign: the ZM15 anchor posterior
+  page moved off its hod_mod 0.2.1 basis (χ²/dof 0.44 → 0.603), the three tier
+  pages onto their real source, and the More+2015 benchmark tables are now
+  generated from `benchmark_result.json` by
+  `hod_mod.scripts.benchmarks.make_benchmark_tables` so two pages cannot drift
+  apart again. `docs/oarsub_campaign.rst` gained the provenance rules; pages
+  still awaiting a re-run carry a dated banner naming the artifact.
+
 ## [0.3.1] — 2026-07-16
 
 **Behaviour-changing release — the default linear P(k) moves CAMB → CosmoPower-JAX.**
@@ -58,21 +236,6 @@ result trees already carry the tag.)
   conventions are built in: 2.4' Gaussian beam (the CIB-deprojected M20
   y-map; 1.6' pre-deprojection) and area-weighted averaging over the
   beam-width annuli the paper reports.
-
-### X-ray amplitude chain: opt-in physical ECF + S1 anchor (`--ecf`)
-
-- **`fit_comparat2025 --ecf`** folds the validated eROSITA TM0 flux→count ECF
-  (`ErositaResponse`; per-halo `ECF(kT(M))` on the gas leg, Γ=1.9 on the AGN
-  leg) into the cross-power, and anchors the remaining sample-independent
-  geometry on S1 (per-sample constants ∝ 1/S^R_X, the `fit_xray_joint`
-  convention).  `log10_A_gas`/`log10_A_AGN` become O(1) residuals centred on
-  0 instead of absorbing the entire ~1e8 model→counts chain (Λ_eff, Mpc→cm,
-  1/4π, ECF, sr→arcsec²).  Opt-in: non-ECF runs stay comparable to the
-  running campaign; the anchor is measured once per results tree and cached
-  (`ecf_anchor_<agn_model>.json`).
-
-- **New `hod_mod/scripts/forecasts/run_forecast_nuts.py`** — full NUTS posterior
-  of the forecast forward model (blackjax, `--compare-fisher` validation loop).
 
 ### HPC re-run campaign infrastructure (`oarsub/`)
 

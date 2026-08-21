@@ -16,7 +16,7 @@
 # Smoke:   oarsub -t devel -S ./oarsub/fit_comparat2025_gas_temp.sh    (<=30 min)
 # =============================================================================
 
-#OAR -n c2025_gas_temp
+#OAR --name c2025_gas_temp
 #OAR --project your-oar-project
 #OAR -l /nodes=1/core=16,walltime=10:00:00
 #OAR --stdout oarsub/logs/%jobid%.c2025_gas_temp.out
