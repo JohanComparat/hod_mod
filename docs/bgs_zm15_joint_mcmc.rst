@@ -3,20 +3,17 @@
 BGS × LS10 — Zu & Mandelbaum 2015 joint :math:`w_p` + :math:`n_{\rm gal}` MCMC
 ==============================================================================================
 
-.. admonition:: Pending v0.3 re-run — the numbers below are superseded
-   :class: warning
+.. admonition:: Provenance — campaign ``VTAG=v0.3``
+   :class: note
 
-   *Status 2026-08-19.*  This page is built on a chain produced with **hod_mod
-   0.2.1**, i.e. before the 0.3.0 Hankel-transform fix, so every number on it —
-   including the :math:`\chi^2/\mathrm{dof} = 0.44` headline, the 13-parameter
-   posterior table and the per-bin :math:`M_{\rm eff}`/:math:`b_{\rm eff}`/
-   :math:`f_{\rm sat}` table — is superseded.  The v0.3 re-run is under way:
-   its MAP already gives :math:`\chi^2/\mathrm{dof} = 59.70/99 = 0.603`, and the
-   chain stood at **1871/2500 steps** when this note was written, so
-   ``bgs_zm15_joint_wp_ngal_v0.3/flatchain.npz`` does not exist yet and the
-   figures cannot be regenerated.  Resume with
-   ``VTAG=v0.3 ./oarsub/submit_campaign.sh <project> production``; track it with
-   ``./oarsub/campaign_status.sh``.  See :doc:`oarsub_campaign`.
+   Refreshed 2026-08-21 from the completed v0.3 chain
+   (``bgs_zm15_joint_wp_ngal_v0.3``, 2500/2500 steps, 64 000 samples,
+   2026-08-20).  The numbers here supersede the previous version of this page,
+   which was built on a **hod_mod 0.2.1** chain — i.e. before the 0.3.0
+   Hankel-transform fix — and quoted :math:`\chi^2/\mathrm{dof} = 44.0/99 =
+   0.44`.  Physics is the 0.3.0 Hankel fix with the linear :math:`P(k)` pinned
+   to CAMB; the 0.3.1+ package default is the CosmoPower-JAX emulator, see
+   :doc:`oarsub_campaign` and :doc:`cosmology`.
 
 This page exploits the finished MCMC posterior of the global inverse-HOD fit of
 :class:`~hod_mod.connection.hod.ZuMandelbaum15HODModel` (Zu & Mandelbaum 2015) to the
@@ -25,9 +22,10 @@ thirteen SHMR + scatter + satellite parameters is fit **simultaneously** to all 
 stellar-mass bins, using the projected clustering :math:`w_p(r_p)` and the galaxy number
 density :math:`n_{\rm gal}` of every bin (**no lensing** in this run).
 
-The chain was produced by ``oarsub/fit_bgs_zm15_joint_mcmc.sh`` running
-:mod:`hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint` (``--mode mcmc --surveys``,
-i.e. ``wp`` + ``n_gal`` only) with **hod_mod 0.2.1**.  The figures on this page are
+The chain was produced by the ``production`` family of the ``VTAG=v0.3``
+campaign (``oarsub/params/production_mcmc.txt``) running
+:mod:`hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint` (``--mode both --surveys``,
+i.e. ``wp`` + ``n_gal`` only): 32 walkers, 500 burn-in + 2000 production steps.  The figures on this page are
 regenerated from ``flatchain.npz`` + ``map_result.json`` by
 :mod:`hod_mod.scripts.fitting.bgs_ls10.plot_bgs_zm15_joint_posterior`.  They show the
 **posterior** — median and 68 / 95 % credible bands — throughout; the MAP point estimate is
@@ -39,7 +37,7 @@ used only as a reference in the constraint table.
 :math:`\log_{10}(M_*/M_\odot)` of width 0.2 dex (the top bin, 11.4–12.0, is wider), each
 with its own measured effective redshift :math:`z_{\rm mean}`.
 
-The fit is **excellent**: :math:`\chi^2/\mathrm{dof} = 44.0/99 = 0.44` at the MAP.
+The fit is **excellent**: :math:`\chi^2/\mathrm{dof} = 59.70/99 = 0.603` at the MAP.
 
 ----
 
@@ -74,9 +72,9 @@ the MAP best fit (Powell).  Discarding burn-in leaves
 :math:`32 \times 2000 = 64\,000` posterior samples.
 
 **Convergence.**  Reshaping the flat chain into its 32 walkers, the integrated
-autocorrelation time is :math:`\tau \approx 145` steps (maximum 170 across the 13
-parameters).  The 2000 production steps per walker therefore contain
-:math:`\approx 14` independent samples each, for
+autocorrelation time is :math:`\tau \approx 145` steps (maximum 162, for
+:math:`\delta`, across the 13 parameters).  The 2000 production steps per walker
+therefore contain :math:`\approx 14` independent samples each, for
 :math:`N_{\rm eff} \approx 441` effectively independent samples across the ensemble
 — ample for the credible intervals and 2D contours below.
 
@@ -98,52 +96,52 @@ contributes negligibly.
      - :math:`\chi^2_{n_g}`
      - :math:`\chi^2_{\rm total}`
    * - 10.0 – 10.2
-     - 4.49
-     - 0.124
-     - 4.61
+     - 7.26
+     - 1.979
+     - 9.24
    * - 10.2 – 10.4
-     - 4.29
-     - 0.272
-     - 4.56
+     - 8.14
+     - 1.501
+     - 9.64
    * - 10.4 – 10.6
-     - 2.94
-     - 0.044
-     - 2.99
+     - 5.12
+     - 0.073
+     - 5.19
    * - 10.6 – 10.8
-     - 6.58
-     - 0.005
-     - 6.58
+     - 8.79
+     - 0.029
+     - 8.81
    * - 10.8 – 11.0
-     - 7.27
-     - 0.284
-     - 7.56
+     - 8.95
+     - 0.264
+     - 9.21
    * - 11.0 – 11.2
-     - 5.84
-     - 0.039
-     - 5.88
-   * - 11.2 – 11.4
-     - 5.70
-     - 0.053
-     - 5.76
-   * - 11.4 – 12.0
-     - 6.09
+     - 6.81
      - 0.000
-     - 6.09
+     - 6.81
+   * - 11.2 – 11.4
+     - 5.26
+     - 0.364
+     - 5.62
+   * - 11.4 – 12.0
+     - 5.08
+     - 0.092
+     - 5.17
    * - **Total**
-     - **43.20**
-     - **0.82**
-     - **44.03**
+     - **55.40**
+     - **4.30**
+     - **59.70**
 
-:math:`\chi^2/\mathrm{dof} = 0.44 < 1` indicates the reported errors are conservative:
+:math:`\chi^2/\mathrm{dof} = 0.603 < 1` indicates the reported errors are conservative:
 the 5 % :math:`n_{\rm gal}` floor and the 1 % covariance ridge both inflate the effective
 uncertainties.  The parameter **credible intervals below should therefore be read as
 upper bounds on the true statistical precision**.
 
-**Posterior** :math:`\chi^2` **distribution.**  Propagating 200 chain samples through the
+**Posterior** :math:`\chi^2` **distribution.**  Propagating 150 chain samples through the
 full halo model, the total :math:`\chi^2` has a posterior median of
-:math:`\chi^2 = 44.1^{+6.2}_{-3.8}` (68 %), i.e.
-:math:`\chi^2/\mathrm{dof} = 0.445\,[0.41,\,0.51]` over :math:`n_{\rm dof}=99`.  The
-posterior median coincides with the MAP value (0.44); the whole distribution stays well
+:math:`\chi^2 = 60.6^{+11.9}_{-7.8}` (68 %), i.e.
+:math:`\chi^2/\mathrm{dof} = 0.612\,[0.533,\,0.733]` over :math:`n_{\rm dof}=99`.  The
+posterior median sits just above the MAP value (0.603); the whole distribution stays well
 below unity, so *no* region of the sampled parameter space over- or mis-fits the data.
 
 ----
@@ -166,68 +164,68 @@ fit *with* lensing — a different selection, so exact agreement is not expected
      - ZM15 pub.
    * - ``lg_m1h``
      - :math:`\log_{10} M_1`
-     - :math:`12.145^{+0.087}_{-0.101}`
-     - 11.900
+     - :math:`12.175^{+0.072}_{-0.065}`
+     - 12.075
      - 12.10
    * - ``lg_m0star``
      - :math:`\log_{10} M_{*,0}`
-     - :math:`10.535^{+0.058}_{-0.065}`
-     - 10.367
+     - :math:`10.534^{+0.053}_{-0.053}`
+     - 10.404
      - 10.31
    * - ``beta``
      - :math:`\beta`
-     - :math:`0.543^{+0.050}_{-0.057}`
-     - 0.426
+     - :math:`0.523^{+0.046}_{-0.047}`
+     - 0.376
      - 0.33
    * - ``delta``
      - :math:`\delta`
-     - :math:`0.699^{+0.024}_{-0.023}`
-     - 0.616
+     - :math:`0.650^{+0.046}_{-0.046}`
+     - 0.613
      - 0.42
    * - ``gamma``
      - :math:`\gamma`
-     - :math:`1.820^{+0.212}_{-0.207}`
-     - 1.686
+     - :math:`1.846^{+0.191}_{-0.204}`
+     - 1.831
      - 1.21
    * - ``sigma_lnmstar``
      - :math:`\sigma_{\ln M_*}`
-     - :math:`0.723^{+0.066}_{-0.066}`
-     - 0.823
+     - :math:`0.674^{+0.058}_{-0.061}`
+     - 0.772
      - 0.50
    * - ``eta``
      - :math:`\eta`
-     - :math:`-0.131^{+0.059}_{-0.058}`
-     - −0.227
+     - :math:`-0.145^{+0.058}_{-0.047}`
+     - −0.215
      - −0.04
    * - ``fc``
      - :math:`f_c`
-     - :math:`0.857^{+0.094}_{-0.122}`
-     - 0.754
+     - :math:`0.969^{+0.022}_{-0.052}`
+     - 1.000
      - 0.86
    * - ``bsat``
      - :math:`B_{\rm sat}`
-     - :math:`19.75^{+2.52}_{-2.48}`
-     - 17.544
+     - :math:`20.449^{+2.376}_{-2.206}`
+     - 13.020
      - 8.98
    * - ``beta_sat``
      - :math:`\beta_{\rm sat}`
-     - :math:`0.560^{+0.034}_{-0.035}`
-     - 0.493
+     - :math:`0.556^{+0.026}_{-0.027}`
+     - 0.580
      - 0.90
    * - ``bcut``
      - :math:`B_{\rm cut}`
-     - :math:`1.84^{+2.92}_{-1.29}`
-     - 9.634
+     - :math:`4.471^{+3.446}_{-2.654}`
+     - 7.664
      - 0.86
    * - ``beta_cut``
      - :math:`\beta_{\rm cut}`
-     - :math:`0.440^{+0.292}_{-0.292}`
-     - 0.820
+     - :math:`0.884^{+0.227}_{-0.402}`
+     - 0.891
      - 0.41
    * - ``alpha_sat``
      - :math:`\alpha_{\rm sat}`
-     - :math:`1.259^{+0.048}_{-0.047}`
-     - 1.250
+     - :math:`1.269^{+0.043}_{-0.044}`
+     - 1.104
      - 1.00
 
 **Reading the posterior:**
@@ -237,7 +235,7 @@ fit *with* lensing — a different selection, so exact agreement is not expected
 - :math:`B_{\rm cut}` and :math:`\beta_{\rm cut}` — the satellite low-mass cut-off — are
   **poorly constrained / prior-dominated**: :math:`w_p` + :math:`n_{\rm gal}` alone carry
   little information about the exact cut-off shape.  This is why the MAP
-  (:math:`B_{\rm cut}=9.6`) sits far from the posterior median (1.84): the total
+  (:math:`B_{\rm cut}=7.7`) sits far from the posterior median (4.5): the total
   :math:`\chi^2` is nearly flat in :math:`B_{\rm cut}`, so the point estimate is not
   meaningful for this parameter.
 - Several parameters are offset from the SDSS ZM15 values.  This is **expected**: the BGS
@@ -255,22 +253,22 @@ fit *with* lensing — a different selection, so exact agreement is not expected
      - :math:`r`
      - Interpretation
    * - :math:`B_{\rm sat}` – :math:`\alpha_{\rm sat}`
-     - **+0.95**
+     - **+0.98**
      - satellite amplitude vs power-law slope — the dominant degeneracy
-   * - :math:`\sigma_{\ln M_*}` – :math:`\eta`
-     - −0.84
-     - scatter normalisation vs its mass slope
-   * - :math:`\log_{10}M_{*,0}` – :math:`\beta`
-     - +0.81
-     - SHMR pivot vs low-mass slope
    * - :math:`\log_{10}M_1` – :math:`\log_{10}M_{*,0}`
-     - +0.75
+     - +0.89
      - the two SHMR mass scales
-   * - :math:`\beta_{\rm sat}` – :math:`\alpha_{\rm sat}`
-     - −0.70
-     - satellite halo-mass slope vs occupation slope
+   * - :math:`\log_{10}M_1` – :math:`\beta`
+     - +0.83
+     - SHMR characteristic mass vs low-mass slope
+   * - :math:`\log_{10}M_{*,0}` – :math:`\beta`
+     - +0.80
+     - SHMR pivot vs low-mass slope
+   * - :math:`\delta` – :math:`\beta_{\rm cut}`
+     - −0.77
+     - SHMR transition vs satellite cut-off slope
 
-The :math:`B_{\rm sat}`–:math:`\alpha_{\rm sat}` ridge (:math:`r=+0.95`) is why neither is
+The :math:`B_{\rm sat}`–:math:`\alpha_{\rm sat}` ridge (:math:`r=+0.98`) is why neither is
 constrained as tightly as its 1D interval suggests: the data fix the *satellite abundance*
 in the probed halo-mass range, leaving an amplitude–slope direction nearly free.
 
@@ -349,42 +347,42 @@ fraction :math:`f_{\rm sat}` (occupation-weighted over the halo mass function):
      - :math:`b_{\rm eff}`
      - :math:`f_{\rm sat}`
    * - 10.0 – 10.2
-     - :math:`12.04^{+0.04}_{-0.06}`
-     - :math:`1.05\pm0.01`
-     - :math:`0.169^{+0.033}_{-0.019}`
+     - :math:`12.09\pm0.03`
+     - :math:`1.06\pm0.01`
+     - :math:`0.173\pm0.020`
    * - 10.2 – 10.4
-     - :math:`12.20^{+0.03}_{-0.05}`
+     - :math:`12.25\pm0.03`
      - :math:`1.11\pm0.01`
-     - :math:`0.191^{+0.035}_{-0.022}`
+     - :math:`0.190\pm0.023`
    * - 10.4 – 10.6
-     - :math:`12.38^{+0.03}_{-0.05}`
-     - :math:`1.17\pm0.01`
-     - :math:`0.209^{+0.039}_{-0.021}`
+     - :math:`12.42\pm0.03`
+     - :math:`1.18\pm0.01`
+     - :math:`0.206\pm0.022`
    * - 10.6 – 10.8
-     - :math:`12.54^{+0.03}_{-0.04}`
-     - :math:`1.23\pm0.02`
-     - :math:`0.211^{+0.036}_{-0.022}`
+     - :math:`12.58\pm0.03`
+     - :math:`1.23\pm0.01`
+     - :math:`0.203\pm0.021`
    * - 10.8 – 11.0
-     - :math:`12.70^{+0.03}_{-0.04}`
-     - :math:`1.28\pm0.01`
-     - :math:`0.198^{+0.027}_{-0.022}`
+     - :math:`12.74^{+0.02}_{-0.03}`
+     - :math:`1.29\pm0.01`
+     - :math:`0.181\pm0.021`
    * - 11.0 – 11.2
-     - :math:`12.88\pm0.03`
-     - :math:`1.37\pm0.02`
-     - :math:`0.174^{+0.024}_{-0.016}`
+     - :math:`12.94^{+0.02}_{-0.03}`
+     - :math:`1.38\pm0.01`
+     - :math:`0.155\pm0.023`
    * - 11.2 – 11.4
-     - :math:`13.09^{+0.03}_{-0.04}`
-     - :math:`1.51\pm0.02`
-     - :math:`0.144^{+0.019}_{-0.017}`
+     - :math:`13.16\pm0.03`
+     - :math:`1.54^{+0.02}_{-0.02}`
+     - :math:`0.115^{+0.028}_{-0.019}`
    * - 11.4 – 12.0
-     - :math:`13.32^{+0.06}_{-0.08}`
-     - :math:`1.73\pm0.05`
-     - :math:`0.087^{+0.015}_{-0.020}`
+     - :math:`13.46^{+0.07}_{-0.09}`
+     - :math:`1.83^{+0.07}_{-0.07}`
+     - :math:`0.056^{+0.028}_{-0.017}`
 
 The occupation-weighted mean host halo mass climbs steadily from
-:math:`10^{12.0}` to :math:`10^{13.3}\,M_\odot/h`, the effective bias grows from
-:math:`1.05` to :math:`1.73`, and the satellite fraction falls from :math:`\sim0.21` at the
-low-mass peak to :math:`0.09` as the sample becomes central-dominated at high :math:`M_*`.
+:math:`10^{12.1}` to :math:`10^{13.5}\,M_\odot/h`, the effective bias grows from
+:math:`1.06` to :math:`1.83`, and the satellite fraction falls from :math:`\sim0.21` at the
+low-mass peak to :math:`0.06` as the sample becomes central-dominated at high :math:`M_*`.
 :math:`\langle\log_{10}M_h\rangle` is the mean over centrals *and* satellites, so it sits
 above the central-only inverse-SHMR curve (figure below) by the satellite contribution.
 
@@ -392,10 +390,10 @@ Stellar-to-halo mass relation and scatter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The posterior SHMR peaks in star-formation efficiency at
-:math:`\log_{10}(M_h/[M_\odot h^{-1}]) = 11.9^{+0.2}_{-0.2}` with a peak ratio
-:math:`M_*/M_h \approx 0.026`, and the cumulative satellite fraction is
-:math:`f_{\rm sat}(>10^{10}\,M_\odot)\approx0.19`, dropping to
-:math:`\approx0.16` above :math:`10^{11}\,M_\odot`.
+:math:`\log_{10}(M_h/[M_\odot h^{-1}]) = 11.99^{+0.03}_{-0.05}` with a peak ratio
+:math:`M_*/M_h \approx 0.024`, and the cumulative satellite fraction is
+:math:`f_{\rm sat}(>10^{10}\,M_\odot)\approx0.18`, dropping to
+:math:`\approx0.14` above :math:`10^{11}\,M_\odot`.
 
 .. figure:: _images/bgs_zm15_joint__shmr.png
    :width: 78%

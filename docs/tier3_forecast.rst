@@ -1,21 +1,19 @@
 Tier-3 forecast: multi-wavelength maps, band LFs, z < 2, M* > 10⁹
 ==================================================================
 
-.. admonition:: Pending v0.3 re-run — the numbers below are superseded
-   :class: warning
+.. admonition:: Provenance — campaign-fresh, but emulator-based
+   :class: note
 
-   *Status 2026-08-19.*  The v0.3 campaign job for this tier ran on 2026-07-16
-   but only refreshed its Jacobian block **cache**; it was killed before writing
-   ``tier3_forecast_nb6.npz``, so the numbers, ``SUMMARY_nb6.txt`` and every
-   ``tier3_forecast__*.png`` on this page are still from the **2026-07-04** run and predate
-   the 0.3.0 Hankel-transform fix.
-
-   The re-run needs the cache cleared first.  ``Tier2Forecast._cache_path``
-   (:mod:`hod_mod.forecast.tier2`) keys a cached block on
-   ``spec_repr + block.label + block.which + fiducial`` — with **no code
-   version** — and the Hankel fix changed the input→output map without changing
-   any input, so **307 of 511** cached blocks computed before 2026-07-16
-   would be silently reused.  See :doc:`oarsub_campaign`.
+   Numbers and figures are from the **VTAG=v0.31** campaign run of 2026-07-16 —
+   the only campaign in which this tier completed.  That is not a mixed-campaign
+   citation: the ``HOD_MOD_PK_BACKEND`` pin reaches Families A–C only, because
+   the forecast stack builds
+   :class:`~hod_mod.forecast.forward_jax.ForwardModel`, which selects its
+   :math:`P(k)` correction from a driver flag and defaults to the CosmoPower-JAX
+   emulator (real CAMB is not JAX-traceable).  A v0.3 and a v0.31 forecast are
+   therefore the same physics — their tier :math:`\sigma`'s agree to 3–4 % —
+   and the v0.3 tree holds only the pre-campaign 2026-07-02/04 leftovers.  See
+   :doc:`oarsub_campaign`.
 
 The :doc:`tier-2 study <tier2_forecast>` freed every parameter of the
 X-ray/tSZ/lensing forward model on a z < 1, M* > 10¹⁰ galaxy grid.  The
@@ -237,7 +235,7 @@ Two operational lessons from the production run:
 Production configuration and results
 ------------------------------------
 
-The production run frees all 102 parameters (only the retired ``log10DC``
+The production run frees all 111 parameters (only the retired ``log10DC``
 pinned) over the full block set:
 
 * **292 blocks**: 260 SF/Q-split (z, M*) cells (13 M* bins × 10 shells ×
@@ -253,7 +251,7 @@ pinned) over the full block set:
 
 SUMMARY, npz products, the per-sector information gains and the
 ``tier3_forecast__*`` figure suite are written to
-``$HOD_MOD_RESULTS/tier3_forecast/`` (2026-07-04 run: 59 779 rows, no
+``$HOD_MOD_RESULTS/tier3_forecast/`` (``VTAG=v0.31`` run, 2026-07-16: 60 039 rows, no
 skipped cells).
 
 **Headline numbers** at :math:`r_\mathrm{min} = 0.1\,h^{-1}` Mpc:
@@ -263,33 +261,34 @@ skipped cells).
    :widths: 22 20 22 14
 
    * - Parameter
-     - All 102 free
+     - All 111 free
      - Astrophysics pinned
      - Degradation
    * - :math:`\Omega_\mathrm{m}`
-     - :math:`5.89\times10^{-5}`
-     - :math:`3.68\times10^{-5}`
+     - :math:`6.11\times10^{-5}`
+     - :math:`3.89\times10^{-5}`
      - ×1.6
    * - :math:`\sigma_8`
-     - :math:`7.95\times10^{-5}`
-     - :math:`5.72\times10^{-5}`
+     - :math:`7.98\times10^{-5}`
+     - :math:`5.75\times10^{-5}`
      - ×1.4
    * - :math:`w_0`
-     - :math:`7.33\times10^{-4}`
-     - :math:`4.60\times10^{-4}`
+     - :math:`7.35\times10^{-4}`
+     - :math:`4.71\times10^{-4}`
      - ×1.6
    * - :math:`w_a`
-     - :math:`3.39\times10^{-3}`
-     - :math:`2.12\times10^{-3}`
+     - :math:`3.41\times10^{-3}`
+     - :math:`2.11\times10^{-3}`
      - ×1.6
 
 Two structural conclusions:
 
 * **The multi-wavelength data self-calibrate the astrophysics.**  Relative
-  to the 90-parameter tier-2 production (:doc:`tier2_forecast`:
-  :math:`\sigma(\Omega_\mathrm{m}) = 1.82\times10^{-4}`,
-  :math:`\sigma(\sigma_8) = 2.93\times10^{-4}`), the tier-3 combination is
-  ×3.1 / ×3.7 tighter *while freeing 12 more parameters*, and the
+  to the tier-2 production (:doc:`tier2_forecast`:
+  :math:`\sigma(\Omega_\mathrm{m}) = 1.89\times10^{-4}`,
+  :math:`\sigma(\sigma_8) = 3.00\times10^{-4}`), the tier-3 combination is
+  ×3.1 / ×3.8 tighter *while freeing the 12 radio / IR / UV parameters tier-2
+  has to pin*, and the
   free-vs-pinned degradation collapses from ×2.3 to ×1.6.  Even
   :math:`h` and :math:`n_s` become data-dominated
   (:math:`5.5\times10^{-5}`, :math:`7.0\times10^{-5}` — two orders of
@@ -316,7 +315,7 @@ them) is noted for the tier-4 analysis.
 .. figure:: _images/tier3_forecast__cosmo_constraints.png
    :width: 70%
 
-   :math:`\Omega_m`–:math:`\sigma_8` with all 102 parameters free vs
+   :math:`\Omega_m`–:math:`\sigma_8` with all 111 parameters free vs
    astrophysics pinned.
 
 .. figure:: _images/tier3_forecast__astro_sectors.png
@@ -340,7 +339,7 @@ them) is noted for the tier-4 analysis.
 .. figure:: _images/tier3_forecast__degeneracies.png
    :width: 85%
 
-   The strongest degeneracies that *survive* the full 102-parameter data
+   The strongest degeneracies that *survive* the full 111-parameter data
    combination.
 
 Verification
