@@ -17,6 +17,16 @@ PY="${PY:-python}"
 # v0.31 = + CosmoPower P(k)).  HOD_MOD_RESULTS, if already set, still wins.
 source "$(dirname "${BASH_SOURCE[0]}")/_campaign_env.sh"
 RES="${HOD_MOD_RESULTS:?set HOD_MOD_RESULTS}"
+# Family D (forecasts) is sourced separately.  oarsub_campaign.rst records that
+# the HOD_MOD_PK_BACKEND pin reaches Families A-C only: the forecast stack builds
+# ForwardModel, which picks its P(k) correction from a driver flag and defaults
+# to the emulator because real CAMB is not JAX-traceable.  So a v0.3 and a v0.31
+# forecast are the same physics (their tier sigmas agree to 3-4%), and the only
+# question is which campaign actually finished one -- for tier2/3/4 that is
+# v0.31, while v0.3 still holds the pre-campaign 2026-07-02..04 leftovers.
+# Reading Family D from where it ran is therefore not mixing campaigns; pinning
+# it to $RES for symmetry's sake would just keep publishing stale numbers.
+RES_FAMILY_D="${RES_FAMILY_D:-${RES}}"
 IMG="${IMG:-docs/_images}"   # overridable so a collection can be rehearsed off-repo
 
 echo "== collecting VTAG=$VTAG from $RES into $IMG"
@@ -139,7 +149,7 @@ fi
 # figure prefix off the npz basename.  Guarded on SINCE so a run that only
 # refreshed its cache/ cannot restamp 2026-07 science with today's date.
 for t in 2 3 4; do
-    npz="$RES/tier${t}_forecast/tier${t}_forecast_nb6.npz"
+    npz="$RES_FAMILY_D/tier${t}_forecast/tier${t}_forecast_nb6.npz"
     if [ ! -f "$npz" ]; then
         echo "   .. skip tier${t} figures (no $(basename "$npz") — run never finished)"; continue
     fi
@@ -147,8 +157,8 @@ for t in 2 3 4; do
         echo "   .. skip tier${t} figures ($(basename "$npz") predates $SINCE)"; continue
     fi
     extra=""
-    [ "$t" = 2 ] && [ -f "$RES/tier2_forecast/tier2_forecast_nb1.npz" ] \
-        && extra="--compare $RES/tier2_forecast/tier2_forecast_nb1.npz"
+    [ "$t" = 2 ] && [ -f "$RES_FAMILY_D/tier2_forecast/tier2_forecast_nb1.npz" ] \
+        && extra="--compare $RES_FAMILY_D/tier2_forecast/tier2_forecast_nb1.npz"
     JAX_ENABLE_X64=1 $PY -m hod_mod.scripts.forecasts.make_tier2_figures "$npz" $extra || true
 done
 
@@ -164,8 +174,10 @@ else
 fi
 #   run_stage4_forecast copies stage4_forecast.png into docs/_images — but it ran
 #   on dahu, so that copy landed in dahu's checkout.  Copy the pulled one here.
-cp -f "$RES/stage4_forecast/stage4_forecast.png" "$IMG/" 2>/dev/null || true
+cp -f "$RES_FAMILY_D/stage4_forecast/stage4_forecast.png" "$IMG/" 2>/dev/null || true
 
-printf '%s\n' "$VTAG" > "$STAMP"
+{ printf '%s\n' "$VTAG"
+  [ "$RES_FAMILY_D" != "$RES" ] && printf '# family-D from: %s\n' "$RES_FAMILY_D"
+} > "$STAMP"
 echo "== done.  Review with:  git status $IMG   &&   git diff --stat docs/"
 echo "   Then update the χ²/dof, best-fit params and the AUM agreement line in the .rst pages."

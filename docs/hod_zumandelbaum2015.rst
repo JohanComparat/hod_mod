@@ -1524,7 +1524,18 @@ Source: ``results/bgs_zm15_joint_wp_ngal/map_result.json``
 (:mod:`hod_mod.scripts.fitting.bgs_ls10.fit_bgs_zm15_joint`, ``--mode map``,
 8 stellar-mass bins :math:`10.0 \le \log_{10}M_* < 12.0`,
 :math:`w_p(r_p) + \bar n_g`, no lensing).  Joint
-:math:`\chi^2/\mathrm{dof} = 44.03/99 = 0.44`.
+:math:`\chi^2/\mathrm{dof} = 44.03/99 = 0.445`.
+
+.. note::
+
+   This is the **frozen June-2026 reference MAP**, not the v0.3 campaign fit of
+   the same model.  It is deliberately held fixed — ``_campaign_env.sh``
+   symlinks it into every versioned results tree as a ``REFERENCE_INPUTS``
+   entry — so that the Family-C X-ray presets stay comparable across campaigns.
+   The v0.3 re-fit of the same data is a different run with
+   :math:`\chi^2/\mathrm{dof} = 59.70/99 = 0.603` and a noticeably different
+   posterior; see :doc:`bgs_zm15_joint_mcmc`.  Do not mix the two.
+
 All 13 parameters below are held fixed when running ``--fix-zm15``; the
 stellar-mass threshold :math:`\log_{10}M_{*,\mathrm{th}}` is set per sample
 (10.0 for S1, overridable with ``--zm15-thresh``).
