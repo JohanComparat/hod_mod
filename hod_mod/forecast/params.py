@@ -356,15 +356,24 @@ def load_fiducial() -> dict:
     _XRAY_KEYS = ("lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max", "log10DC")
     try:
         with open(os.path.join(root, "xray_joint_bands", "S1_bands_summary.json")) as fh:
-            m = json.load(fh)["map"]
+            summ = json.load(fh)
+        m = summ["map"]
     except Exception:
-        m = None
+        summ, m = None, None
     if m is not None:
-        if all(n in m for n in _XRAY_KEYS):
+        # A native-DPM summary carries the four scaling-relation values in
+        # 'map_scaling', projected by fit_xray_joint_bands.scaling_from_native.
+        # Prefer 'map' (an old phenomenological fit), then that projection.
+        src = dict(m)
+        proj = (summ or {}).get("map_scaling") or {}
+        for n in ("lx_norm", "lx_slope", "kt_norm", "kt_slope"):
+            if n not in src and n in proj:
+                src[n] = proj[n]
+        if all(n in src for n in _XRAY_KEYS):
             for n in _XRAY_KEYS:
-                fid[n] = float(m[n])
+                fid[n] = float(src[n])
         else:
-            _warn_native_band_summary(sorted(set(_XRAY_KEYS) - set(m)))
+            _warn_native_band_summary(sorted(set(_XRAY_KEYS) - set(src)))
     return fid
 
 
