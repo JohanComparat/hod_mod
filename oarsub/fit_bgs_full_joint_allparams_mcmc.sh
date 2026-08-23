@@ -31,7 +31,7 @@ export HOD_MOD_DATA_DIR="${HOME}/data/hod_mod_data"
 # environment to the node, so `VTAG=v0.3 oarsub -S ./script.sh` would silently
 # run as the default.  Pass it as an argument instead:
 #   oarsub --project P -S "./oarsub/fit_bgs_full_joint_allparams_mcmc.sh v0.3"
-VTAG="${1:-${VTAG:-v0.31}}"
+VTAG="${1:-${VTAG:-v0.4}}"
 source "$(dirname "${BASH_SOURCE[0]}")/_campaign_env.sh"
 OUT_DIR="${HOD_MOD_RESULTS}/bgs_full_joint_allparams_${VTAG}"
 

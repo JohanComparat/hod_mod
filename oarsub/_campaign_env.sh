@@ -14,16 +14,22 @@
 # campaigns sharing one root means the second silently overwrites the first's
 # benchmarks — destroying the very comparison the campaign exists to make.
 #
-#   VTAG=v0.3   -> ~/data/hod_mod_results         Hankel fix, CAMB P(k)
-#   VTAG=v0.31  -> ~/data/hod_mod_results_v0.31   Hankel fix + CosmoPower P(k)
+#   VTAG=v0.3   -> ~/data/hod_mod_results         Hankel fix, CAMB P(k)      [closed]
+#   VTAG=v0.31  -> ~/data/hod_mod_results_v0.31   + CosmoPower P(k)          [closed]
+#   VTAG=v0.4   -> ~/data/hod_mod_results_v0.4    + 0.4.0 gas prior/seed fix [live]
 #
 # v0.3 ran before the cluster was updated, so it used CAMB.  The v0.3 -> v0.31
 # difference therefore isolates the P(k) swap alone (~+2.5% in P(k) amplitude,
-# ~+1.3% in sigma8), with the Hankel fix common to both.  Override per run:
+# ~+1.3% in sigma8), with the Hankel fix common to both.  v0.4 adds the 0.4.0
+# full-joint gas prior/seed correction, which WITHDRAWS the v0.3/v0.31 gas
+# posteriors rather than shifting them -- there is no pin that reproduces them.
+#
+# The default is the LIVE campaign, so a bare invocation cannot silently write
+# into a closed tree.  Override per run:
 #   VTAG=v0.31 oarsub ... -S ./oarsub/fit_comparat2025_gas_shape.sh
 # =============================================================================
 
-VTAG="${VTAG:-v0.31}"
+VTAG="${VTAG:-v0.4}"
 
 # --- read-data root ----------------------------------------------------------
 # Must be exported by EVERY submission path, not just run_job.sh: without it

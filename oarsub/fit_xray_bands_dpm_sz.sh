@@ -70,7 +70,7 @@ CONDA_ENV="hod_mod"
 # OAR does NOT propagate the submitting shell's environment to the node, so pass
 # the campaign tag and the sample list as ARGUMENTS, not env vars:
 #   oarsub --project P -S "./oarsub/fit_xray_bands_dpm_sz.sh v0.31 S1 S4 S7"
-VTAG="${1:-${VTAG:-v0.31}}"
+VTAG="${1:-${VTAG:-v0.4}}"
 shift || true
 SAMPLES=("${@:-S1 S2 S3 S4 S5 S6 S7}")
 if [ "$#" -eq 0 ]; then SAMPLES=(S1 S2 S3 S4 S5 S6 S7); fi

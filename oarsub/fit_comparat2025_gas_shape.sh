@@ -29,10 +29,20 @@ CONDA_ENV="hod_mod"                                   # conda/mamba env name
 # environment to the node, so `VTAG=v0.3 oarsub -S ./script.sh` would silently
 # run as the default.  Pass it as an argument instead:
 #   oarsub --project P -S "./oarsub/fit_comparat2025_gas_shape.sh v0.3"
-VTAG="${1:-${VTAG:-v0.31}}"
+VTAG="${1:-${VTAG:-v0.4}}"
+
+# Optional second positional arg `ecf` (0.4.0): fold the validated eROSITA TM0
+# flux->count ECF into the cross-power and anchor the sample-independent
+# geometry on S1, so log10_A_gas / log10_A_AGN come out as O(1) residuals
+# instead of absorbing the whole ~1e8 model->counts chain.  Written to a
+# separate _ecf out-dir so the ECF and non-ECF fits live side by side and stay
+# directly comparable.  Passed unquoted below: fixed literal, no word splitting
+# to worry about, and an empty array under `set -u` is not portable.
+ECF_FLAG=""; ECF_SUFFIX=""
+if [ "${2:-}" = "ecf" ]; then ECF_FLAG="--ecf"; ECF_SUFFIX="_ecf"; fi
 source "$(dirname "${BASH_SOURCE[0]}")/_campaign_env.sh"
 campaign_require_zm15_json
-OUT_DIR="${HOD_MOD_RESULTS}/fits/comparat2025_fixedZM15_gas-shape_${VTAG}"
+OUT_DIR="${HOD_MOD_RESULTS}/fits/comparat2025_fixedZM15_gas-shape${ECF_SUFFIX}_${VTAG}"
 
 # --- environment ------------------------------------------------------------
 # GRICAD provides conda via /applis; activate the project env.
@@ -63,7 +73,7 @@ echo "host=$(hostname)  job=${OAR_JOB_ID:-local}  cores=${NCORES}  start=$(date 
 
 python -m hod_mod.scripts.fitting.fit_comparat2025 \
     --sample S1 --fix-zm15 "${ZM15_JSON}" --mode map \
-    --free-params gas-shape --agn-model hod \
+    --free-params gas-shape --agn-model hod ${ECF_FLAG} \
     --out-dir "${OUT_DIR}"
 
 echo "done=$(date -Is)"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# GRICAD / OAR generic array-job wrapper for the v0.3 re-run campaign.
+# GRICAD / OAR generic array-job wrapper for the re-run campaigns.
 #
 # One wrapper for the whole "re-run every w_p / ΔΣ / Σ_y / w_θ calculation after
 # the v0.3 Hankel fix" campaign.  Submit as an OAR *array* job with a param file
@@ -25,11 +25,16 @@
 #          -p "network_address='<a devel node>'" -S ...   # or run the line locally
 # =============================================================================
 
-#OAR --name hodmod_v03_rerun
+#OAR --name hodmod_campaign
 #OAR --project PROJECTNAME
 #OAR -l /nodes=1/core=8,walltime=02:00:00
-#OAR --stdout oarsub/logs/%jobid%.v03_rerun.out
-#OAR --stderr oarsub/logs/%jobid%.v03_rerun.err
+#OAR --stdout oarsub/logs/%jobid%.campaign.out
+#OAR --stderr oarsub/logs/%jobid%.campaign.err
+# These three are FALLBACKS only.  #OAR directives are literal text and cannot
+# interpolate VTAG, so every campaign wrote the same stem and the second one's
+# logs landed indistinguishably on top of the first's.  submit_campaign.sh
+# overrides --name/--stdout/--stderr on the command line with a
+# <tag>_<family> stem; these apply only to a hand-rolled `oarsub -S run_job.sh`.
 # --- resumable MCMC jobs (production_mcmc.txt) can be auto-restarted: the emcee
 #     HDF backend is idempotent, so uncomment for CiGri / besteffort submission.
 # #OAR -t besteffort

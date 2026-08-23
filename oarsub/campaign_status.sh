@@ -15,7 +15,7 @@
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 RES="${HOD_MOD_RESULTS:?set HOD_MOD_RESULTS}"
-VTAG="${VTAG:-v0.31}"   # keep in sync with _campaign_env.sh / submit_campaign.sh
+VTAG="${VTAG:-v0.4}"   # keep in sync with _campaign_env.sh / submit_campaign.sh
 PY="${PY:-python}"      # only used to read the emcee HDF backend's step counter
 
 miss=0
@@ -109,6 +109,25 @@ echo "-- Comparat+2025 X-ray w_theta presets (Family C, 5 dedicated scripts) --"
 for p in gas-shape gas-temp gas-full agn-occ agn-lum; do
     check_dir "fits/comparat2025_fixedZM15_${p}_${VTAG}" "fit_comparat2025_${p}.sh not finished/synced"
 done
+
+# The --ecf variant (0.4.0) is an optional extra family, so auditing it
+# unconditionally would report five spurious MISSes on any campaign that did not
+# submit it.  Self-configuring instead: audit all five iff at least one exists,
+# which is what makes a *partially* landed ECF family a real failure rather than
+# a silent one.
+_ecf_present=0
+for p in gas-shape gas-temp gas-full agn-occ agn-lum; do
+    [ -d "$RES/fits/comparat2025_fixedZM15_${p}_ecf_${VTAG}" ] && _ecf_present=1
+done
+if [ "$_ecf_present" = "1" ]; then
+    echo "-- ... and their --ecf variants (physical ECF chain + S1 anchor) --"
+    for p in gas-shape gas-temp gas-full agn-occ agn-lum; do
+        check_dir "fits/comparat2025_fixedZM15_${p}_ecf_${VTAG}" \
+                  "fit_comparat2025_${p}.sh ${VTAG} ecf not finished/synced"
+    done
+else
+    echo "     (no --ecf variants in this tree; skipping that family)"
+fi
 
 echo
 echo "-- literature benchmarks (benchmarks_map/mcmc: NO --out-dir, written in place) --"

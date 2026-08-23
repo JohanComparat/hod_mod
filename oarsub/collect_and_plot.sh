@@ -38,7 +38,10 @@ echo "== collecting VTAG=$VTAG from $RES into $IMG"
 # prose that claims a single P(k) backend.  Stamp what is in there and refuse
 # to switch without saying so out loud.
 STAMP="$IMG/.campaign_vtag"
-prev_vtag="$(cat "$STAMP" 2>/dev/null || true)"
+# head -1: the stamp carries an optional second line ("# family-D from: ...")
+# and `cat` folded it into the comparison, so prev_vtag could never equal a
+# bare tag -- the guard fired on every re-collect of the SAME campaign.
+prev_vtag="$(head -1 "$STAMP" 2>/dev/null || true)"
 if [ -n "$prev_vtag" ] && [ "$prev_vtag" != "$VTAG" ] && [ "${FORCE_VTAG_SWITCH:-0}" != "1" ]; then
     echo "!! $IMG currently holds VTAG=$prev_vtag figures; you asked for $VTAG."
     echo "   Collecting on top would mix the two campaigns.  To switch deliberately:"
@@ -121,6 +124,16 @@ find "$RES/bgs_comparat2025_${VTAG}" -maxdepth 1 -name '*.png' -exec cp -f {} "$
 echo "== C. Comparat+2025 X-ray w_θ presets — figures written by each fit into its _${VTAG} run dir"
 for p in gas-shape gas-temp gas-full agn-occ agn-lum; do
     find "$RES/fits/comparat2025_fixedZM15_${p}_${VTAG}" -name '*.png' -exec cp -f {} "$IMG/" \; 2>/dev/null || true
+done
+
+# The --ecf variants (0.4.0) write the SAME basenames as their non-ECF twins, so
+# copying them flat would silently overwrite one family with the other.  Prefix
+# them instead; a page that wants the ECF version references ecf__<name>.png.
+for p in gas-shape gas-temp gas-full agn-occ agn-lum; do
+    d="$RES/fits/comparat2025_fixedZM15_${p}_ecf_${VTAG}"
+    [ -d "$d" ] || continue
+    find "$d" -name '*.png' -print0 2>/dev/null \
+        | while IFS= read -r -d '' f; do cp -f "$f" "$IMG/ecf__$(basename "$f")"; done
 done
 
 echo "== D. forecasts + benchmark MAP+MCMC"

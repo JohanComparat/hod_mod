@@ -5,17 +5,18 @@
 # Each campaign lives in its OWN results tree (see oarsub/_campaign_env.sh), so
 # a pull is per-version.  The root convention is mirrored from that file:
 #
-#   v0.3   -> <base>            Hankel fix, CAMB P(k)
-#   v0.31  -> <base>_v0.31      Hankel fix + CosmoPower P(k)
+#   v0.3   -> <base>            Hankel fix, CAMB P(k)          [closed]
+#   v0.31  -> <base>_v0.31      + CosmoPower P(k)              [closed]
+#   v0.4   -> <base>_v0.4       + 0.4.0 gas prior/seed fix     [live]
 #
-# By default BOTH are pulled, in order, so the v0.3 -> v0.31 comparison (which
-# isolates the P(k) swap) can be made locally.
+# Defaults to the LIVE campaign (v0.4).  The two closed trees are already local
+# and settled; pull them by name if you need the P(k)-swap comparison again.
 #
 # Safe by default: `rsync --dry-run` prints the file list.  Add --go to transfer.
 # Config is env-overridable — set DAHU_HOST / BASTION to match ~/.ssh/config.
 #
-#   ./oarsub/pull_results.sh                 # dry-run, both versions
-#   ./oarsub/pull_results.sh --go            # transfer, both versions
+#   ./oarsub/pull_results.sh                 # dry-run, live campaign
+#   ./oarsub/pull_results.sh --go            # transfer, live campaign
 #   ./oarsub/pull_results.sh --go v0.31      # transfer, only v0.31
 #   VTAGS="v0.3 v0.31" ./oarsub/pull_results.sh --go
 # =============================================================================
@@ -50,8 +51,12 @@ for a in "$@"; do
         *) ARGS+=("$a") ;;
     esac
 done
-# positional VTAGs win over $VTAGS, which wins over the both-versions default.
-if [ "${#ARGS[@]}" -gt 0 ]; then VTAGS=("${ARGS[@]}"); else read -r -a VTAGS <<<"${VTAGS:-v0.3 v0.31}"; fi
+# positional VTAGs win over $VTAGS, which wins over the live-campaign default.
+# The default is the campaign currently running, not every campaign ever run:
+# v0.3 and v0.31 are closed and fully pulled, so including them only re-walked
+# ~2.5 GB of settled tree on every invocation.  Pull them explicitly if needed:
+#   ./oarsub/pull_results.sh --go v0.3 v0.31
+if [ "${#ARGS[@]}" -gt 0 ]; then VTAGS=("${ARGS[@]}"); else read -r -a VTAGS <<<"${VTAGS:-v0.4}"; fi
 
 # Mirror of _campaign_env.sh: v0.3 keeps the un-versioned root, everything else
 # gets its own `<base>_<vtag>` tree.
