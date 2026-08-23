@@ -216,10 +216,13 @@ def psf_king_window_ell(
     nu = alpha - 1.0
     norm0 = 2.0 ** (nu - 1.0) * math.gamma(nu)   # limit of x^nu K_nu(x) as x→0
     prefac = 2.0 ** (2.0 - alpha) / math.gamma(nu)
+    # prefac is exactly 1/norm0 (2^{1-nu}/Γ(nu) · 2^{nu-1}Γ(nu) = 1), so it already
+    # normalises B_0 = 1 on its own — do not divide by norm0 as well. norm0 is
+    # used only to substitute the x→0 limit where x^nu K_nu(x) is 0 · inf.
     with np.errstate(divide="ignore", invalid="ignore"):
         Bx = x ** nu * _kv(nu, x)
     Bx = np.where(x == 0.0, norm0, Bx)
-    return jnp.asarray(prefac * Bx / norm0)
+    return jnp.asarray(prefac * Bx)
 
 
 # ---------------------------------------------------------------------------

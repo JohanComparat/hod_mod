@@ -279,6 +279,34 @@ class TestKingPsfWindowEll:
         expected = np.exp(-ell * tc_arcsec * _ARCSEC_TO_RAD)
         np.testing.assert_allclose(Bk, expected, rtol=1e-6)
 
+    @pytest.mark.parametrize("alpha", [1.2, 1.502, 1.9, 2.5, 3.0])
+    def test_unity_at_ell_zero_general_alpha(self, alpha):
+        """B_ℓ(ℓ=0) = 1 on the general Bessel branch too, not just at α=3/2.
+
+        The prefactor 2^{2-α}/Γ(α-1) is already the reciprocal of
+        lim_{x→0} x^{α-1} K_{α-1}(x); applying both normalisations left
+        B_0 = 0.7999 at α=1.502 rather than 1.
+        """
+        B = psf_king_window_ell(np.array([0.0]), alpha=alpha)
+        assert float(B[0]) == pytest.approx(1.0, abs=1e-10)
+
+    @pytest.mark.parametrize("alpha", [1.2, 1.502, 1.9, 2.5])
+    def test_general_alpha_bounded_and_monotone(self, alpha):
+        """General branch stays in (0, 1] and decreases with ℓ."""
+        ell = np.linspace(0.0, 5000.0, 200)
+        B = np.asarray(psf_king_window_ell(ell, alpha=alpha))
+        # 1 ULP of slack: prefac * norm0 is 1 only up to binary rounding.
+        assert np.all(B > 0.0) and np.all(B <= 1.0 + 1e-12)
+        assert np.all(np.diff(B) <= 1e-12)
+
+    def test_branches_agree_across_alpha_1p5(self):
+        """General branch → exponential branch as α → 3/2 (the guard seam)."""
+        ell = np.array([0.0, 100.0, 1000.0, 5000.0])
+        B_special = np.asarray(psf_king_window_ell(ell, alpha=1.5))
+        for alpha in (1.5 - 1e-5, 1.5 + 1e-5):
+            B_general = np.asarray(psf_king_window_ell(ell, alpha=alpha))
+            np.testing.assert_allclose(B_general, B_special, rtol=1e-4, atol=1e-10)
+
     def test_wider_core_more_suppression(self):
         """Larger θ_c → more suppression at same ℓ."""
         ell = np.array([500.0])
