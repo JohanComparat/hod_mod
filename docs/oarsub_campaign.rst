@@ -11,7 +11,7 @@ specifics (projects, tokens, monitoring) live in ``oarsub/README.md``.
 Why campaigns
 -------------
 
-Two behaviour-changing releases forced full re-runs:
+Three behaviour-changing releases have forced full re-runs:
 
 * **v0.3** — the 0.3.0 Hankel-transform fix in ``_pk_to_xi`` moved every
   real-space observable (:math:`w_p` ≤ 19 %, :math:`\Delta\Sigma` ≤ 20 %,
@@ -19,6 +19,10 @@ Two behaviour-changing releases forced full re-runs:
 * **v0.31** — 0.3.1 swapped the default linear P(k) from CAMB to the
   CosmoPower-JAX emulator (~+2.5 % in P(k) amplitude, ≈1.3 % in
   :math:`\sigma_8`; see :doc:`cosmology`).
+* **v0.4** — 0.4.0 corrected the full-joint gas sector, whose
+  full-covariance prior was never applied and whose seed sat clipped on three
+  bounds.  Every v0.3/v0.31 full-joint gas posterior is withdrawn rather than
+  shifted, so no pin reproduces the old numbers.
 
 Because ~47 job lines write through :func:`hod_mod.paths.results_root`, each
 campaign gets its **own versioned results tree** (``…/hod_mod_results`` for
@@ -100,11 +104,58 @@ VTAG       Physics                         ``HOD_MOD_PK_BACKEND`` pin   Results 
 =========  ==============================  ===========================  =============================
 ``v0.3``   Hankel fix, CAMB P(k)           ``camb``                     ``…/hod_mod_results``
 ``v0.31``  + CosmoPower-JAX default P(k)   ``cosmopower``               ``…/hod_mod_results_v0.31``
+``v0.4``   + 0.4.0 gas prior/seed fix      ``cosmopower``               ``…/hod_mod_results_v0.4``
 =========  ==============================  ===========================  =============================
 
 The pin is derived from ``VTAG`` *inside the job* rather than exported by the
 caller because OAR does not propagate the submitting shell's environment to
 the node — an ``HOD_MOD_PK_BACKEND=camb oarsub …`` would be silently dropped.
+
+Closed campaigns: what v0.3 and v0.31 never produced
+----------------------------------------------------
+
+*Status 2026-08-23.*  Both campaigns are **closed as-is**.  Four production
+chains never reached their step budget and one Family-D artifact never landed.
+None will be resumed: 0.4.0 supersedes the gas sector of the two ``full_joint``
+runs among them, so the re-run belongs to the ``v0.4`` campaign instead.
+
+.. list-table:: Outstanding at close
+   :header-rows: 1
+   :widths: 32 20 20 28
+
+   * - Artifact
+     - v0.3
+     - v0.31
+     - Disposition
+   * - ``bgs_full_joint_allparams_<VTAG>``
+     - 1061/4000 steps
+     - 889/4000 steps
+     - superseded — gas sector invalid (0.4.0)
+   * - ``bgs_zm15_thresh_joint_<VTAG>``
+     - 1909/2500 steps
+     - 1071/2500 steps
+     - re-run under ``v0.4``
+   * - ``fits/benchmark``
+     - 2026-07-12, pre-campaign
+     - absent
+     - re-run under ``v0.4`` (``forecasts.txt``)
+
+The chains are truncated, not corrupted — ``log_prob[:iteration]`` is finite
+throughout.  The two ``allparams`` runs died after 11-12 h of wall clock at
+74-98 steps/h, against the 41-54 h that 4000 steps needed; the ``zm15_thresh``
+pair additionally hit the ensemble collapse that
+:mod:`hod_mod.fitting.mcmc_resume` was later written for.
+
+Everything else landed in both trees, including all **31/31** requested
+literature benchmarks.  (The v0.3 ``benchmarks/`` tree has five extra top-level
+directories -- one deprecated run, an archived ``version0`` snapshot and three
+figure-only directories -- which are not models; the 25-vs-20 directory count is
+a misleading proxy for completeness.)
+
+``docs/_images/`` carries the **v0.3** figure set at close: the stamp reads
+``v0.3``, with Family D taken from the v0.31 tree.  v0.31 was never collected,
+deliberately -- the two campaigns do not produce the same *set* of figures, and
+the tree is kept as the numeric before/after for the P(k) swap alone.
 
 What a "v0.3 figure" is, and what it is not
 --------------------------------------------
