@@ -496,6 +496,183 @@ def tinker10_bias(nu: jnp.ndarray, Delta: float = 200.0) -> jnp.ndarray:
     )
 
 
+# ---------------------------------------------------------------------------
+# Halo bias models
+#
+# f(sigma) and its bias are not independent: the peak-background split ties
+# them together, and pairing an arbitrary multiplicity function with an
+# arbitrary bias breaks the consistency integral
+#
+#     int b(M) (M / rho_m) dn/dM dM = 1,
+#
+# which is what guarantees that matter is unbiased with respect to itself.
+# ``bias_consistency`` below measures the violation, and
+# ``tests/test_halo_bias.py`` asserts a tolerance for every pairing shipped.
+# ---------------------------------------------------------------------------
+
+_DELTA_C = 1.686
+
+
+@jax.jit
+def bias_sheth99(nu: jnp.ndarray, Delta: float = 200.0) -> jnp.ndarray:
+    r"""Sheth & Tormen (1999) peak-background-split bias.
+
+    The partner of :func:`fsigma_sheth99`, obtained from its multiplicity
+    function by the peak-background split (their Eq. 12):
+
+    .. math::
+
+        b(\nu) = 1 + \frac{a\nu^2 - 1}{\delta_c}
+                 + \frac{2p/\delta_c}{1 + (a\nu^2)^p}
+
+    with :math:`a = 0.707`, :math:`p = 0.3`.  Independent of ``Delta``, which is
+    accepted only so that every bias model shares one signature.
+    """
+    a, pp = 0.707, 0.3
+    anu2 = a * nu ** 2
+    return (1.0 + (anu2 - 1.0) / _DELTA_C
+            + 2.0 * pp / (_DELTA_C * (1.0 + anu2 ** pp)))
+
+
+@jax.jit
+def bias_sheth01(nu: jnp.ndarray, Delta: float = 200.0) -> jnp.ndarray:
+    r"""Sheth, Mo & Tormen (2001) bias, their Eq. 8.
+
+    An empirical recalibration of :func:`bias_sheth99` against simulations,
+
+    .. math::
+
+        b(\nu) = 1 + \frac{1}{\sqrt{a}\,\delta_c}
+        \Big[\sqrt{a}(a\nu^2) + \sqrt{a}\,b\,(a\nu^2)^{1-c}
+        - \frac{(a\nu^2)^c}{(a\nu^2)^c + b(1-c)(1-c/2)}\Big]
+
+    with :math:`a = 0.707`, :math:`b = 0.5`, :math:`c = 0.6`.
+    """
+    a, b, c = 0.707, 0.5, 0.6
+    sa = jnp.sqrt(a)
+    anu2 = a * nu ** 2
+    return 1.0 + (sa * anu2 + sa * b * anu2 ** (1.0 - c)
+                  - anu2 ** c / (anu2 ** c + b * (1.0 - c) * (1.0 - c / 2.0))
+                  ) / (sa * _DELTA_C)
+
+
+@jax.jit
+def bias_bhattacharya11(nu: jnp.ndarray, Delta: float = 200.0) -> jnp.ndarray:
+    r"""Bhattacharya et al. (2011) bias, their Eq. 18 at :math:`z=0`.
+
+    .. math::
+
+        b(\nu) = 1 + \frac{a\nu^2 - q}{\delta_c}
+                 + \frac{2p/\delta_c}{1 + (a\nu^2)^p}
+
+    with :math:`a = 0.788`, :math:`p = 0.807`, :math:`q = 1.795`.  The published
+    fit carries a weak redshift dependence in ``a`` which is not applied here;
+    the paired multiplicity function :func:`fsigma_bhattacharya11` does carry it.
+    """
+    a, pp, q = 0.788, 0.807, 1.795
+    anu2 = a * nu ** 2
+    return (1.0 + (anu2 - q) / _DELTA_C
+            + 2.0 * pp / (_DELTA_C * (1.0 + anu2 ** pp)))
+
+
+_BIAS_MODELS = {
+    "tinker10":        tinker10_bias,
+    "sheth99":         bias_sheth99,
+    "sheth01":         bias_sheth01,
+    "bhattacharya11":  bias_bhattacharya11,
+}
+
+#: Multiplicity function -> its peak-background-split partner, where one exists.
+#: Any pairing absent from this map is an *ad hoc* combination: it may still be
+#: accurate enough, but it does not satisfy the consistency integral by
+#: construction.  ``tests/test_halo_bias.py`` measures the violation for all of
+#: them.
+_MATCHED_BIAS = {
+    "sheth99":         "sheth99",
+    "tinker08":        "tinker10",
+    "tinker10":        "tinker10",
+    "bhattacharya11":  "bhattacharya11",
+}
+
+
+def make_bias(name: str = "tinker10"):
+    """Return the bias callable ``b(nu, Delta)`` for *name*.
+
+    Parameters
+    ----------
+    name : str
+        Any key of ``_BIAS_MODELS``: ``tinker10`` (default), ``sheth99``,
+        ``sheth01``, ``bhattacharya11``.
+    """
+    if name not in _BIAS_MODELS:
+        raise ValueError(f"bias model must be one of {list(_BIAS_MODELS)}, got '{name}'")
+    return _BIAS_MODELS[name]
+
+
+def matched_bias_for(fsigma_model: str) -> str | None:
+    """The peak-background-split partner of *fsigma_model*, or ``None``.
+
+    ``None`` means no partner is implemented, so any choice of bias is an
+    *ad hoc* pairing whose consistency violation should be checked.
+    """
+    return _MATCHED_BIAS.get(fsigma_model)
+
+
+def bias_consistency(fsigma_model: str, bias_model: str, z: float = 0.0,
+                     Delta: float = 200.0, nu_min: float = 1e-3,
+                     nu_max: float = 50.0, n_nu: int = 20000) -> dict:
+    r"""Mass-weighted mean bias for one (multiplicity, bias) pairing.
+
+    The peak-background split requires that matter be unbiased with respect to
+    itself.  Written in peak height :math:`\nu = \delta_c/\sigma`, where the
+    mass-weighted measure is :math:`f(\sigma)\,{\rm d}\ln\nu`, that condition is
+
+    .. math::
+
+        \langle b \rangle \equiv
+        \frac{\int f(\sigma(\nu))\,b(\nu)\,{\rm d}\ln\nu}
+             {\int f(\sigma(\nu))\,{\rm d}\ln\nu} = 1 .
+
+    Working in :math:`\nu` rather than in mass is deliberate.  The equivalent
+    mass-space integral :math:`\int b\,(M/\bar\rho_m)\,({\rm d}n/{\rm d}M)\,{\rm d}M`
+    needs :math:`\sigma(M)` far below any halo mass of interest, which in turn
+    needs :math:`P(k)` far beyond any tabulated :math:`k`; measured that way the
+    result wanders between 0.89 and 1.12 for a pairing that is exact by
+    construction, so it tests the quadrature rather than the physics.  In
+    :math:`\nu` the diagnostic is cosmology-free and depends only on the two
+    functions being paired.
+
+The default range :math:`\nu \in [10^{-3}, 50]` is wide enough that a
+    normalisable multiplicity function has converged: Sheth--Tormen paired with
+    its own bias returns :math:`\langle b\rangle = 1.010`.  Narrowing it does
+    *not* improve matters --- over :math:`\nu\in[0.1,10]` the same pairing
+    returns 1.094, because the truncated low-:math:`\nu` tail carries real
+    weight.  Several fits are not normalisable at all, which is why
+    ``mass_norm`` is returned alongside: Tinker08 gives 1.72 over the wide range
+    because its :math:`\sigma\to\infty` limit does not fall off.  A
+    ``mass_norm`` far from unity means the pairing is being asked for something
+    the fit never promised, and ``mean_bias`` should not be read as a defect of
+    the bias model.
+
+    Returns
+    -------
+    dict with keys ``mean_bias``, ``mass_norm``, ``deviation``
+        (``deviation`` is ``|mean_bias - 1|``).
+    """
+    if fsigma_model not in _FSIGMA_MODELS:
+        raise ValueError(f"unknown multiplicity model '{fsigma_model}'")
+    lnnu = jnp.linspace(jnp.log(nu_min), jnp.log(nu_max), n_nu)
+    nu = jnp.exp(lnnu)
+    sigma = _DELTA_C / nu
+    f = _FSIGMA_MODELS[fsigma_model](sigma, z)
+    b = make_bias(bias_model)(nu, Delta)
+    norm = jnp.trapezoid(f, lnnu)
+    mean_b = jnp.trapezoid(f * b, lnnu) / norm
+    return {"mean_bias": float(mean_b),
+            "mass_norm": float(norm),
+            "deviation": float(jnp.abs(mean_b - 1.0))}
+
+
 # Backward-compat alias
 tinker08_fsigma = fsigma_tinker08
 
@@ -841,6 +1018,7 @@ class HaloMassFunction:
         model: str = "tinker08",
         Delta: float = 200.0,
         n_k: int = 512,
+        bias_model: str | None = None,
         **fsigma_kwargs,
     ):
         if model not in _FSIGMA_MODELS:
@@ -849,6 +1027,14 @@ class HaloMassFunction:
         self.rho_mean = float(rho_mean)
         self.model = model
         self.Delta = float(Delta)
+        # Default to the peak-background-split partner of the chosen f(sigma)
+        # when one exists, so that (f, b) is consistent by construction;
+        # otherwise fall back to Tinker10, which is what every backend used
+        # before bias became selectable.
+        if bias_model is None:
+            bias_model = matched_bias_for(model) or "tinker10"
+        self.bias_model = bias_model
+        self._bias_fn = make_bias(bias_model)
         self._k_int = jnp.logspace(-4, 3, n_k)
         base_fn = _FSIGMA_MODELS[model]
         self._fsigma_fn = partial(base_fn, **fsigma_kwargs) if fsigma_kwargs else base_fn
@@ -952,7 +1138,9 @@ class HaloMassFunction:
     # ------------------------------------------------------------------
 
     def bias(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
-        """Tinker 2010 large-scale halo bias b(M, z) [dimensionless].
+        """Large-scale halo bias b(M, z) [dimensionless].
+
+        Uses ``self.bias_model`` (see :func:`make_bias`).
 
         Parameters
         ----------
@@ -960,10 +1148,9 @@ class HaloMassFunction:
         z : float  Redshift.
         theta : dict  Cosmological parameters.
         """
-        delta_c = 1.686
         sig = self.sigma(m_h, z, theta)
-        nu = delta_c / sig
-        return tinker10_bias(nu, self.Delta)
+        nu = _DELTA_C / sig
+        return self._bias_fn(nu, self.Delta)
 
     # ------------------------------------------------------------------
     # Number density

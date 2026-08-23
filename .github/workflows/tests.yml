@@ -48,6 +48,18 @@ jobs:
             -m "not x64" \
             --cov=hod_mod --cov-report=xml
 
+      # The accuracy budget is a committed artefact, so it can drift away from
+      # what the code does. Regenerating it in CI and failing on any entry
+      # outside its tolerance is what stops that. Checks whose reference
+      # package is absent from this environment (CLASS, AUM) record themselves
+      # as skipped rather than vanishing, so the coverage gap stays visible.
+      - name: Regenerate the accuracy budget
+        env:
+          JAX_PLATFORMS: cpu
+        run: |
+          python -m hod_mod.scripts.make_accuracy_budget
+          git --no-pager diff --stat -- benchmarks/accuracy.json || true
+
       # x64-marked tests (gradient vs finite differences) need
       # JAX_ENABLE_X64=1, which is read once at jax import — hence a
       # separate pytest process, never a mid-session toggle.
