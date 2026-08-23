@@ -160,81 +160,108 @@ panel decomposed into its physical components.
    :math:`\theta\lesssim20''` and the gas the outer profile.  The 9 X-ray
    parameters are fit jointly across all bands.
 
-.. admonition:: Correction (2026-08-21) — the gas sector of this fit is invalid
-   :class: warning
+.. admonition:: Resolved in v0.4 (2026-08-23) — the gas sector has been re-fitted
+   :class: note
 
-   The X-ray/gas numbers below were written from the v0.3 posterior in good
-   faith.  Three defects in :mod:`hod_mod.fitting.full_joint`, found while
-   preparing v0.4, mean that posterior does not constrain the gas sector:
+   The 2026-08-21 correction on this page withdrew every gas-sector number.
+   Three defects in :mod:`hod_mod.fitting.full_joint` meant the v0.3 posterior
+   constrained nothing: the full-covariance gas prior was never applied
+   (``pri_sig`` is diagonal and carried ``inf`` for the four native-DPM gas
+   parameters, so a prior whose information lives almost entirely in its
+   correlations — :math:`\rho` from :math:`-0.95` to :math:`+0.84` —
+   contributed nothing, and the sector ran on its uniform bounds); the seed was
+   the *scaling-relation* prior centre used where the *induced* centre belongs,
+   474 units of prior :math:`\chi^2` away and clipped onto three bounds; and
+   ``--kt-prior-sig`` wrote onto ``log10_p03`` / ``beta_P`` rather than
+   ``kt_norm`` / ``kt_slope``.
 
-   * **The informative gas prior was never applied.**  ``pri_sig`` is diagonal
-     by construction and carries ``inf`` for the four native-DPM gas
-     parameters, so the full-covariance prior — whose information lives almost
-     entirely in its correlations (ρ from −0.95 to +0.84) — contributed
-     nothing.  The gas sector ran on its uniform bounds alone.  Where this page
-     says the intervals are *prior-dominated*, the sharper and worse truth is
-     that they are **bounds-dominated**.
-   * **The gas seed was the wrong distribution's centre** — the
-     scaling-relation prior centre used where the induced-prior centre belongs,
-     474 units of prior :math:`\chi^2` away and clipped onto three bounds,
-     which Nelder-Mead did not escape.
-   * **``--kt-prior-sig`` pinned the wrong parameters.**  After the native-DPM
-     re-base the two slots it wrote onto are ``log10_p03`` and ``beta_P``, not
-     ``kt_norm``/``kt_slope``.  It is replaced in v0.4 by ``--gas-prior-widen``,
-     a scalar inflation of the whole 4×4.
+   All three are fixed in 0.4.0, and every number below is the **re-run**:
+   campaign ``VTAG=v0.4``, package 0.5.0, chain of 2026-08-23.
+   ``--kt-prior-sig`` is replaced by ``--gas-prior-widen``, a scalar inflation
+   of the whole :math:`4\times4`; this run used its default.  The diagnostic
+   that forced the withdrawal has changed sign:
 
-   The visible symptom is an **inverted** :math:`k_BT`–:math:`M` relation:
-   :math:`\beta_P - \beta_n = -0.41` at the posterior median against a prior
-   centred on :math:`+0.6`.  The galaxy and AGN sectors are unaffected.  This
-   page will be rewritten once the fit is re-run with the corrected prior and
-   seed; until then treat every gas-sector number and the
-   *Hot-gas scaling relations* figures below as withdrawn.
+   .. list-table::
+      :header-rows: 1
+      :widths: 42 29 29
 
-Goodness of fit (campaign ``VTAG=v0.3``)
+      * - diagnostic
+        - v0.3 (withdrawn)
+        - v0.4
+      * - :math:`\beta_P - \beta_n`, posterior median
+        - :math:`-0.41` — **inverted**
+        - :math:`+0.46^{+0.20}_{-0.34}`
+      * - MAP :math:`\chi^2/\mathrm{dof}`
+        - 186.4
+        - **9.26**
+      * - largest pile-up on a bound
+        - MAP clipped on three
+        - 0.3 % of samples
+
+   The induced prior is centred on :math:`+0.6`, so the recovered
+   :math:`k_BT`–:math:`M` slope is now consistent with it rather than of the
+   opposite sign.  Quoted as a difference of medians for exact comparability
+   with the withdrawn figure, v0.3 gives :math:`-0.414` and v0.4
+   :math:`+0.377`; the :math:`+0.46` above is the median of the per-sample
+   difference, which is the correct statistic for a derived quantity.
+
+Goodness of fit (campaign ``VTAG=v0.4``)
 ----------------------------------------
 
-.. list-table:: Step-2 MAP, ``bgs_full_joint_fixedzm15_v0.3``
+.. list-table:: Step-2 MAP, ``bgs_full_joint_fixedzm15_v0.4``, against the withdrawn v0.3 run
    :header-rows: 1
-   :widths: 34 22 22 22
+   :widths: 32 17 17 34
 
    * - Sector
-     - :math:`\chi^2`
-     - share
+     - v0.3 :math:`\chi^2`
+     - v0.4 :math:`\chi^2`
      - note
    * - galaxies (:math:`n_{\rm gal}, w_p, \Delta\Sigma`)
      - 2.11
-     - 0.002 %
-     - ZM15 held fixed
+     - 5.52
+     - ZM15 held fixed in both
    * - AGN (XLF + bias)
      - 53.55
-     - 0.05 %
+     - 103.82
      - —
    * - X-ray (broad + 15 bands)
      - 97 985.73
-     - **99.9 %**
-     - carries the entire misfit
-   * - **total**
-     - **98 041.40** / 526 dof
+     - **4 762.11**
+     - :math:`20.6\times` smaller
+   * - **total** (526 dof)
+     - **98 041.40**
+     - **4 871.44**
      - —
-     - :math:`\chi^2/\mathrm{dof} = 186.4`
+   * - :math:`\chi^2/\mathrm{dof}`
+     - 186.39
+     - **9.26**
+     - —
 
-Two things follow, and neither is cosmetic.
+Three things follow.
 
-* **The X-ray band sector is not fitted.**  The galaxy and AGN sectors are
-  essentially perfect (:math:`\chi^2 = 2.1` and :math:`53.6`); all 98 000 units of
-  :math:`\chi^2` sit in the X-ray bands.  A :math:`\chi^2/\mathrm{dof}` of 186 is
-  not a measurement — the band model is missing something, and the posterior
-  below should be read as "where the sampler went", not as a constraint.
-* **The MAP and the posterior disagree.**  Re-evaluating at the posterior median
-  gives :math:`\chi^2/\mathrm{dof} = 2805` (X-ray 1 475 528), a factor 15 worse
-  than the MAP.  The chain is not sampling a basin around the MAP; several
-  parameters sit on prior bounds (``p2`` at its 0.1 floor while the MAP is at
-  0.637; ``r_max``, ``agn_delta2`` and ``log10_M_star_cen`` at their ceilings;
-  ``agn_mu_bh`` at its floor).  ``agn_gamma`` is one of them: the chain rails on
-  its :math:`\Gamma=1.2` floor (median 1.224) while the MAP sits at 1.448, so
-  the ":math:`\Gamma` settles hard at :math:`\approx1.5`" reading below holds at
-  the MAP but not in the posterior.  Quote the MAP, and treat the 68 % intervals
-  in ``posterior_summary.json`` as prior-dominated.
+* **The X-ray sector is now being fitted.**  It still carries 97.8 % of the
+  :math:`\chi^2`, but the absolute misfit fell by a factor 20.6 and
+  :math:`\chi^2/\mathrm{dof} = 9.26` describes a model that fits badly rather
+  than one that is not fitting at all.  The galaxy and AGN sectors got slightly
+  *worse* (2.11 → 5.52 and 53.55 → 103.82), which is the expected sign: the gas
+  sector no longer absorbs arbitrary amounts of misfit by running free on its
+  bounds, so the other sectors have to carry their share.
+
+* **The chain samples a basin.**  Across the second half of the chain the 68 %
+  spread of :math:`-2\log P` is :math:`\approx110` units in v0.4
+  (3 164 → 3 274) against :math:`\approx7\,000` in v0.3 (55 100 → 62 098).  The
+  v0.3 text had to warn that "the chain is not sampling a basin around the MAP";
+  that warning no longer applies.  (:math:`-2\log P` is the stored log-posterior
+  and includes the prior term, so it is a mixing diagnostic, not a
+  :math:`\chi^2`.)
+
+* **Nothing rails.**  The largest pile-up at any bound is 0.3 % of samples
+  (``log10_ne03`` at its :math:`-7` floor), against v0.3 where the MAP was
+  clipped on three bounds and ``p2`` sat on its 0.1 floor in the posterior
+  (median 0.101; now 0.576).  Two v0.4 *MAP* coordinates do still land on an
+  edge — ``r_max`` at 3.000 and ``agn_gamma`` at 1.200 — but the posterior
+  keeps clear of both (medians 3.85 and 1.28), so the MAP is the less
+  representative of the two summaries here.
 
 Why the AGN photon index is free
 --------------------------------
@@ -264,28 +291,61 @@ the natural next constraint.
 Hot-gas scaling relations and radial profiles
 ---------------------------------------------
 
-The X-ray sector is parametrised by explicit :math:`L_X`–:math:`M_{500c}` and
-:math:`k_BT`–:math:`M_{500c}` power laws plus a density-profile shape
-(:math:`p_2`, :math:`r_{\max}`).  The top row shows those recovered scaling
-relations against cluster/group literature; the bottom row shows the DPM radial
-profiles whose density normalisation is calibrated to the fit's own
-:math:`L_X`–:math:`M` relation.
+Since the 0.3.1 native-DPM re-base the X-ray sector is parametrised by the DPM
+gas parameters themselves — :math:`\log_{10}n_{e,0.3}`, :math:`\beta_n`,
+:math:`\log_{10}P_{0.3}`, :math:`\beta_P`, plus the density-profile shape
+(:math:`p_2`, :math:`r_{\max}`) — so there are no fitted
+:math:`L_X`–:math:`M_{500c}` or :math:`k_BT`–:math:`M_{500c}` coefficients left
+in the chain to read off.  The relations in the top row are therefore
+**predictions, not fitted lines**: 0.4.0 rewrote ``fig_gas`` to derive them by
+integrating each posterior draw's own DPM profiles out to :math:`R_{500c}` with
+:math:`n_e^2` weighting and the :math:`T>0.3` keV hot-phase cut, reusing the
+likelihood's own factorisation from :mod:`hod_mod.fitting.dpm_bands`; the 68 %
+band is 400 draws pushed through that same integrator.  The bottom row shows
+the DPM radial profiles directly.
 
 .. figure:: _images/bgs_full_joint_fixedzm15__gas.png
    :width: 100%
    :alt: Hot-gas L_X-M, kT-M and L_X-kT scaling relations and n_e, T, P_e radial profiles.
 
    **Top:** :math:`L_X`–:math:`M_{500c}`, :math:`k_BT`–:math:`M_{500c}` and
-   :math:`L_X`–:math:`k_BT` — the MAP (green) and posterior-median (blue) fit
+   :math:`L_X`–:math:`k_BT` — the MAP (green) and posterior-median (blue)
    relations with the 68 % posterior band, over-plotted with Lovisari+2020 and
    Bulbul+2018 cluster/group samples and the Lovisari+2020 / Comparat+2025
-   (GAS.py) relations.  With ``agn_gamma`` free (previous section) the posterior
-   :math:`k_BT`–:math:`M_{500c}` **tracks the Lovisari/Bulbul cluster cloud**
-   rather than sitting an order of magnitude above it; the slope is physical.
+   (GAS.py) relations.  Read this panel with the caveat below: the v0.4 fit
+   fixes the *slope* and not the *normalisation*.  :math:`k_BT` now rises with
+   mass, as :math:`\beta_P - \beta_n = +0.46 > 0` requires, but the posterior
+   median sits at :math:`k_BT \approx 40`–:math:`350` keV where the cluster
+   samples are at 2–10 keV — roughly 1.5–2 dex high — and the MAP is higher
+   still.  :math:`L_X`–:math:`M_{500c}` is the better-behaved of the two: the
+   posterior median crosses the cluster cloud near
+   :math:`M_{500c}\sim5\times10^{14}\,M_\odot`, though with a steeper slope
+   than Lovisari+2020.
    **Bottom:** electron density :math:`n_e(r)`, temperature :math:`T(r)=P_e/n_e`
    and electron pressure :math:`P_e(r)` at
    :math:`M_{200}=10^{13,14,15}\,M_\odot/h` (dotted = Arnaud+2010 pressure), with
    :math:`n_e` calibrated to the fit's :math:`L_X`–:math:`M`.
+
+.. admonition:: What v0.4 fixed here, and what it did not
+   :class: warning
+
+   The 0.4.0 gas-sector fix removed the **inversion** — the sign of
+   :math:`\beta_P - \beta_n` — and that is all it claimed to do.  It did not
+   make the gas sector physical.  The recovered temperatures are 1.5–2 orders
+   of magnitude above the cluster samples, and the :math:`T(r)` panel below
+   peaks at :math:`10^2`–:math:`10^4` keV rather than the few keV a group or
+   cluster halo should show.  Consistently, the MAP
+   :math:`\chi^2/\mathrm{dof}` is 9.26: the band model is fitting, but it is
+   not fitting *well*.
+
+   So the scaling relations here are a **diagnostic of the fit, not a
+   measurement of hot-gas physics**.  Soft-X-ray :math:`w(\theta)` alone does
+   not break the density–temperature–continuum degeneracy (see the previous
+   section), which is exactly the argument for the tSZ leg: a
+   pressure-weighted cross-correlation constrains :math:`P_e` independently and
+   should pull the normalisation down.  Until that lands, quote the
+   :math:`L_X`–:math:`M` relation with care and do not quote
+   :math:`k_BT`–:math:`M` as a result.
 
 AGN host stellar-mass function
 ------------------------------

@@ -1723,6 +1723,72 @@ written to ``results/fits/comparat2025_fixedZM15/`` (overridable per run with
 ``--out-dir``) — separate from the joint-fit ``results/fits/comparat2025/`` so
 neither clobbers the other.
 
+.. admonition:: The ``--ecf`` variant does not yet do what it was built for (v0.4, 2026-08-23)
+   :class: warning
+
+   0.4.0 added ``--ecf``, which folds the validated eROSITA TM0 flux→count ECF
+   into the cross-power and anchors the sample-independent geometry on S1, so
+   that ``log10_A_gas`` / ``log10_A_AGN`` should come out as :math:`O(1)`
+   residuals centred on 0 instead of absorbing the whole :math:`\sim10^8`
+   model→counts chain.  The ``VTAG=v0.4`` campaign ran all five presets both
+   ways.  It does not currently deliver that:
+
+   .. list-table:: S1 MAP, ``VTAG=v0.4``
+      :header-rows: 1
+      :widths: 20 13 13 13 13 13
+
+      * - preset
+        - :math:`\chi^2/\mathrm{dof}`
+        - + ``--ecf``
+        - :math:`\log_{10}A_{\rm gas}`
+        - + ``--ecf``
+        - :math:`\log_{10}A_{\rm AGN}` (ecf)
+      * - ``gas-shape``
+        - 4.16
+        - 8.35
+        - 0.09
+        - 4.47
+        - :math:`-3.3139`
+      * - ``gas-temp``
+        - 4.39
+        - 9.04
+        - :math:`-0.72`
+        - 4.78
+        - :math:`-3.3139`
+      * - ``gas-full``
+        - 6.02
+        - 13.38
+        - :math:`-0.69`
+        - 1.55
+        - :math:`-3.3139`
+      * - ``agn-occ``
+        - 5.72
+        - 9.86
+        - :math:`-0.36`
+        - 1.06
+        - :math:`-3.3139`
+      * - ``agn-lum``
+        - 3.85
+        - 9.45
+        - :math:`-0.36`
+        - 1.06
+        - :math:`-0.0617`
+
+   Two things are wrong.  **The ECF fit is uniformly worse** — every preset
+   roughly doubles its :math:`\chi^2/\mathrm{dof}`.  And
+   :math:`\log_{10}A_{\rm AGN}` returns **exactly** :math:`-3.3139` in four
+   independent fits, which is not a coincidence but a bound: the AGN amplitude
+   rails under ``--ecf`` for every preset using the ``hod`` AGN model.  Only
+   ``agn-lum`` (``ham``) escapes, and it is the one preset whose AGN amplitude
+   is already a residual by construction.
+
+   Meanwhile the *non-ECF* amplitudes are the ones sitting near zero
+   (:math:`-0.72` to :math:`+0.09`), because the S1 anchor is measured against
+   them.  So the anchor appears to be calibrated in the opposite sense to the
+   correction it is meant to absorb.  Until this is understood, **quote the
+   non-ECF fits**; the ``--ecf`` runs are kept in
+   ``…_ecf_<VTAG>/`` alongside them for diagnosis, not for publication.
+
 .. admonition:: Diagnostic SMF/n_gal units (h³)
    :class: note
 

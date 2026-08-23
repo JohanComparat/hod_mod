@@ -157,6 +157,56 @@ a misleading proxy for completeness.)
 deliberately -- the two campaigns do not produce the same *set* of figures, and
 the tree is kept as the numeric before/after for the P(k) swap alone.
 
+v0.4 campaign status
+--------------------
+
+*Status 2026-08-23, campaign in flight.*  52 job lines submitted from
+**v0.5.0** (``commit=d6a0e62``) into ``~/data/hod_mod_results_v0.4``.
+
+**Landed:** ``bgs_full_joint_fixedzm15`` (the fit 0.4.0 exists for),
+``bgs_comparat2025``, all ten Family-C presets — the five originals *and* the
+five new ``--ecf`` variants — 23 of 31 literature benchmarks, and the
+tier2/tier3/tier4 forecasts.
+
+**Still running:** ``bgs_zm15_joint_wp_ngal``, ``bgs_zm15_thresh_joint``,
+``bgs_full_joint_allparams``, ``sensitivity_fisher``, ``stage4_forecast``,
+``fits/benchmark``, and the eight Zu–Mandelbaum MCMC benchmark bins.
+
+.. warning::
+
+   ``docs/_images/`` is stamped ``v0.4`` but is currently a **mix**.
+   ``collect_and_plot.sh`` was run with ``ALLOW_PARTIAL=1``, so it refreshed the
+   87 figures whose jobs have landed and skipped the rest — which therefore
+   still show their **v0.3** renderings.  The stamp records the campaign that
+   *collected*, not that every figure came from it.  Re-collect without
+   ``ALLOW_PARTIAL`` once ``campaign_status.sh`` reports a clean tree.
+
+   Family-C figures are unaffected either way: those fits emit **PDF**, and
+   section C of ``collect_and_plot.sh`` copies ``*.png``, so it has never
+   collected anything from them.
+
+.. admonition:: Provenance incident, 2026-08-23 — check the commit, not the tree name
+   :class: warning
+
+   The first v0.4 submission ran on the **wrong code** and had to be killed and
+   redone.  ``dahu`` was still at ``ce17a1c``, the pre-0.4.0 ``main`` tip,
+   missing the gas prior/seed fix that is the campaign's entire reason to
+   exist — so ``bgs_full_joint_fixedzm15`` was 909 steps into reproducing the
+   very posterior 0.4.0 withdrew.
+
+   Nothing about the *tree* revealed this.  ``VTAG=v0.4`` was passed correctly
+   and the old ``_campaign_env.sh`` still routed it to
+   ``…/hod_mod_results_v0.4`` with the CosmoPower pin, so v0.3-era physics was
+   landing in a directory named for v0.4.  What exposed it was the **job
+   name**: ``hodmod_v03_rerun`` where 0.4.1's submitter writes
+   ``hodmod_v04_<family>``.  That per-campaign log stem was added for tidiness
+   and earned its keep on its first outing.
+
+   The rule this leaves: after ``pull_results.sh``, read ``commit=`` out of a
+   job log header before trusting anything in the tree.  ``run_job.sh`` has
+   logged it since 785c097 precisely so that a mislabelled campaign is
+   detectable rather than merely unlikely.
+
 What a "v0.3 figure" is, and what it is not
 --------------------------------------------
 
