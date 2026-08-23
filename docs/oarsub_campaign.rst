@@ -160,17 +160,24 @@ the tree is kept as the numeric before/after for the P(k) swap alone.
 v0.4 campaign status
 --------------------
 
-*Status 2026-08-23, campaign in flight.*  52 job lines submitted from
-**v0.5.0** (``commit=d6a0e62``) into ``~/data/hod_mod_results_v0.4``.
+*Status 2026-08-23 21:00, campaign in flight.*  52 job lines submitted from
+**v0.5.0** (``commit=d6a0e62``) into ``~/data/hod_mod_results_v0.4``, plus a
+five-job re-run of the ``--ecf`` family from ``commit=17c9026`` once the anchor
+bug below was fixed.
 
-**Landed:** ``bgs_full_joint_fixedzm15`` (the fit 0.4.0 exists for),
-``bgs_comparat2025``, all ten Family-C presets — the five originals *and* the
-five new ``--ecf`` variants — 23 of 31 literature benchmarks, and the
-tier2/tier3/tier4 forecasts.
+**Landed (45 of 57):** ``bgs_full_joint_fixedzm15`` — the fit 0.4.0 exists for,
+and the one that carries the acceptance test — ``bgs_comparat2025``, all ten
+Family-C presets, the **re-run** ``--ecf`` five, 25 of 31 literature benchmarks,
+and the tier2/tier3/tier4 forecasts.
 
-**Still running:** ``bgs_zm15_joint_wp_ngal``, ``bgs_zm15_thresh_joint``,
-``bgs_full_joint_allparams``, ``sensitivity_fisher``, ``stage4_forecast``,
-``fits/benchmark``, and the eight Zu–Mandelbaum MCMC benchmark bins.
+**Still running (5):** ``bgs_zm15_joint_wp_ngal`` (60/2500 steps),
+``bgs_zm15_thresh_joint`` (116/2500), ``bgs_full_joint_allparams`` (701/4000),
+``sensitivity_fisher`` and ``stage4_forecast``.  ``fits/benchmark`` and six
+Zu–Mandelbaum MCMC bins are queued behind them.
+
+The three MCMC production fits are the long pole and are the reason the campaign
+is not finished: at the step rates observed in v0.3 they need 24–50 h each, and
+they restarted at least once on besteffort.
 
 .. warning::
 

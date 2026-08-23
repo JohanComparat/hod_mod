@@ -325,74 +325,107 @@ anchors the remaining sample-independent geometry on S1, so that
 absorbing the whole :math:`\sim10^8` model→counts chain
 (:math:`\Lambda_{\rm eff}`, Mpc→cm, :math:`1/4\pi`, ECF, sr→arcsec²).
 
-.. admonition:: The v0.4 ``--ecf`` runs are invalid — the AGN component was switched off
+.. admonition:: The first ``--ecf`` runs were invalid — the AGN component was switched off
    :class: warning
 
-   Every ``--ecf`` fit in the table above was made with **no AGN component at
-   all**, and must not be quoted.
+   The five ``--ecf`` fits of 2026-08-23 morning ran with **no AGN component at
+   all** and must not be quoted.  The anchor is measured once on S1 by a
+   least-squares solve for the two conversion constants; as shipped in 0.4.0
+   that solve weighted by a bare :math:`1/|\sigma|`, omitting the ``f_sys``
+   floor the likelihood itself applies.  That hands the fit to the tiny-error
+   large-:math:`\theta` bins, where the gas/AGN split is degenerate, and drives
+   the AGN coefficient *negative*; a non-negativity box then clipped it to
+   exactly ``0.0``.  Since the model applies it as
+   ``A_AGN = 10**log10_A_AGN * c_agn``, a zero conversion removes the AGN term
+   for **every** value of the amplitude.
 
-   The anchor is measured once on S1 by a least-squares solve for the two
-   conversion constants.  As shipped in 0.4.0 that solve weighted by a bare
-   :math:`1/|\sigma|`, omitting the ``f_sys`` floor the likelihood itself
-   applies.  That hands the fit to the tiny-error large-:math:`\theta` bins,
-   where the gas/AGN split is degenerate, and drives the AGN coefficient
-   *negative*; a non-negativity box then clipped it to exactly ``0.0``.  Since
-   the model applies it as ``A_AGN = 10**log10_A_AGN * c_agn``, a zero
-   conversion removes the AGN term for **every** value of the amplitude.
+   Three signatures, all in the stored results: :math:`\chi^2/\mathrm{dof}`
+   roughly doubled for every preset; ``agn-occ_ecf`` and ``agn-lum_ecf``
+   returned **bit-identical** :math:`\chi^2 = 226.79257920358373` despite
+   different AGN models; and ``log10_A_AGN`` came back as exactly
+   :math:`-3.3139` from all four ``hod`` presets.  That value is **not** a bound
+   — the range is :math:`(-5, 15)` — but the optimiser's *seed*, returned
+   untouched because a zero conversion makes the direction exactly flat.
 
-   Three signatures follow, all visible above and in the stored results:
+   The anchor now uses the likelihood's own error definition and an
+   unconstrained solve, refuses to cache a degenerate result, and carries a
+   ``scheme`` field so an anchor written the old way is re-measured rather than
+   reused.  The re-measured constants are :math:`c_{\rm gas}=7.819\times10^{-13}`,
+   :math:`c_{\rm AGN}=4.854\times10^{-4}` (``hod``) and
+   :math:`7.813\times10^{-13}`, :math:`0.868` (``ham``) — all strictly positive,
+   and now genuinely differing between AGN models, where before both were
+   identically zero.
 
-   * :math:`\chi^2/\mathrm{dof}` roughly doubles for every preset — gas alone
-     must now fit the AGN-dominated :math:`\theta\lesssim20''` points.
-   * ``agn-occ_ecf`` and ``agn-lum_ecf`` have **bit-identical**
-     :math:`\chi^2 = 226.79257920358373` despite using different AGN models.
-   * ``log10_A_AGN`` is reported as exactly :math:`-3.3139` by all four ``hod``
-     presets.  This is **not** a bound — the range is :math:`(-5, 15)` — and not
-     a coincidence: with a zero conversion the direction is exactly flat, so
-     L-BFGS-B returns its **seed**, which is computed before any preset-specific
-     parameter exists and is therefore identical across presets.
+Results after the fix
+~~~~~~~~~~~~~~~~~~~~~
 
-   **Fixed after the campaign.**  The anchor now uses the likelihood's own error
-   definition (jackknife :math:`\oplus` the ``f_sys`` floor) and an
-   unconstrained solve; a degenerate anchor raises instead of being cached; and
-   the cache carries the measurement ``scheme``, so an anchor written the old way
-   is re-measured rather than silently reused.  The MAP seed is also computed in
-   residual units — it was in absolute units, so under ``--ecf`` it started ~12
-   decades off and was clipped to a meaningless :math:`-3`.
+The five presets were re-run on 2026-08-23 evening against the corrected anchor.
 
-   Verified end-to-end on the ``amps`` preset (S1, ``hod``), which is the same
-   two amplitudes without the expensive profile rebuilds:
+.. list-table:: S1 MAP, :math:`\chi^2/\mathrm{dof}`
+   :header-rows: 1
+   :widths: 18 16 20 18 28
 
-   .. list-table::
-      :header-rows: 1
-      :widths: 30 18 26 26
+   * - Preset
+     - no ``--ecf``
+     - ``--ecf`` (broken)
+     - ``--ecf`` (fixed)
+     - :math:`\log_{10}A_\mathrm{gas}` / :math:`A_\mathrm{AGN}`, fixed
+   * - ``gas-shape``
+     - 4.161
+     - 8.348
+     - **3.304**
+     - :math:`-0.34` / :math:`-0.43`
+   * - ``gas-temp``
+     - 4.388
+     - 9.043
+     - **3.741**
+     - :math:`-0.11` / :math:`-0.44`
+   * - ``gas-full``
+     - 6.022
+     - 13.379
+     - 6.240
+     - :math:`-0.24` / :math:`-0.49`
+   * - ``agn-occ``
+     - 5.720
+     - 9.861
+     - 5.744
+     - :math:`0.00` / :math:`0.00`
+   * - ``agn-lum``
+     - 3.845
+     - 9.450
+     - 3.871
+     - :math:`0.00` / :math:`0.00`
 
-      * - run
-        - :math:`\chi^2/\mathrm{dof}`
-        - :math:`\log_{10}A_\mathrm{gas}`
-        - :math:`\log_{10}A_\mathrm{AGN}`
-      * - no ``--ecf``
-        - 4.537
-        - :math:`-0.359`
-        - :math:`+8.410`
-      * - ``--ecf``, **fixed**
-        - **4.556**
-        - **:math:`-0.0000`**
-        - **:math:`-0.0000`**
-      * - ``--ecf``, as shipped
-        - 8.348
-        - :math:`+4.465`
-        - :math:`-3.314`
+``--ecf`` does what it was built to do.  The amplitudes are now :math:`O(1)`
+residuals — :math:`-0.11` to :math:`-0.49` — instead of the :math:`+7.92` that
+absorbed the whole model→counts chain, and they are *interpretable*: a
+:math:`\log_{10}A_\mathrm{gas}` of :math:`-0.24` says the DPM gas prediction
+over-predicts the observed counts by a factor 1.7 once the real instrument
+response is folded in, which the non-ECF :math:`+7.92` could never have told
+you.
 
-   The re-measured anchor is :math:`c_{\rm gas}=7.819\times10^{-13}`,
-   :math:`c_{\rm AGN}=+4.854\times10^{-4}` — both strictly positive.  ``--ecf``
-   is a reparametrisation, so agreeing with the non-ECF :math:`\chi^2/\mathrm{dof}`
-   to 0.4 % *is* the correctness criterion, and the amplitudes now sit at 0
-   instead of absorbing the conversion chain.  (The anchor is per AGN model; the
-   ``ham`` value differs.)
+It also **fits better** where the gas profile has freedom: ``gas-shape``
+improves 4.161 → 3.304 (21 %) and ``gas-temp`` 4.388 → 3.741 (15 %).  Folding
+the per-halo :math:`\mathrm{ECF}(k_BT(M))` weight into the gas leg changes its
+*shape*, not merely its scale, and the data prefer the weighted version.
+``gas-full``, ``agn-occ`` and ``agn-lum`` are unchanged to within 4 %, as
+expected: the first is already at its noise floor and the last two do not fit
+their extra parameters at all (see :ref:`familyc-inert`).
 
-   The five ``--ecf`` presets still need re-running before this page can report
-   their results.
+.. warning::
+
+   Two caveats on the fixed ``--ecf`` fits.
+
+   * **Convergence is still poor.**  The three gas presets improve their
+     :math:`\chi^2` but report ``success=False``; only ``agn-occ`` reports
+     ``True``, and it does so having moved nothing.  The optimiser problem
+     documented above is orthogonal to the anchor and is not fixed.
+   * **``gas-shape`` rails.**  Its ``beta_gas`` sits at 0.8000, exactly the
+     upper bound, and ``gas-temp``'s at 0.7503 just inside it.  The non-ECF fits
+     sat at 0.40–0.43.  The ECF-weighted gas leg wants a steeper mass tilt than
+     the prior range allows, so that bound needs revisiting before these numbers
+     are quoted as a measurement.
+
 
 Where the outputs are stored
 ----------------------------
