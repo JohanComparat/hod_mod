@@ -1648,6 +1648,11 @@ free X-ray/gas/AGN parameters are selected with ``--free-params``:
      - 7
      - ``agn-models`` + :math:`\sigma_{L_X},\ \log_{10}A_\mathrm{kcorr},\ \log_{10}A_\mathrm{dc}`
      - HamAGNModel luminosity overrides (needs ``--agn-model ham``)
+   * - ``agn-occ``
+     - 8
+     - ``agn-models`` + :math:`f_\mathrm{inc},\ \log_{10}M_\mathrm{min},\ \sigma_{\log M},\ \alpha_\mathrm{AGN}`
+     - HODAgnModel occupation (needs ``--agn-model hod``); rebuilds the AGN
+       model per evaluation
 
 An explicit subset of registry names may also be passed, e.g.
 ``--free-params log10_A_gas beta_gas alpha_out_gas``.
@@ -1675,6 +1680,16 @@ An explicit subset of registry names may also be passed, e.g.
    * - Option
      - Class
      - Behaviour
+   * - ``hod`` — occupation-weighted (**default**)
+     - :class:`~hod_mod.agn.agn_hod.HODAgnModel`
+     - A physically predicted, occupation-weighted AGN cross-power, convolved
+       with the PSF inside ``angular_cl_gX``.  :math:`\log_{10}A_\mathrm{AGN}`
+       is a fudge factor on that amplitude rather than the whole flux scale.
+       This is what four of the five Family-C presets run.
+   * - ``xray`` — X-ray-selected
+     - :mod:`hod_mod.agn`
+     - Flux-selected variant of the occupation model, used for the
+       ``agn-models`` comparison only.
    * - ``ham`` — PSF amplitude
      - :class:`~hod_mod.agn.ham.HamAGNModel`
      - The AGN is an unresolved point source, so its angular template is the
@@ -1723,71 +1738,28 @@ written to ``results/fits/comparat2025_fixedZM15/`` (overridable per run with
 ``--out-dir``) — separate from the joint-fit ``results/fits/comparat2025/`` so
 neither clobbers the other.
 
-.. admonition:: The ``--ecf`` variant does not yet do what it was built for (v0.4, 2026-08-23)
+.. admonition:: The ``--ecf`` runs of the v0.4 campaign are invalid
    :class: warning
 
-   0.4.0 added ``--ecf``, which folds the validated eROSITA TM0 flux→count ECF
-   into the cross-power and anchors the sample-independent geometry on S1, so
-   that ``log10_A_gas`` / ``log10_A_AGN`` should come out as :math:`O(1)`
-   residuals centred on 0 instead of absorbing the whole :math:`\sim10^8`
-   model→counts chain.  The ``VTAG=v0.4`` campaign ran all five presets both
-   ways.  It does not currently deliver that:
+   ``--ecf`` (0.4.0) folds the validated eROSITA flux→count ECF into both legs
+   and anchors the residual amplitudes on S1.  In the ``VTAG=v0.4`` campaign the
+   anchor was measured by a *non-negative* solve under a weighting that drove
+   the AGN conversion negative, so it clipped to exactly zero — and since the
+   model applies it as ``A_AGN = 10**log10_A_AGN * c_agn``, every ``--ecf`` fit
+   ran with **no AGN component at all**.
 
-   .. list-table:: S1 MAP, ``VTAG=v0.4``
-      :header-rows: 1
-      :widths: 20 13 13 13 13 13
+   An earlier revision of this page attributed the identical
+   :math:`\log_{10}A_\mathrm{AGN} = -3.3139` reported by four presets to the
+   amplitude railing against a bound.  That was wrong: the range is
+   :math:`(-5, 15)` and the value is interior.  It is the optimiser's **seed**,
+   returned untouched because a zero conversion makes the direction exactly
+   flat.
 
-      * - preset
-        - :math:`\chi^2/\mathrm{dof}`
-        - + ``--ecf``
-        - :math:`\log_{10}A_{\rm gas}`
-        - + ``--ecf``
-        - :math:`\log_{10}A_{\rm AGN}` (ecf)
-      * - ``gas-shape``
-        - 4.16
-        - 8.35
-        - 0.09
-        - 4.47
-        - :math:`-3.3139`
-      * - ``gas-temp``
-        - 4.39
-        - 9.04
-        - :math:`-0.72`
-        - 4.78
-        - :math:`-3.3139`
-      * - ``gas-full``
-        - 6.02
-        - 13.38
-        - :math:`-0.69`
-        - 1.55
-        - :math:`-3.3139`
-      * - ``agn-occ``
-        - 5.72
-        - 9.86
-        - :math:`-0.36`
-        - 1.06
-        - :math:`-3.3139`
-      * - ``agn-lum``
-        - 3.85
-        - 9.45
-        - :math:`-0.36`
-        - 1.06
-        - :math:`-0.0617`
-
-   Two things are wrong.  **The ECF fit is uniformly worse** — every preset
-   roughly doubles its :math:`\chi^2/\mathrm{dof}`.  And
-   :math:`\log_{10}A_{\rm AGN}` returns **exactly** :math:`-3.3139` in four
-   independent fits, which is not a coincidence but a bound: the AGN amplitude
-   rails under ``--ecf`` for every preset using the ``hod`` AGN model.  Only
-   ``agn-lum`` (``ham``) escapes, and it is the one preset whose AGN amplitude
-   is already a residual by construction.
-
-   Meanwhile the *non-ECF* amplitudes are the ones sitting near zero
-   (:math:`-0.72` to :math:`+0.09`), because the S1 anchor is measured against
-   them.  So the anchor appears to be calibrated in the opposite sense to the
-   correction it is meant to absorb.  Until this is understood, **quote the
-   non-ECF fits**; the ``--ecf`` runs are kept in
-   ``…_ecf_<VTAG>/`` alongside them for diagnosis, not for publication.
+   The anchor is fixed (likelihood-consistent weights, unconstrained solve, and
+   a degenerate anchor now raises rather than being cached), but the five
+   ``--ecf`` presets have not yet been re-run.  Full diagnosis, the
+   goodness-of-fit tables and the cross-campaign comparison are on
+   :doc:`bgs_xray_fixedzm15_presets`.
 
 .. admonition:: Diagnostic SMF/n_gal units (h³)
    :class: note
@@ -1802,7 +1774,14 @@ neither clobbers the other.
    :math:`\bar n_g` (ratio :math:`\approx1`); only the high-mass tail
    (:math:`\log_{10}M_*\gtrsim11.5`) is over-predicted, the known iHOD limitation.
 
-.. list-table:: S1 fixed-ZM15 MAP result (``--free-params all``, :math:`w_\theta` only)
+.. note::
+
+   The table below is an older ``--free-params all`` run and carries no campaign
+   tag — it is **not** one of the ten v0.4 Family-C fits.  For campaign-tagged
+   results, the five presets side by side, and the v0.3/v0.31/v0.4 comparison,
+   see :doc:`bgs_xray_fixedzm15_presets`.
+
+.. list-table:: S1 fixed-ZM15 MAP result (``--free-params all``, :math:`w_\theta` only, pre-v0.4)
    :header-rows: 1
    :widths: 30 16 54
 

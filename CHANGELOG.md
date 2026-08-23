@@ -2,6 +2,70 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed: `--ecf` ran every fit with no AGN component
+
+- **The S1 anchor was measured by a non-negative solve that clipped to zero.**
+  `_ecf_anchor_consts` weighted the two-component least squares by a bare
+  `1/|sigma|`, omitting the `f_sys` floor the likelihood itself applies. That
+  hands the solve to the tiny-error large-`theta` bins, where the gas/AGN split
+  is degenerate, and drives the AGN coefficient **negative** (-1.37 on the
+  shipped fiducial shapes); `bounds=([0,0], [inf,inf])` then clipped it to
+  exactly `0.0`. Because the model applies it as
+  `A_AGN = 10**log10_A_AGN * c_agn`, a zero conversion deletes the AGN
+  component for *every* value of the amplitude.
+- **Size.** All five `--ecf` presets of the `VTAG=v0.4` campaign are invalid:
+  `chi2/dof` roughly doubled against their non-ECF twins (4.16 -> 8.35, 4.39 ->
+  9.04, 6.02 -> 13.38, 5.72 -> 9.86, 3.85 -> 9.45), and `agn-occ_ecf` /
+  `agn-lum_ecf` returned **bit-identical** `chi2 = 226.79257920358373` despite
+  different AGN models — both had collapsed to the same gas-only fit.
+- The `log10_A_AGN = -3.3139` those runs report is **not a bound** (the range is
+  `(-5, 15)`) and not a coincidence: with a zero conversion the direction is
+  exactly flat, so L-BFGS-B returns its seed — computed before any
+  preset-specific parameter exists, hence identical across presets. The
+  2026-08-23 documentation attributing it to railing was wrong and is corrected.
+- **Fix:** the anchor now uses the likelihood's own error definition
+  (jackknife (+) `f_sys` floor, with `f_sys` forwarded from `log_likelihood`) and an
+  unconstrained solve. On the same fiducial shapes it returns
+  `c_gas = 7.81e-13`, `c_agn = +0.87` — both strictly positive — and a fiducial
+  `A = 1` reproduces S1 to median model/data = 0.9986, the acceptance test the
+  feature's own commit defined.
+- **Guard:** `_validate_ecf_anchor` refuses to cache or read a degenerate
+  anchor. A silently-zero conversion is invisible downstream — it reports as a
+  converged fit at the seed — which is exactly why this shipped. The cache also
+  carries a `scheme` field now, so an anchor written by the old measurement is
+  re-measured rather than reused.
+- **Seed:** the MAP starting point is computed in residual units
+  (`log10(A_lin / c_gas)`). It was in absolute units, so under `--ecf` it began
+  ~12 decades off and was clipped by the `1e-3`/`1e-5` guards to a meaningless
+  -3 / -5.
+- **Figures:** `plot_bestfit_hmf_compare` and `plot_all_bestfit` never applied
+  the anchor, so every `--ecf` figure they drew was wrong by the full ~1e12
+  conversion while `plot_bestfit` and the likelihood applied it.
+- **Tests:** `tests/test_ecf_anchor.py` — nothing covered `--ecf` at all
+  (the ECF *tables* were tested, their *use* was not). Asserts the guard fires,
+  that a zero conversion makes the amplitude flat while a positive one does not,
+  and reproduces the clip-to-zero on a synthetic problem.
+- The write-only `_Infrastructure._ecf_fixed` attribute is removed, and the
+  `ham` branch documents why its PSF template is deliberately *not* ECF-folded
+  (a normalised shape, so the constant is degenerate with the amplitude and the
+  anchor absorbs it).
+
+### Documentation
+
+- **New `docs/bgs_xray_fixedzm15_presets.rst`** — the Family-C results page.
+  Goodness of fit for all ten v0.4 runs, the v0.3/v0.31/v0.4 comparison (Family C
+  moves < 3 % across both the Hankel fix and the P(k) swap), the `--ecf`
+  diagnosis, and where the outputs live. Records two things the fits themselves
+  say and no page did: L-BFGS-B reports `success=False` for **6 of 10** runs,
+  and most nominally-free parameters never move — `agn-occ` freezes 6 of 8 at
+  their seed and `agn-lum` 5 of 7, so both fit two amplitudes and nothing else.
+- `hod_zumandelbaum2015.rst`: the preset table was missing `agn-occ` entirely
+  and the `--agn-model` table omitted `hod` — the default, used by four of the
+  five Family-C presets — and `xray`. The stale untagged `--free-params all`
+  result table is now marked pre-v0.4.
+
 ## [0.5.0] — 2026-08-23
 
 Parity work against CCL (Chisari et al. 2019) and JAX-COSMO (Campagne et al.

@@ -77,6 +77,7 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    bgs_comparat2025_mstar10_joint_fit
    bgs_zm15_joint_mcmc
    bgs_full_joint
+   bgs_xray_fixedzm15_presets
    bgs_m10_nonlinear_models
    bgs_m10_nl_allmodels
    timing_joint_model

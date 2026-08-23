@@ -545,7 +545,6 @@ class _Infrastructure:
         self.cross = HaloModelCrossSpectra(
             self.fhmp, density_profile=self.dp, agn_model=self.agn
         )
-        self._ecf_fixed = None
         print(f"  done in {time.time() - t0:.1f}s", flush=True)
 
     def enable_ecf(self, sample: str):
@@ -569,7 +568,6 @@ class _Infrastructure:
 
         self.cross._ecf_gas_table = ecf_gas_of_mass
         self.cross._ecf_agn = ecf_agn
-        self._ecf_fixed = ecf_fixed
         return ecf_fixed
 
     def use_agn_for(self, label: str) -> None:
@@ -732,42 +730,85 @@ _USE_ECF = False
 _ECF_ANCHOR = None       # {"c_gas_S1", "c_agn_S1", "srx_S1", "agn_model"}
 
 
-def _ecf_anchor_consts(label: str, infra) -> tuple:
+# Weighting scheme used to measure the anchor.  Bumped whenever the measurement
+# changes, and stored in the cache JSON: an anchor written by an older scheme is
+# silently WRONG rather than merely stale, so it is re-measured instead of read.
+_ECF_ANCHOR_SCHEME = "wls-fsys-unconstrained-v2"
+
+
+def _validate_ecf_anchor(anc: dict, where: str) -> None:
+    """Reject a degenerate anchor instead of letting it annihilate a component.
+
+    ``A_AGN = 10**log10_A_AGN * c_agn`` (see log_likelihood), so a zero
+    conversion removes that component from the model for EVERY value of its
+    amplitude and turns the parameter into an exactly flat direction — which
+    reports back as the untouched optimiser seed rather than as an error.  That
+    is precisely how the v0.4 campaign shipped five --ecf fits with no AGN leg
+    at all (c_agn_S1 = 0.0, from a non-negative solve clipped at its bound).
+    """
+    bad = [k for k in ("c_gas_S1", "c_agn_S1")
+           if not np.isfinite(anc.get(k, np.nan)) or abs(anc.get(k, 0.0)) <= 0.0]
+    if bad:
+        raise RuntimeError(
+            f"[ecf] degenerate anchor from {where}: {', '.join(bad)} is zero or "
+            f"non-finite ({ {k: anc.get(k) for k in bad} }).  That would delete "
+            f"the corresponding component from every --ecf fit.  Anchor: {anc}"
+        )
+
+
+def _ecf_anchor_consts(label: str, infra, f_sys: float = 0.05) -> tuple:
     """Per-sample (c_gas, c_amp_agn) residual-amplitude conversions under --ecf.
 
-    Measured ONCE on S1: shapes at the fiducial HOD/β with the ECF enabled,
-    non-negative lsq of (A_gas, A_AGN) against the S1 w_θ in the fitted range —
-    those solutions are DEFINED as the conversions, so the free amplitudes sit
-    at 1 (log10 = 0) on S1 at the fiducial.  Other samples scale ∝ 1/S^R_X
-    (background surface brightness; cooling/ECF/geometry are sample-independent).
-    Cached to ``_RESULTS_DIR/ecf_anchor_<agn_model>.json``.
+    Measured ONCE on S1: shapes at the fiducial HOD/β with the ECF enabled, a
+    weighted least-squares solve for (A_gas, A_AGN) against the S1 w_θ in the
+    fitted range — those solutions are DEFINED as the conversions, so the free
+    amplitudes sit at 1 (log10 = 0) on S1 at the fiducial.  Other samples scale
+    ∝ 1/S^R_X (background surface brightness; cooling/ECF/geometry are
+    sample-independent).  Cached to ``_RESULTS_DIR/ecf_anchor_<agn_model>.json``.
+
+    The solve deliberately uses **the likelihood's own error definition**
+    (jackknife ⊕ f_sys floor, as in log_likelihood) and is **unconstrained**.
+    Weighting by a bare 1/|err| instead hands the fit to the tiny-error large-θ
+    bins, where the gas/AGN split is degenerate, and drives the AGN coefficient
+    negative; a non-negativity box then clipped it to exactly zero.
     """
     global _ECF_ANCHOR
     if not _USE_ECF:
         return 1.0, 1.0
     if _ECF_ANCHOR is None:
         cache = _RESULTS_DIR / f"ecf_anchor_{infra.agn_model_choice}.json"
+        cached = None
         if cache.exists():
-            _ECF_ANCHOR = json.loads(cache.read_text())
+            cached = json.loads(cache.read_text())
+            if cached.get("scheme") != _ECF_ANCHOR_SCHEME:
+                print(f"[ecf] ignoring {cache.name}: scheme "
+                      f"{cached.get('scheme')!r} != {_ECF_ANCHOR_SCHEME!r} "
+                      f"— re-measuring", flush=True)
+                cached = None
+        if cached is not None:
+            _validate_ecf_anchor(cached, str(cache))
+            _ECF_ANCHOR = cached
         else:
-            from scipy.optimize import lsq_linear
-            print("[ecf] measuring the S1 anchor (fiducial shapes + lsq) ...",
+            print("[ecf] measuring the S1 anchor (fiducial shapes + wls) ...",
                   flush=True)
             shapes = _predict_shape("S1", infra, _hod_params("S1"),
                                     beta_gas=_BETA_GAS_DEFAULT,
                                     beta_pressure=_BETA_PRESSURE_DEFAULT)
             d = load_data("S1")
             m = (d["theta_arcsec"] >= 8.0) & (d["theta_arcsec"] <= 300.0)
-            w = 1.0 / np.maximum(np.abs(d["wtheta_err"][m]), 1e-30)
-            A = np.column_stack([shapes["gas"][m] * w, shapes["agn"][m] * w])
-            sol = lsq_linear(A, d["wtheta"][m] * w,
-                             bounds=([0.0, 0.0], [np.inf, np.inf]), method="bvls")
-            _ECF_ANCHOR = dict(c_gas_S1=float(sol.x[0]), c_agn_S1=float(sol.x[1]),
+            wd  = d["wtheta"][m]
+            err = np.sqrt(d["wtheta_err"][m] ** 2 + (f_sys * np.abs(wd)) ** 2)
+            w   = 1.0 / np.maximum(err, 1e-30)
+            A   = np.column_stack([shapes["gas"][m] * w, shapes["agn"][m] * w])
+            sol, *_ = np.linalg.lstsq(A, wd * w, rcond=None)
+            _ECF_ANCHOR = dict(c_gas_S1=float(sol[0]), c_agn_S1=float(sol[1]),
                                srx_S1=float(load_data("S1")["beckground"][0]),
-                               agn_model=infra.agn_model_choice)
+                               agn_model=infra.agn_model_choice,
+                               scheme=_ECF_ANCHOR_SCHEME, f_sys=float(f_sys))
+            _validate_ecf_anchor(_ECF_ANCHOR, "the S1 measurement")
             _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
             cache.write_text(json.dumps(_ECF_ANCHOR, indent=2))
-            print(f"[ecf] S1 anchor: c_gas={sol.x[0]:.4e} c_agn={sol.x[1]:.4e} "
+            print(f"[ecf] S1 anchor: c_gas={sol[0]:.4e} c_agn={sol[1]:.4e} "
                   f"-> {cache.name}", flush=True)
     f = _ECF_ANCHOR["srx_S1"] / float(load_data(label)["beckground"][0])
     return _ECF_ANCHOR["c_gas_S1"] * f, _ECF_ANCHOR["c_agn_S1"] * f
@@ -980,6 +1021,14 @@ def _predict_shape(
         agn_shape = _hankel(np.asarray(cl_components["agn"], dtype=float), theta)
     else:
         # Legacy: AGN as a pure free-amplitude King PSF point source.
+        #
+        # Deliberately NOT ECF-folded under --ecf, unlike the "hod"/"duty_cycle"
+        # branch (cross_spectra multiplies agn_conv by _ecf_agn there).  This
+        # template is a normalised SHAPE, so ecf_agn would be a pure constant on
+        # it and therefore exactly degenerate with log10_A_AGN — and the S1
+        # anchor, measured against this same template, already absorbs it.  The
+        # gas leg is different: its ECF is a per-halo ECF(kT(M)) weight, so it
+        # changes the shape and must be folded.
         agn_shape = _psf_template(data_d["theta_arcsec"])
     shapes = {
         "gas":        _hankel(np.asarray(cl_components["gas"],        dtype=float), theta),
@@ -1148,7 +1197,9 @@ def log_likelihood(
         )
 
     shapes = shape_cache[cache_key]
-    c_gas, c_agn = _ecf_anchor_consts(label, infra)   # (1, 1) unless --ecf
+    # f_sys forwarded so the anchor is measured under the same error definition
+    # this likelihood uses; recorded in the anchor cache for provenance.
+    c_gas, c_agn = _ecf_anchor_consts(label, infra, f_sys=f_sys)  # (1,1) unless --ecf
     A_gas  = 10.0 ** log10_A_gas * c_gas
     A_AGN  = 10.0 ** log10_A_AGN * c_agn
     wm_all = A_gas * shapes["gas"] + A_AGN * shapes["agn"]
@@ -1515,8 +1566,13 @@ def run_map(
     if not np.isfinite(A_lin)     or A_lin     <= 0: A_lin     = 1.0
     if not np.isfinite(A_agn_lin) or A_agn_lin <= 0: A_agn_lin = 1.0
 
-    log10_A_gas0 = float(np.log10(max(A_lin,     1e-3)))
-    log10_A_AGN0 = float(np.log10(max(A_agn_lin, 1e-5)))
+    # The linear solve above is in ABSOLUTE model units, but the fitted
+    # amplitudes are residuals on the --ecf anchor (A = 10**log10_A * c).  Seed
+    # in the same units the optimiser works in, or --ecf starts ~12 decades off
+    # and the 1e-3/1e-5 guards below clip it to a meaningless -3 / -5.
+    _c_gas0, _c_agn0 = _ecf_anchor_consts(label, infra, f_sys=f_sys)
+    log10_A_gas0 = float(np.log10(max(A_lin     / _c_gas0, 1e-3)))
+    log10_A_AGN0 = float(np.log10(max(A_agn_lin / _c_agn0, 1e-5)))
 
     if _FIT_CFG is not None:
         # Seed every registry param at its default; override the two amplitudes
@@ -2099,8 +2155,11 @@ def plot_bestfit_hmf_compare(
                      sigma_lnmstar=p["sigma_lnmstar"],
                      lg_m1h=p["lg_m1h"], alpha_sat=p["alpha_sat"],
                      fc=p["fc"])
-    A_gas = 10.0 ** p["log10_A_gas"]
-    A_AGN = 10.0 ** p["log10_A_AGN"]
+    # Apply the --ecf anchor exactly as log_likelihood and plot_bestfit do;
+    # without it every --ecf figure drawn here is off by the ~1e12 conversion.
+    _c_gas, _c_agn = _ecf_anchor_consts(label, next(iter(infra_by_hmf.values())))
+    A_gas = 10.0 ** p["log10_A_gas"] * _c_gas
+    A_AGN = 10.0 ** p["log10_A_AGN"] * _c_agn
     z_eff = s["zmean"]
 
     names  = list(infra_by_hmf)
@@ -2554,8 +2613,11 @@ def plot_all_bestfit(
             )
 
         shapes   = cache[ck]
-        wm_gas   = 10.0 ** p["log10_A_gas"] * shapes["gas"]
-        wm_agn   = 10.0 ** p["log10_A_AGN"] * shapes["agn"]
+        # Same --ecf anchor as the likelihood; omitting it made this summary
+        # grid disagree with S1_bestfit.pdf by the full conversion factor.
+        _c_gas, _c_agn = _ecf_anchor_consts(label, infra)
+        wm_gas   = 10.0 ** p["log10_A_gas"] * _c_gas * shapes["gas"]
+        wm_agn   = 10.0 ** p["log10_A_AGN"] * _c_agn * shapes["agn"]
         wmodel   = wm_gas + wm_agn
         theta_as = data["theta_arcsec"]
 
