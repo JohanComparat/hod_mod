@@ -1,28 +1,118 @@
-mamba activate hod_mod
-pip install cosmopower-jax          # or: mamba env update -f environment.yml
-python -c "from hod_mod.core.power_spectrum import default_pk_linear; print(type(default_pk_linear()).__name__)"
-# expect: CosmoPowerJaxPkLinear
+In a new git repo (private)
+hod_mod_technical_paper
+Do a complete write-up of the equations of the models and their parameters in a latex doc.
+This would become a technical paper to be submitted to the OpenJournal of Astrophysics.
+https://astro.theoj.org/
+
+
+
+
+=============================================================================
+V0.4 CAMPAIGN RUNBOOK   (supersedes the v0.3/v0.31 block that was here)
+=============================================================================
+v0.3 and v0.31 are CLOSED.  Four chains never finished and v0.31 never produced
+fits/benchmark; none will be resumed -- two of the four are full_joint, whose
+gas sector 0.4.0 withdraws regardless of step count.  See docs/oarsub_campaign.rst
+("Closed campaigns: what v0.3 and v0.31 never produced").
+
+Code ref: v0.5.0 on main.  Campaign tag: VTAG=v0.4.  These are deliberately
+different numbers -- VTAG names the RESULTS TREE and the physics generation
+(0.4.0's gas prior/seed fix), while v0.5.0 is the package release the jobs are
+built from.  Same distinction docs/oarsub_campaign.rst already draws for v0.3.
+Nothing in 0.5.0 moves a campaign number: its behaviour change reaches only
+sheth99/bhattacharya11 and every job line uses tinker08.
+(v0.4.0 is NOT usable -- its release commit ships the changelog for two fixes
+but the code for only one.  v0.4.1 is that repair; v0.5.0 contains it.)
+
+--- 1. on dahu: get the code -----------------------------------------------
+cd ~/software/hod_mod
+git fetch origin --tags && git checkout v0.5.0
+git rev-parse --short HEAD          # run_job.sh stamps this into every job log
+ls ~/data/hod_mod_results/bgs_zm15_joint_wp_ngal   # ZM15 reference must exist,
+                                                   # else campaign_require_zm15_json aborts
+
+--- 2. from the workstation: stage the inputs ------------------------------
+./oarsub/rsync_data_to_dahu.sh
+
+--- 3. smoke first (7 jobs, 30-min devel partition) ------------------------
+VTAG=v0.4 ./oarsub/submit_campaign.sh your-oar-project all --devel
+# every family honours --devel now (the 3 standalone ones did not before, so
+# `all --devel` used to send 12 multi-hour jobs to the real queue).
+# In the log the header line must show:
+#   vtag=v0.4  results=/home/your-cluster-login/data/hod_mod_results_v0.4  commit=<sha>
+#   pk_backend=CosmoPowerJaxPkLinear
+# and the "cmd>" line a POPULATED --data-dir with a /home/your-cluster-login-rooted
+# --out-dir (not "/bgs_...").
+
+--- 4. full submission: 16 oarsub calls, 52 job lines ----------------------
+export VTAG=v0.4
+./oarsub/submit_campaign.sh your-oar-project all      # or family by family:
+#   benchmarks_map      18 lines   8c /  2 h
+#   benchmarks_mcmc     13 lines   8c /  8 h   besteffort (was losing chains)
+#   production           3 lines  16c / 24 h   besteffort
+#   forecasts            6 lines  16c / 24 h
+#   comparat2025         5 jobs   16c / 4-18 h  NOT resumable
+#   comparat2025_ecf     5 jobs   16c / 4-18 h  NOT resumable   (new in 0.4.0)
+#   full_joint           2 jobs   16c / 6 h + 48 h
+oarstat -u $USER
+
+# allparams is the tight one: v0.3/v0.31 ran at 74-98 steps/h, so 4000 steps
+# needs 41-54 h against a 48 h wall.  Expect a besteffort restart; the resume
+# goes through mcmc_resume.revive_ensemble, and post-revive samples are a FRESH
+# burn-in, so the discard must cover the restart.
+
+--- 5. pull, audit, collect ------------------------------------------------
+./oarsub/pull_results.sh --go                    # defaults to v0.4 now
+SINCE=<submission-date> VTAG=v0.4 HOD_MOD_RESULTS=~/data/hod_mod_results_v0.4 \
+    ./oarsub/campaign_status.sh
+FORCE_VTAG_SWITCH=1 VTAG=v0.4 HOD_MOD_RESULTS=~/data/hod_mod_results_v0.4 \
+    PY=/home/comparat/mamba/envs/hod_mod/bin/python ./oarsub/collect_and_plot.sh
+# FORCE_VTAG_SWITCH needed once: the stamp still reads v0.3.
+# Leave REFRESH_SENSITIVITY off -- fisher_study.npz param_names no longer match
+# forward_jax.PARAM_NAMES, so the figures would be silently recomputed instead
+# of read from the campaign product.
+
+--- 6. acceptance: the number that says the gas fix took -------------------
+# At the v0.4 bgs_full_joint_fixedzm15 posterior median, beta_P - beta_n should
+# sit near the prior centre +0.6, NOT at -0.41 (the v0.3 value), and log10_ne03
+# must not be pinned to its -3.0 bound (v0.3 MAPs: -3.0002, -3.0234, -3.0872).
+
+--- 7. docs left by hand (collect_and_plot only refreshes PNGs) ------------
+# - rewrite the withdrawn gas-sector section of docs/bgs_full_joint.rst
+# - lift the "Pending v0.3 re-run" banners v0.4 resolves:
+#     benchmark_map_mcmc.rst, benchmark_zumandelbaum2015_multisample.rst,
+#     bgs_comparat2025_mstar10_joint_fit.rst
+#   NOTE multisample's driver run_zm15_joint_all.py is in NO param file --
+#   either add it to a param file or keep that banner.
+# - refresh chi2/dof, best-fit params, the AUM agreement line
+# - still unwired: fit_xray_bands_dpm_sz.sh belongs to no family, and its output
+#   fits/xray_bands_dpm_sz_<VTAG> is neither audited nor plotted.
 
 
 
 
 
+# 1. on dahu — get the code
+cd ~/software/hod_mod
+git fetch origin && git checkout feature/dpm-native-xray-sz && git pull
+# 2. sanity: the SZ stack must be visible, or the job silently becomes X-ray-only
+ls ~/software/sum_stat/data/BGS_SZ/ | wc -l        # expect 9
 
-#
-# edit the config block in oarsub/run_job.sh for your account, then:
-./oarsub/submit_campaign.sh your-oar-project benchmarks_map --devel   # 30-min smoke first
-./oarsub/submit_campaign.sh your-oar-project all
+# 3. SMOKE FIRST (devel queue, <=30 min) — one sample, catches env/data problems
+oarsub -t devel -S "./oarsub/fit_xray_bands_dpm_sz.sh v0.31 S1"
 
-rsync -avhz --progress \
-  'your-cluster-login@dahu:/home/your-cluster-login/data/hod_mod_results/{benchmarks,fits,bgs_*_v0.3,tier2_forecast,tier3_forecast,tier4_forecast,stage4_forecast,sensitivity_fisher}' \
-  /home/comparat/data/hod_mod_results/
+# 4. full run (7 samples, MCMC, 24 h)
+oarsub --project your-oar-project -S "./oarsub/fit_xray_bands_dpm_sz.sh v0.31"
 
-# or 
-oarsub/pull_results.sh
+# 5. monitor
+oarstat -u $USER
+tail -f oarsub/logs/<jobid>.xband_dpm_sz.out
 
-HOD_MOD_RESULTS=/home/comparat/data/hod_mod_results PY=/home/comparat/mamba/envs/hod_mod/bin/python \
-  ./oarsub/collect_and_plot.sh
-git -C /home/comparat/software/hod_mod status docs/_images   # review the figure diff
+# 6. pull results back (from your laptop)
+./oarsub/pull_results.sh
+
+
+
 
 
 
@@ -48,38 +138,6 @@ JAX_PLATFORMS=cpu python -m hod_mod.scripts.fitting.plot_bgs_full_joint --docs
 Since HOD_MOD_RESULTS points at ~/data/hod_mod_results, the plotter finds the run with no --out-dir needed. --docs overwrites the three docs/_images/bgs_full_joint_fixedzm15__*.png with your production posterior (replacing my representative local-chain figures). It'll also print the MAP/median χ²/dof — worth checking it's near the ~5.6 I saw. Then commit the three regenerated PNGs.
 
 If the all-params (Step 3) job has also finished, pull and plot it the same way with bgs_full_joint_allparams/ and --free-zm15.
-
-
-
-
-
-Update Todos
-
-Fold 90-param production numbers into missing_physics_implementation.rst Results
-
-Phase 0: log10m_min kwarg + slice freeze + figure hard-codes; tier-2 bit-identity gate
-
-Phase A: +12 params & _pk_tracer_field refactor
-
-Phase B: radio/IR fields + 7 map observables + cl_yy/cl_HIHI/ncl/ds_agn
-
-Phase C: band LFs + tests/test_forecast_tier3.py (22 tests green)
-
-Phase D: noise.py surveys + two-tier completeness + tier2 hooks + Tier3Forecast (smoke green)
-TODO:
-Phase E: run_tier3_forecast.py driver + assembly tests
-
-Phase F: --jobs multiprocessing (parallel == serial gate)
-
-Phase G: docs (tier3 section, verified refs) + CHANGELOG; commit
-
-Phase H: launch tier-3 production run --jobs; report decomposition
-
-
-JAX_PLATFORMS=cpu HOD_MOD_RESULTS=/home/comparat/data/hod_mod_results \
-  python -m hod_mod.scripts.forecasts.run_sensitivity_study --add-planck-prior
-
-
 
 
 # shared env prefix (skip if ~/.bashrc already exports these)

@@ -164,10 +164,18 @@ Pages refreshed from the ``VTAG=v0.3`` campaign carry a provenance note pointing
 here.  Three caveats, stated once:
 
 * **The package version is not the campaign version.**  ``conf.py`` takes
-  ``release`` from ``pyproject.toml`` (0.3.1), whose *default* linear
+  ``release`` from ``pyproject.toml``, whose *default* linear
   :math:`P(k)` is the CosmoPower-JAX emulator.  The v0.3 figures were produced
   with ``HOD_MOD_PK_BACKEND=camb``, pinned inside the job from ``VTAG``.  0.3.1
   in the sidebar and CAMB in the figures is deliberate, not a mismatch.
+
+  The same holds for ``v0.4``, which runs from the **0.5.0** release.  ``VTAG``
+  names the results tree and the physics generation — here 0.4.0's full-joint
+  gas prior/seed correction — not the package version that happens to be
+  current when the jobs are submitted.  0.5.0 adds CCL-parity work on top; none
+  of it moves a campaign number, because its one behaviour change reaches only
+  the ``sheth99`` / ``bhattacharya11`` bias pairings and every job line runs
+  ``tinker08``.
 
 * **The pin reaches Families A–C only.**  Family-D forecasts
   (:doc:`sensitivity_fisher`, :doc:`stage4_forecast`, :doc:`tier2_forecast`,
