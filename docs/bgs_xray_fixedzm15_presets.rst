@@ -256,14 +256,65 @@ could only ever have moved downward.
 The two gas normalisations that freeze (``log10_P_03``, ``log10_ne_03``) are
 exactly the parameters the ZM15 page's *Cost and identifiability* note predicts
 to be degenerate flat directions in a :math:`w(\theta)`-only fit — a normalisation
-is not separable from the amplitude that multiplies it.  The AGN-sector case is
-less benign and is not yet explained; a likely contributor is that the
-occupation parameters enter only through a rebuilt AGN model whose response is
-below L-BFGS-B's ``eps=1e-3`` finite-difference step.
+is not separable from the amplitude that multiplies it.
+
+The two AGN presets freeze for **two different reasons**, both now measured.
+
+``agn-lum`` — the parameters have no effect at all
+   Perturbing ``scatter_lx``, ``log10_A_kcorr`` and ``log10_A_dc`` across their
+   entire allowed ranges changes the predicted :math:`w(\theta)` by
+   :math:`\max|\Delta| = 0` — exactly zero, in both the gas and the AGN leg.
+   Under ``--agn-model ham`` the AGN template is
+   :func:`_psf_template`, a **normalised** King PSF: ``_predict_shape`` does
+   compute the AGN cross-power that these three parameters feed, and then
+   discards it.  Nor could it be otherwise for a point source — a luminosity
+   parameter can only rescale a normalised template, and that scaling is
+   already free as :math:`\log_{10}A_\mathrm{AGN}`.  The preset is degenerate
+   by construction, not merely unconstrained by the data.
+
+``agn-occ`` — the parameters work, the optimiser does not
+   The opposite case.  Perturbing the occupation parameters moves the AGN
+   template substantially: ``f_inc`` 0.01 → 0.05 changes it by 244 %,
+   ``sigma_logm_agn`` 0.8 → 1.2 by 66 %, ``log10mmin_agn`` 12.5 → 13.0 by 30 %
+   (``alpha_agn`` is weak, 0.6 %).  The likelihood is not flat.  L-BFGS-B simply
+   fails: it reports ``ABNORMAL`` termination after **189 function evaluations
+   with zero successful iterations**, leaving every parameter — amplitudes
+   included — at its starting value.  Rescaling the parameters to the unit cube
+   does not help, so the cause is not the shared finite-difference step.
+
+Both presets terminate the same way — ``ABNORMAL`` at ``nit=0``, with
+``nfev=189`` (``agn-occ``) and ``nfev=168`` (``agn-lum``) — which is what a
+line search does when the Hessian is singular or near-singular.  For
+``agn-lum`` the cause is explicit: three exactly-flat directions.  For
+``agn-occ`` it is near-degeneracy rather than exact — ``f_inc`` is *almost* a
+pure rescaling of the AGN template (the ratio to the fiducial varies only
+9–44 % across :math:`\theta`), so it is close to, but not identical with,
+:math:`\log_{10}A_\mathrm{AGN}`.
+
+Two remedies were tried and **rejected on measurement**, recorded here so they
+are not retried blind:
+
+* *Rescaling the parameters to the unit cube* (the textbook fix for a shared
+  finite-difference step).  It left ``agn-occ`` bit-identical — still
+  ``ABNORMAL``, ``nit=0``, ``nfev=189`` — and *regressed* ``gas-shape`` from
+  4.161/converged to 4.86/``ABNORMAL``.  Reverted.
+* *Powell* (derivative-free, so indifferent to conditioning).  It did not
+  converge within a 10-minute budget on the cheapest AGN preset, against 2.5
+  minutes for L-BFGS-B, so it could not be validated here.
 
 **Read this as: ``agn-occ`` and ``agn-lum`` currently add no constraint over the
 4-parameter ``all`` preset.**  Their :math:`\chi^2` differences reflect the AGN
-*model* (``hod`` vs ``ham``), not the extra freedom.
+*model* (``hod`` vs ``ham``), not the extra freedom.  ``agn-lum`` cannot be
+repaired by a better optimiser at all — its parameters are degenerate by
+construction; ``agn-occ`` plausibly can, but needs a reparametrisation that
+separates ``f_inc`` from the AGN amplitude, which is a design change rather
+than a tuning one.
+
+The run now says so out loud: ``run_map`` reports the optimiser's message,
+iteration and evaluation counts, and any objective failures, and records them in
+``S1_map.json`` as ``opt_message`` / ``opt_nit`` / ``opt_nfev`` /
+``obj_failures``.  Selecting a preset whose parameters cannot act under the
+chosen ``--agn-model`` prints a warning naming them.
 
 The ``--ecf`` variant
 ---------------------

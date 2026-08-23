@@ -52,6 +52,56 @@ All notable changes to this project will be documented in this file.
   (a normalised shape, so the constant is degenerate with the amplitude and the
   anchor absorbs it).
 
+### Fixed: every 16-core OAR job threaded to 8
+
+- **`OAR_RES_NB_CORES` does not exist on this OAR.** All eight job scripts set
+  `NCORES="${OAR_RES_NB_CORES:-8}"`, so the fallback always won: **519 of 519
+  job logs ever written report `cores=8`**, while OAR really allocated 16
+  (`actual_resources = /network_address=1/core=16`). Every production, forecast,
+  Family-C and full-joint job in v0.3, v0.31 and v0.4 ran its BLAS/XLA threads on
+  half its allocation.
+- Probe job 428025 settles it: the environment carries `OAR_NODEFILE`
+  (one line per allocated core), `OAR_CPUSET` and `OAR_JOB_ID`, but no
+  `OAR_RES_NB_CORES`. `nproc` also agrees, because OAR confines jobs with
+  cpusets (`Cpus_allowed_list: 12,14,16,18` for a 4-core job).
+- Detection is now `OAR_RES_NB_CORES` -> `wc -l < $OAR_NODEFILE` -> `nproc` -> 8.
+
+### Diagnosability: MAP fits that silently did nothing
+
+- **`run_map` now reports what the optimiser actually did** — `opt_message`,
+  `opt_nit`, `opt_nfev` in `S1_map.json`, and a warning on stdout when it did not
+  converge. Six of the ten v0.4 Family-C runs report `success=False`, and the
+  reason was nowhere to be found.
+- **The objective's `except Exception: return 1e30` swallowed its own cause.**
+  It still returns the wall (one bad probe must not kill a fit) but now counts
+  failures, keeps the first, and reports both as `obj_failures` /
+  `obj_nonfinite` / `obj_first_failure`.
+- What this immediately exposed: `agn-occ` terminates `ABNORMAL` after
+  **189 evaluations with zero iterations** — no objective failures at all — so
+  every parameter, amplitudes included, is returned at its seed. `agn-lum` does
+  the same at `nfev=168`.
+
+### Family-C presets that cannot constrain anything
+
+- **`agn-lum`'s three parameters have no effect whatsoever.** Perturbing
+  `scatter_lx`, `log10_A_kcorr` and `log10_A_dc` over their full ranges moves the
+  prediction by exactly `0`. Under `--agn-model ham` the AGN template is a
+  *normalised* King PSF, so `_predict_shape` computes the cross-power they feed
+  and discards it — and no luminosity parameter could act on a normalised
+  point-source template anyway, that scaling being already free as
+  `log10_A_AGN`. Selecting such a preset now prints a warning naming the dead
+  parameters instead of burning hours on them.
+- **`agn-occ`'s parameters do act** — `f_inc` 0.01 -> 0.05 moves the AGN template
+  by 244 %, `sigma_logm_agn` by 66 %, `log10mmin_agn` by 30 % — but `f_inc` is
+  *nearly* a pure rescaling (ratio varying only 9-44 % across theta), i.e. nearly
+  degenerate with `log10_A_AGN`. That near-singularity, not a flat likelihood, is
+  what defeats the line search.
+- Two remedies were tried and rejected on measurement, recorded so they are not
+  retried blind: **unit-cube rescaling** left `agn-occ` bit-identical and
+  *regressed* `gas-shape` from 4.161/converged to 4.86/`ABNORMAL`; **Powell** did
+  not converge within 10 minutes against 2.5 for L-BFGS-B. `agn-occ` needs a
+  reparametrisation separating `f_inc` from the AGN amplitude.
+
 ### Documentation
 
 - **New `docs/bgs_xray_fixedzm15_presets.rst`** — the Family-C results page.

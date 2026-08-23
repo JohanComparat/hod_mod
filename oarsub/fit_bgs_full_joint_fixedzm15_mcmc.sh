@@ -48,7 +48,16 @@ if [ $? -eq 0 ]; then eval "$__mamba_setup"; else alias mamba="$MAMBA_EXE"; fi
 unset __mamba_setup
 mamba activate "${CONDA_ENV}"
 
-NCORES="${OAR_RES_NB_CORES:-8}"
+# Cores actually allocated.  OAR_RES_NB_CORES does NOT exist on this OAR (probe
+# job 428025: the env carries OAR_NODEFILE/OAR_CPUSET but no such variable), so
+# the old `${OAR_RES_NB_CORES:-8}` always fell through to 8 — every 16-core job
+# ever run threaded to half its allocation.  OAR_NODEFILE has one line per
+# allocated core, and OAR uses cpusets so nproc agrees; keep both, plus the 8.
+NCORES="${OAR_RES_NB_CORES:-}"
+if [ -z "${NCORES}" ] && [ -r "${OAR_NODEFILE:-/nonexistent}" ]; then
+    NCORES="$(wc -l < "${OAR_NODEFILE}")"
+fi
+NCORES="${NCORES:-$(nproc 2>/dev/null || echo 8)}"
 export OMP_NUM_THREADS="${NCORES}" OPENBLAS_NUM_THREADS="${NCORES}" MKL_NUM_THREADS="${NCORES}"
 export XLA_FLAGS="--xla_cpu_multi_thread_eigen=true"
 export JAX_PLATFORMS=cpu

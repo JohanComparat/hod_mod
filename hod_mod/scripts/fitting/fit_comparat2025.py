@@ -1596,16 +1596,36 @@ def run_map(
         bounds      = list(_PARAM_BOUNDS)
         param_names = list(_PARAM_NAMES)
 
+    # A bare `except: return 1e30` turns any failure into a flat wall, on which
+    # L-BFGS-B terminates at x0 and reports success=False with no reason — the
+    # whole objective looks constant.  Six of the ten v0.4 Family-C runs ended
+    # that way.  Keep the wall (a single bad probe must not kill the fit) but
+    # count it and remember the first cause, and surface both in the result.
+    _obj_fail = {"n": 0, "first": None, "n_nonfinite": 0}
+
     def neg_log_prob(p):
         try:
             v = log_prob(p, label, infra, data_wt, t_mask, data_wp, shape_cache, f_sys=f_sys)
-            return -v if np.isfinite(v) else 1e30
-        except Exception:
+            if not np.isfinite(v):
+                _obj_fail["n_nonfinite"] += 1
+                if _obj_fail["first"] is None:
+                    _obj_fail["first"] = f"non-finite log_prob at {np.round(p, 6).tolist()}"
+                return 1e30
+            return -v
+        except Exception as exc:                        # noqa: BLE001 - reported below
+            _obj_fail["n"] += 1
+            if _obj_fail["first"] is None:
+                _obj_fail["first"] = f"{type(exc).__name__}: {exc}"
             return 1e30
 
     print(f"  [{label}] MAP: x0={np.round(x0, 3)}  "
           f"n_pts_wtheta={n_pts_wt}  n_pts_smf={n_pts_smf}  n_pts_wp={n_pts_wp}", flush=True)
 
+    # NB: L-BFGS-B applies ONE finite-difference `eps` to every parameter, which
+    # spans f_inc ~ 0.01 to log10_A_AGN ~ 8.4 here.  Rescaling to the unit cube
+    # is the textbook remedy and was tried: it did NOT fix agn-occ (identical
+    # ABNORMAL, nit=0, nfev=189) and it REGRESSED gas-shape, 4.161/converged ->
+    # 4.86/ABNORMAL.  Left unscaled deliberately; see docs/bgs_xray_fixedzm15_presets.
     res = minimize(
         neg_log_prob, x0, method="L-BFGS-B",
         bounds=bounds,
@@ -1614,6 +1634,15 @@ def run_map(
             "eps": 1e-3,   # finite-diff step ≫ cache rounding (1e-4) → enables HOD gradient
         },
     )
+
+    if _obj_fail["n"] or _obj_fail["n_nonfinite"]:
+        print(f"  [{label}] WARNING: objective failed {_obj_fail['n']} time(s) and "
+              f"returned non-finite {_obj_fail['n_nonfinite']} time(s); "
+              f"first: {_obj_fail['first']}", flush=True)
+    if not res.success:
+        print(f"  [{label}] WARNING: optimiser did NOT converge "
+              f"(nit={getattr(res, 'nit', -1)}, nfev={getattr(res, 'nfev', -1)}): "
+              f"{getattr(res, 'message', '')}", flush=True)
 
     chi2   = 2.0 * res.fun
     result = dict(
@@ -1627,6 +1656,12 @@ def run_map(
         chi2_dof         = float(chi2 / ndof),
         log_prob         = float(-res.fun),
         success          = bool(res.success),
+        opt_message      = str(getattr(res, "message", "")),
+        opt_nit          = int(getattr(res, "nit", -1)),
+        opt_nfev         = int(getattr(res, "nfev", -1)),
+        obj_failures     = int(_obj_fail["n"]),
+        obj_nonfinite    = int(_obj_fail["n_nonfinite"]),
+        obj_first_failure= _obj_fail["first"],
         n_pts_wtheta     = n_pts_wt,
         n_pts_smf        = n_pts_smf,
         n_pts_wp         = n_pts_wp,
@@ -2810,6 +2845,24 @@ def main():
                     f"--free-params {args.free_params[0]} requires --agn-model {req} "
                     f"(got {args.agn_model})."
                 )
+        # Under --agn-model ham/xray the AGN template is _psf_template(), a
+        # NORMALISED King PSF: _predict_shape computes the AGN cross-power that
+        # the agn_cheap parameters feed and then discards it.  Perturbing
+        # scatter_lx / log10_A_kcorr / log10_A_dc across their whole ranges moves
+        # the prediction by exactly 0, so they cannot be constrained — and could
+        # not be even in principle, since a luminosity parameter can only rescale
+        # a normalised point-source template and that scaling is already free as
+        # log10_A_AGN.  Warn rather than raise: the fit is still a valid
+        # amplitude fit, it just has dead parameters (this is why agn-lum has
+        # returned its seed for scatter_lx/kcorr/dc in every campaign).
+        _dead = [n for n in free
+                 if _PARAM_REGISTRY[n][3].startswith("agn_cheap:")]
+        if _dead and args.agn_model not in ("hod", "duty_cycle"):
+            print(f"  WARNING: {len(_dead)} free parameter(s) have NO effect under "
+                  f"--agn-model {args.agn_model}: {', '.join(_dead)}.  The AGN "
+                  f"template is a normalised PSF, so they are exactly degenerate "
+                  f"with log10_A_AGN and will be returned at their seed.",
+                  flush=True)
         thresh = {
             lb: (args.zm15_thresh if args.zm15_thresh is not None
                  else SAMPLES[lb]["log10ms_min"])
