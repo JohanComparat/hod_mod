@@ -333,11 +333,14 @@ class PressureProfileDPM:
         -------
         uk : (Nk, NM) [(Mpc/h)²]
         """
-        h       = float(theta_cosmo["h"])
-        omega_m = float(theta_cosmo["Omega_m"])
-        m200    = np.asarray(m200_arr, dtype=float)
-        r200    = np.asarray(r200_arr, dtype=float)
-        k       = np.asarray(k_arr,    dtype=float)
+        # Kept traceable (jnp, no float()) so the tSZ cross-power is
+        # differentiable w.r.t. cosmology, matching PressureProfileA10;
+        # concrete inputs (CAMB) pass through jnp.asarray unchanged.
+        h       = theta_cosmo["h"]
+        omega_m = theta_cosmo["Omega_m"]
+        m200    = jnp.asarray(m200_arr, dtype=float)
+        r200    = jnp.asarray(r200_arr, dtype=float)
+        k       = jnp.asarray(k_arr,    dtype=float)
 
         def _integrand(r_nodes) -> jnp.ndarray:
             # broadcast over the mass axis (no per-halo loop)

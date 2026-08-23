@@ -168,8 +168,11 @@ class TestPcgNumpyOracle:
         b_gal = np.trapezoid(dndm * nt * bias, m) / n_gal
         N_C = (m >= 10.0 ** _LOG10_MMIN_CLUSTER).astype(float)
         n_cluster = np.trapezoid(dndm * N_C, m)
+        # satellites only: the cluster×central coincident pair is a delta at
+        # r = 0 and is excluded from the tabulated spectrum (see
+        # cross_clustering module docstring)
         p1h = np.trapezoid(
-            dndm[None, :] * N_C[None, :] * (nc[None, :] + ns[None, :] * uk),
+            dndm[None, :] * N_C[None, :] * ns[None, :] * uk,
             m, axis=1) / (n_cluster * n_gal)
         p2h = _B_CLUSTER * b_gal * np.asarray(sc["pk_lin"], dtype=float)
         p_ref = np.maximum(p1h + p2h, 1e-20)

@@ -23,6 +23,17 @@ where :math:`N_C(M) = \\Theta(M - M_{\\rm min,C})` is a step function at the
 cluster mass threshold (cluster treated as a point mass at halo centre so
 :math:`\\tilde{u}_C(k|M) = 1`).
 
+The :math:`\\langle N_{\\rm cen}\\rangle` piece of the 1-halo integral is the
+coincident cluster–central pair: both sit at the halo centre, so it is
+*constant in k* and transforms to a Dirac delta at :math:`r = 0`.  It
+contributes nothing to :math:`\\xi_{cg}(r)` at any :math:`r > 0` and is
+therefore **excluded from the tabulated spectrum**.  Keeping it would flatten
+the high-:math:`k` tail to that constant (it dominates :math:`P_{cg}(k_{\\max})`
+by ~10³), and the transform's capped-slope continuation past the table then
+rings through the Ogata quadrature — driving :math:`\\xi_{cg}` negative at the
+1-halo/2-halo transition (fixed in 0.4.0, 2026-08; predictions at
+:math:`r \\lesssim 5` Mpc/h before this fix are superseded).
+
 **2-halo term** — large-scale bias coupling:
 
 .. math::
@@ -145,10 +156,12 @@ class ClusterGalaxyCrossCorrelation:
                     f"log10_m_min_cluster={log10_m_min_cluster} yields zero cluster count."
                 )
 
-        # 1-halo cross-power: clusters at halo centres (u_C = 1)
-        integrand_cg_1h = dndm[None, :] * N_C[None, :] * (
-            nc[None, :] + ns[None, :] * uk
-        )
+        # 1-halo cross-power: clusters at halo centres (u_C = 1).  Satellites
+        # only — the cluster×central coincident pair is constant in k (a delta
+        # at r = 0, zero for all r > 0) and tabulating it would flatten the
+        # high-k tail and ring through the Hankel transform (see module
+        # docstring).
+        integrand_cg_1h = dndm[None, :] * N_C[None, :] * ns[None, :] * uk
         P_cg_1h = jnp.trapezoid(integrand_cg_1h, m, axis=1) / (n_cluster * n_gal)
 
         # 2-halo: b_C × b_G_eff × P_lin
