@@ -477,3 +477,49 @@ class TestGrowthRegressionPin:
                     "_cold_factor stopped carrying z, the multi-z hoisting "
                     "optimisation is back on the table and this test needs "
                     "re-thinking")
+
+
+class TestNoTracerLeakFromDeferredImport:
+    """The module-level grids must be concrete before any jit traces them.
+
+    ``core.growth`` is imported lazily (``halo_mass_function.growth_factor``
+    defers it, so that ``core.power_spectrum`` can import ``growth`` in turn).
+    If that first import happens *inside* a ``jax.jit`` trace, every ``jnp``
+    expression at the module's top level is staged into that trace, and the
+    resulting constants escape as leaked tracers the next time they are used.
+
+    That is not hypothetical: at 6b6ccc4 ``growth.py`` declared
+    ``_K_INT = jnp.logspace(-4.0, 3.0, 512)`` at module scope, and
+    ``ConcentrationModel("bhattacharya13")`` -- whose ``c_bhattacharya13`` is
+    jitted and reaches ``growth_factor`` through ``HaloMassFunction.sigma`` --
+    died with ``UnexpectedTracerError``, naming that exact line as the origin.
+    Three tests in ``tests/test_concentration.py`` failed and nothing else did,
+    because it takes a jitted caller *and* a first import to trigger it.
+
+    The grids now live in ``core.amplitude``, which ``core.halo_mass_function``
+    imports at module scope, so they are built at package-import time.  These
+    assertions pin that: a traced constant is not an ``ndarray``, and the jitted
+    concentration path is the caller that actually caught it.
+    """
+
+    def test_grids_are_concrete_not_traced(self):
+        import jax
+        from hod_mod.core import amplitude, growth
+        for name, arr in (("amplitude.K_INT", amplitude.K_INT),
+                          ("growth._K_INT", growth._K_INT)):
+            assert not isinstance(arr, jax.core.Tracer), f"{name} is a tracer"
+            assert hasattr(arr, "shape") and arr.shape == (512,)
+
+    def test_jitted_concentration_reaches_growth_without_leaking(self):
+        """The exact call that failed at 6b6ccc4."""
+        from hod_mod.core.concentration import ConcentrationModel
+        from hod_mod.core.halo_mass_function import HaloMassFunction
+        from hod_mod.core.power_spectrum import LinearPowerSpectrum
+
+        pk = LinearPowerSpectrum()
+        hmf = HaloMassFunction(pk.pk_linear, model="tinker08")
+        cm = ConcentrationModel("bhattacharya13", hmf=hmf)
+        c = cm.concentration(jnp.logspace(12, 15, 4), z=0.3, theta=_THETA)
+        c = np.asarray(c)
+        assert np.all(np.isfinite(c)) and np.all(c > 0)
+        assert np.all(np.diff(c) < 0), "c(M) must fall with mass"
