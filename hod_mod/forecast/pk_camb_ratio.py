@@ -70,7 +70,8 @@ def build(npz_path: str = _NPZ, verbose: bool = True) -> dict:
                        sum_mnu=th.get("sum_mnu", 0.0))
         camb_th.pop("Omega_cdm", None)      # let omega_cdm() close the budget
         p_c = np.asarray(lp.pk_linear(jnp.asarray(_K_GRID), 0.0, camb_th))
-        eh_th = {k: th[k] for k in ("Omega_m", "Omega_b", "h", "n_s", "sigma8")}
+        eh_th = {k: th[k] for k in ("Omega_m", "Omega_b", "h", "n_s",
+                                    "ln10^{10}A_s")}
         eh_th["sum_mnu"] = th.get("sum_mnu", 0.0)
         eh_th["Omega_cdm"] = float(omega_cdm(eh_th))
         p_e = np.asarray(eh.pk_shape(jnp.asarray(_K_GRID), eh_th))

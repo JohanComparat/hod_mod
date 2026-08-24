@@ -100,25 +100,22 @@ import warnings
 import jax
 import jax.numpy as jnp
 
+from hod_mod.core.amplitude import K_INT, R8, require_as_amplitude, sigma2_tophat
+
 #: Valid ``mode`` values, in decreasing order of fidelity.
 GROWTH_MODES = ("pk_ratio", "ode", "carroll")
 
 #: Mode used when neither the ``mode`` argument nor ``$HOD_MOD_GROWTH`` is set.
 DEFAULT_MODE = "pk_ratio"
 
-#: Wavenumber grid for the σ(R=8) projection.  Matches ``HaloMassFunction``'s
-#: default ``logspace(-4, 3, 512)`` and ``pk_eisenstein_hu._K_INT``, so the
-#: weight applied here is the same one the σ8 normalisation applies.
-_K_INT = jnp.logspace(-4.0, 3.0, 512)
-
-#: Top-hat radius of the projection [Mpc/h].
-_R8 = 8.0
-
-#: Amplitude used when a backend needs ``ln10^{10}A_s`` and ``theta`` carries
-#: only ``sigma8``.  The overall amplitude cancels in the ratio, so the value is
-#: immaterial; the Planck-2018 central value keeps emulators near their training
-#: centre.
-_REF_LN10_10_AS = 3.044
+#: Wavenumber grid and top-hat radius for the σ(R=8) projection, re-exported
+#: from :mod:`hod_mod.core.amplitude`.  These used to be a second declaration of
+#: the same two constants, held equal by a test; they are now literally the same
+#: objects.  ``_K_INT`` keeps its private alias because ``tests/test_growth.py``
+#: imports it by name; ``_R8`` has no importer and survives only as the default
+#: argument of :data:`_sigma2_tophat`.
+_K_INT = K_INT
+_R8 = R8
 
 #: Fallback classification for backends that do not declare ``has_native_z``
 #: themselves.  Every backend shipped with the package now carries the attribute
@@ -199,27 +196,125 @@ def backend_has_native_z(pk) -> bool:
     return False
 
 
-def _sigma2_tophat(pk: jnp.ndarray, k: jnp.ndarray, R: float = _R8) -> jnp.ndarray:
-    r"""σ²(R) = (1/2π²) ∫ P(k) W²(kR) k² dk with a real-space top-hat W.
+#: The σ(R=8) projection weight.  The duplicate that stood here existed only
+#: because ``hod_mod.core`` must not import ``hod_mod.forecast``; the canonical
+#: copy now lives in :mod:`hod_mod.core.amplitude`, which both sides may import,
+#: so there is nothing left to keep in sync.  Alias kept because
+#: ``tests/test_growth.py`` imports it by name.
+_sigma2_tophat = sigma2_tophat
 
-    Duplicated from :func:`hod_mod.forecast.pk_eisenstein_hu._sigma2_tophat` on
-    purpose: ``hod_mod.core`` must not import ``hod_mod.forecast`` (the reverse
-    edge already exists and would close a cycle).  The two are identical and
-    ``tests/test_growth.py`` asserts they stay so.
+
+def _d0_lcdm_quad(omega_m):
+    r"""EdS-normalised :math:`D(z{=}0)` for flat ΛCDM, closed-form quadrature.
+
+    .. math::
+
+        D(0) = \frac{5\Omega_m}{2}\int_0^1 \frac{{\rm d}a}{[a\,H(a)/H_0]^3},
+        \qquad H(a)/H_0 = \sqrt{\Omega_m a^{-3} + 1 - \Omega_m}
+
+    Moved verbatim -- same grid, same trapezoid -- out of
+    :func:`~hod_mod.core.power_spectrum.eisenstein_hu_pk_phys`, so that the ΛCDM
+    amplitude of every result produced before this change is reproduced bit for
+    bit.  The integrand vanishes as :math:`a^{3/2}/\Omega_m^{3/2}`, so starting
+    the grid at ``a = 0.001`` truncates ~7e-8 of the integral.
     """
-    x = k * R
-    w = 3.0 * (jnp.sin(x) - x * jnp.cos(x)) / x ** 3
-    return jnp.trapezoid(pk * w ** 2 * k ** 2, k) / (2.0 * jnp.pi ** 2)
+    a_g = jnp.linspace(0.001, 1.0, 500)
+    ol = 1.0 - omega_m
+    h_over_h0 = jnp.sqrt(omega_m * a_g ** (-3.0) + ol)
+    return (5.0 * omega_m / 2.0) * jnp.trapezoid(1.0 / (a_g * h_over_h0) ** 3, a_g)
+
+
+def growth_d0_eds(theta: dict):
+    r"""EdS-normalised :math:`D(z{=}0)` for flat CPL -- the *absolute* growth.
+
+    Not :math:`D(z)/D(0)`, which is 1 here by construction.  This is the
+    normalisation :math:`D \to a` during matter domination, so for
+    :math:`\Omega_m < 1` it is less than one: dark energy has been suppressing
+    growth since matter--Λ equality, and that suppression is absent from a
+    transfer function, which is shape-only.  It belongs to the amplitude.
+
+    Why this exists
+    ---------------
+    Under the σ8 convention this factor was cosmetic: whatever
+    :func:`~hod_mod.core.power_spectrum.eisenstein_hu_pk_phys` put in,
+    ``HaloMassFunction.sigma``'s σ8 rescale took straight back out, so a
+    ΛCDM-only expression cost nothing.  Under :math:`A_s` it *is* the absolute
+    amplitude.  A ΛCDM-only :math:`D(0)` then makes
+    :math:`\partial\sigma_8/\partial w_0` and
+    :math:`\partial\sigma_8/\partial w_a` **identically zero** while ``w0`` and
+    ``wa`` are free parameters in ``SECTORS["cosmology"]`` -- a Fisher matrix with
+    two structurally blind directions and nothing in the output saying so.
+
+    How it is computed
+    ------------------
+    The exact ΛCDM quadrature, corrected by the CPL/ΛCDM ratio of the growth ODE:
+
+    .. math::
+
+        D(0) = D_{\Lambda\rm CDM}(0;\Omega_m)\;
+               \frac{D_{\rm ODE}(0;\Omega_m,w_0,w_a)}
+                    {D_{\rm ODE}(0;\Omega_m,-1,0)}
+
+    Both legs of the ratio are EdS-normalised on the same ``ln a`` grid at the
+    same :math:`\Omega_m`, so the ODE's truncation and round-off largely cancel
+    and only its *response* to :math:`(w_0, w_a)` survives.  Measured
+    (2026-08-24, CPU x86-64):
+
+    * at :math:`(w_0, w_a) = (-1, 0)` the ratio is 1 and this reproduces the
+      pre-existing ΛCDM value **bit for bit through**
+      ``eisenstein_hu_pk_phys``, in float32 and float64, with and without
+      ``w0``/``wa`` present in ``theta`` -- verified on every path in this
+      package.  That is XLA folding both legs of the ratio to the same graph,
+      not an algebraic guarantee: a mixed concrete-:math:`\Omega_m` /
+      traced-:math:`w_0` jit differs by 1--2 ulp, so do not build an ``==``
+      test on that case;
+    * ``jax.grad`` gives :math:`\partial D_0/\partial w_0 = -0.198247` and
+      :math:`\partial D_0/\partial w_a = -0.0610594`, against converged
+      references of :math:`-0.198247` and :math:`-0.0610595`;
+    * the resulting :math:`\partial\sigma_8/\partial w_0` goes from exactly
+      ``0.0`` to :math:`-0.2076`, and
+      :math:`\partial\sigma_8/\partial w_a` from ``0.0`` to :math:`-0.0639`
+      (fiducial-dependent -- do not pin either without pinning the fiducial).
+
+    The cost is a second ``lax.scan``: +0.012 ms per call (0.126 -> 0.138 ms in
+    float64, 0.101 -> 0.114 ms in float32), measured on
+    ``eisenstein_hu_pk_phys`` itself, inside a jitted body.
+
+    ``growth_factor(..., mode="ode")`` dispatches to the same
+    ``_growth_factor_cpl_jax`` with the same ``n_steps=160, lna_min=-7.0``
+    defaults, so :math:`D(0)` cancels exactly between amplitude and growth --
+    that invariant is what makes this safe.
+
+    Parameters
+    ----------
+    theta : dict
+        ``Omega_m`` required; ``w0`` (default −1) and ``wa`` (default 0) honoured.
+    """
+    # Deferred, matching halo_mass_function.py:237 and :1180: hod_mod.core.growth
+    # must stay free of package imports at module scope so that
+    # hod_mod.core.power_spectrum can import it.
+    from hod_mod.core.halo_mass_function import _growth_factor_cpl_jax
+    om = theta["Omega_m"]
+    d_cpl = _growth_factor_cpl_jax(0.0, om, theta.get("w0", -1.0),
+                                   theta.get("wa", 0.0), normalise=False)
+    d_lcdm = _growth_factor_cpl_jax(0.0, om, -1.0, 0.0, normalise=False)
+    return _d0_lcdm_quad(om) * (d_cpl / d_lcdm)
 
 
 def _as_amplitude_theta(theta: dict) -> dict:
-    """Strip ``sigma8`` so a backend takes its native (A_s) redshift path.
+    """Check ``theta`` is on the A_s convention and hand back a private copy.
 
-    Every σ8-convention ``pk_linear`` implements ``P(k,z) = shape × norm ×
-    D(z)²`` by *calling this module* — asking it for a ratio would recurse.  The
-    A_s branch instead returns whatever the network or Boltzmann solver natively
-    produces at ``z``, which is exactly the quantity a growth ratio wants.  The
-    overall amplitude cancels, so substituting a reference ``A_s`` is free.
+    This used to *strip* ``sigma8``, because every σ8-convention ``pk_linear``
+    implemented ``P(k,z) = shape × norm × D(z)²`` by calling this module, so
+    asking such a backend for a ratio would recurse.  Removing the key forced the
+    A_s branch, which returns whatever the network or Boltzmann solver natively
+    produces at ``z`` — exactly the quantity a growth ratio wants.
+
+    Those branches are gone: ``ln10^{10}A_s`` is the only amplitude, so there is
+    no recursion left to break and nothing to strip.  What remains is a guard.
+    Note the old strip was also a hole: it silently swallowed ``sigma8`` while
+    letting a stray ``S8`` through, so exactly one of the two retired keys
+    reached the backend's own check.  Both are refused here now.
 
     ``Omega_cdm`` is deliberately **not** synthesised when it is absent.  There
     is no single right value: the Boltzmann backends want the closed-budget
@@ -232,9 +327,8 @@ def _as_amplitude_theta(theta: dict) -> dict:
     and poisoning the CLASS solver cache key with it.  A caller who sets
     ``Omega_cdm`` explicitly still has it honoured, unchanged.
     """
-    out = {kk: vv for kk, vv in theta.items() if kk != "sigma8"}
-    out.setdefault("ln10^{10}A_s", _REF_LN10_10_AS)
-    return out
+    require_as_amplitude(theta, "growth_pk_ratio (via _as_amplitude_theta)")
+    return dict(theta)
 
 
 def _pk_at(pk, k, z, theta_as: dict, variant: str):

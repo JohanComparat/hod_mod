@@ -435,9 +435,7 @@ class HamAGNModel:
         log10mh_grid : (n_mh,)
         ham_table : (n_z, n_mh) — log10(L_X^hard / erg/s)
         """
-        from hod_mod.core.halo_mass_function import (
-            growth_factor, _RHO_CRIT0,
-        )
+        from hod_mod.core.halo_mass_function import growth_factor
 
         if z_grid is None:
             z_grid = np.linspace(0.05, 2.0, 20)
@@ -463,24 +461,18 @@ class HamAGNModel:
         # they are done per redshift: the cold-to-total ratio evolves, 1.0091
         # at z = 0 against 1.0152 at z = 3, and freezing it at zero would leave
         # sigma 0.3% low at the top of the grid.  This mirrors
-        # HaloMassFunction.sigma exactly -- cold field for sigma(M), total for
-        # the sigma8 anchor.
+        # HaloMassFunction.sigma exactly -- cold field for sigma(M).
+        #
+        # There used to be a sigma8 anchor here too, re-normalising the spectrum
+        # on the total-matter field when theta carried a 'sigma8'.  It mirrored
+        # the one in HaloMassFunction.sigma, and it is gone for the same reason:
+        # the backend's spectrum already carries its amplitude from
+        # ln10^{10}A_s, and a second amplitude in theta only made the answer
+        # depend on which of the two the caller supplied.
         # ------------------------------------------------------------------
-        omega_m  = float(theta["Omega_m"])
-        rho_mean = omega_m * float(_RHO_CRIT0)
         rho_cold = float(self._hmf._rho_cold(theta))
 
         pk_z0 = self._hmf._pk(self._hmf._k_int, 0.0, theta)
-
-        # sigma8 anchor: total-matter field, redshift-independent
-        rescale2 = 1.0
-        if "sigma8" in theta:
-            R8   = 8.0
-            M8   = (4.0 / 3.0) * np.pi * R8**3 * rho_mean
-            s2_8 = float(self._hmf._sigma2_z0(
-                jnp.array([M8]), pk_z0, jnp.array(rho_mean)
-            )[0])
-            rescale2 = float(theta["sigma8"] ** 2 / s2_8)
 
         _massless = "sum_mnu" not in theta
         _cold_cache = {}
@@ -492,7 +484,6 @@ class HamAGNModel:
                 pk_cold = pk_z0 * self._hmf._cold_factor(theta, key)
                 s2 = [np.array(self._hmf._sigma2_z0(
                           jnp.array(mh_arr * f), pk_cold, jnp.array(rho_cold)))
-                      * rescale2
                       for f in (1.0, np.exp(dlnm), np.exp(-dlnm))]
                 sig0 = np.sqrt(s2[0])
                 dlns = (np.log(np.sqrt(s2[1])) - np.log(np.sqrt(s2[2]))) \

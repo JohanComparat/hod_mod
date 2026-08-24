@@ -19,7 +19,8 @@ The design follows the container pattern of ``jax_cosmo``
 
 Examples
 --------
->>> c = Cosmology(Omega_m=0.31, sigma8=0.81, h=0.6736, n_s=0.9649, Omega_b=0.0493)
+>>> c = Cosmology(Omega_m=0.31, h=0.6736, n_s=0.9649, Omega_b=0.0493,
+...               ln10_10_As=3.044)
 >>> jax.grad(lambda c: c.Omega_m ** 2)(c).Omega_m      # 0.62
 >>> c.to_dict()["Omega_m"]                             # interop with dict APIs
 """
@@ -124,7 +125,7 @@ class Cosmology(ParameterContainer):
 
     Parameters
     ----------
-    Omega_m, sigma8, h, n_s, Omega_b : float
+    Omega_m, h, n_s, Omega_b : float
         Required.
     Omega_cdm, ln10_10_As, w0, wa, sum_mnu : float, optional
         Optional; defaults are flat LCDM with the minimal normal-hierarchy
@@ -133,13 +134,23 @@ class Cosmology(ParameterContainer):
     transfer, mass_def : str, optional
         Static configuration. Not differentiable *by construction* -- that is
         the point of separating them.
+
+    Notes
+    -----
+    ``sigma8`` used to be required positional argument #2, and :meth:`to_theta`
+    emitted it *alongside* ``ln10^{10}A_s`` -- so every theta this container
+    produced carried two amplitudes, and which one won depended on which module
+    consumed it.  ``ln10_10_As`` is now the only amplitude; sigma8 is derived
+    with :func:`hod_mod.core.amplitude.sigma8_from_theta`.  **This changes the
+    positional signature**: ``Cosmology(0.31, 0.8111, 0.6736, ...)`` no longer
+    means what it did, so construct with keywords.
     """
 
-    _PARAMS = ("Omega_m", "sigma8", "h", "n_s", "Omega_b",
+    _PARAMS = ("Omega_m", "h", "n_s", "Omega_b",
                "Omega_cdm", "ln10_10_As", "w0", "wa", "sum_mnu")
     _CONFIG = ("transfer", "mass_def")
 
-    def __init__(self, Omega_m, sigma8, h, n_s, Omega_b,
+    def __init__(self, Omega_m, h, n_s, Omega_b,
                  Omega_cdm=None, ln10_10_As=3.044, w0=-1.0, wa=0.0,
                  sum_mnu=0.06, transfer="cosmopower", mass_def="200m"):
         if Omega_cdm is None:
@@ -147,7 +158,7 @@ class Cosmology(ParameterContainer):
             # cold sector -- see power_spectrum.omega_cdm.
             Omega_cdm = Omega_m - Omega_b - sum_mnu / (NU_DENOM_EV * h ** 2)
         super().__init__(
-            Omega_m=Omega_m, sigma8=sigma8, h=h, n_s=n_s, Omega_b=Omega_b,
+            Omega_m=Omega_m, h=h, n_s=n_s, Omega_b=Omega_b,
             Omega_cdm=Omega_cdm, ln10_10_As=ln10_10_As, w0=w0, wa=wa,
             sum_mnu=sum_mnu, transfer=transfer, mass_def=mass_def,
         )
@@ -156,7 +167,7 @@ class Cosmology(ParameterContainer):
     def to_theta(self) -> dict:
         """The legacy ``theta_cosmo`` dict, with its original key spellings."""
         return {
-            "Omega_m": self.Omega_m, "sigma8": self.sigma8, "h": self.h,
+            "Omega_m": self.Omega_m, "h": self.h,
             "n_s": self.n_s, "Omega_b": self.Omega_b,
             "Omega_cdm": self.Omega_cdm,
             "ln10^{10}A_s": self.ln10_10_As,
@@ -167,7 +178,7 @@ class Cosmology(ParameterContainer):
     @classmethod
     def planck18(cls, **overrides):
         """Planck 2018 TT,TE,EE+lowE best fit."""
-        base = dict(Omega_m=0.3100, sigma8=0.8111, h=0.6736,
+        base = dict(Omega_m=0.3100, h=0.6736,
                     n_s=0.9649, Omega_b=0.0493, ln10_10_As=3.044,
                     sum_mnu=0.06)
         return cls(**{**base, **overrides})

@@ -160,8 +160,22 @@ def load_config(path: str) -> FitConfig:
     if cosmology is not None:
         if "Omega_cdm" not in cosmology and "Omega_m" in cosmology:
             cosmology["Omega_cdm"] = omega_cdm(cosmology)
-        if "sigma8" in cosmology and "ln10^{10}A_s" not in cosmology:
-            cosmology["ln10^{10}A_s"] = _sigma8_to_lnAs(cosmology)
+        # This used to *add* an ln10^{10}A_s derived from a YAML sigma8 while
+        # leaving the sigma8 in place, so theta carried two amplitudes and the
+        # backends disagreed about which one won.  Configs now name the
+        # amplitude directly; convert an old one once with _sigma8_to_lnAs and
+        # replace the key.
+        stray = [k for k in ("sigma8", "S8") if k in cosmology]
+        if stray:
+            lnAs = (_sigma8_to_lnAs(cosmology) if "sigma8" in cosmology
+                    else float("nan"))
+            raise ValueError(
+                f"{path}: cosmology: block carries {stray}, which is no longer "
+                "a parameter -- 'ln10^{10}A_s' is the single amplitude.  "
+                + (f"For this block that is ln10^{{10}}A_s: {lnAs:.6f}.  "
+                   if "sigma8" in cosmology else "")
+                + "Replace the key (hod_mod.fitting.config._sigma8_to_lnAs does "
+                  "the conversion) and keep the old value in a comment.")
 
     (free_params, param_bounds, param_init,
      param_prior_types, param_prior_means, param_prior_sigmas) = _parse_params(params_cfg)

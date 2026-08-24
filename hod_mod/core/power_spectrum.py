@@ -700,14 +700,21 @@ def eisenstein_hu_pk_phys(k: jnp.ndarray, theta: dict) -> jnp.ndarray:
     T = fb * T_b + fc * T_c
 
     # Growth factor D(z=0) normalized so D→a as a→0 (EdS limit).
-    # For Ω_m<1 flat ΛCDM, D(z=0)<1 — this suppression is absent from the EH98
-    # transfer function (which is shape-only, not growth-suppressed) and must be
-    # folded into the amplitude explicitly.
-    # Integral: D(z=0) = (5Ω_m/2) × ∫₀¹ da / [a H(a)/H₀]³
-    a_g = jnp.linspace(0.001, 1.0, 500)
-    ol = 1.0 - om
-    H_over_H0 = jnp.sqrt(om * a_g ** (-3.0) + ol)
-    D_z0 = (5.0 * om / 2.0) * jnp.trapezoid(1.0 / (a_g * H_over_H0) ** 3, a_g)
+    # For Ω_m<1 this is < 1 — the suppression is absent from the EH98 transfer
+    # function (which is shape-only) and must be folded into the amplitude.
+    #
+    # This was `ol = 1.0 - om` and a ΛCDM quadrature, with no w0/wa anywhere.
+    # Harmless while sigma8 pinned the z=0 amplitude and divided this straight
+    # back out; fatal under A_s, where it IS the absolute amplitude and would
+    # make dsigma8/dw0 and dsigma8/dwa identically zero while both are free
+    # parameters.  growth_d0_eds keeps the ΛCDM value bit-identical and adds the
+    # CPL response; see its docstring.
+    #
+    # Deferred import: hod_mod.core.halo_mass_function imports this module at
+    # module scope, so the growth import must not be hoisted.  Inside a
+    # @jax.jit function it runs at trace time only.
+    from hod_mod.core.growth import growth_d0_eds
+    D_z0 = growth_d0_eds(theta)
 
     # Physical amplitude: P = D²(z=0) × (8π²/25) × (c/H₁₀₀)⁴/Ω_m² × A_s × (h/k_*)^{n_s−1}
     # c/H₁₀₀ = 2997.924 Mpc/h;  k_* = 0.05 Mpc^{-1} (physical pivot)

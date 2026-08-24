@@ -86,6 +86,7 @@ def _patch_cemulator_numpy2() -> None:
 
 _patch_cemulator_numpy2()
 
+from .amplitude import require_as_amplitude
 from .power_spectrum import rho_critical_0, mnu_sum, omega_nu, omega_cb, omega_cdm
 
 _RHO_CRIT0 = rho_critical_0()          # (Msun/h)/(Mpc/h)³
@@ -125,7 +126,8 @@ def _growth_factor_flat_jax(z: float, omega_m):
 # ---------------------------------------------------------------------------
 
 def _growth_factor_cpl_jax(z, omega_m, w0=-1.0, wa=0.0,
-                           n_steps: int = 160, lna_min: float = -7.0):
+                           n_steps: int = 160, lna_min: float = -7.0,
+                           normalise: bool = True):
     r"""Growth factor D(z)/D(0) for flat CPL dark energy, JAX-differentiable.
 
     Integrates the linear growth ODE in ``x = ln a``
@@ -175,7 +177,13 @@ def _growth_factor_cpl_jax(z, omega_m, w0=-1.0, wa=0.0,
     _, d_tail = jax.lax.scan(step, y0, lna[:-1])
     d_grid = jnp.concatenate([jnp.array([a0]), d_tail])
     x_z = -jnp.log1p(jnp.asarray(z))
-    return jnp.interp(x_z, lna, d_grid) / d_grid[-1]
+    d_z = jnp.interp(x_z, lna, d_grid)
+    # normalise=False returns the EdS-normalised D (D -> a as a -> 0), which is
+    # what an *absolute* amplitude needs: hod_mod.core.growth.growth_d0_eds asks
+    # for it, eisenstein_hu_pk_phys folds it into A_amp.  Every other caller
+    # wants the ratio and gets the default, on the same float operations as
+    # before -- verified bit-identical at z in {0, 0.1, 0.3, 1, 3}.
+    return d_z / d_grid[-1] if normalise else d_z
 
 
 def _concrete_cosmo_key(z, theta: dict):
@@ -1033,9 +1041,10 @@ _FSIGMA_MODELS = {
 class HaloMassFunction:
     """Halo mass function dn/dM and halo bias, JAX-accelerated.
 
-    Computes σ(M) from the linear power spectrum at z=0 (normalized to sigma8
-    if provided), applies the linear growth factor for z-evolution, then
-    evaluates the chosen multiplicity function.
+    Computes σ(M) from the linear power spectrum at z=0, applies the linear
+    growth factor for z-evolution, then evaluates the chosen multiplicity
+    function.  The spectrum arrives already normalised -- its amplitude is
+    ``theta['ln10^{10}A_s']``, the package's only amplitude parameter.
 
     Parameters
     ----------
@@ -1192,10 +1201,8 @@ class HaloMassFunction:
     def sigma(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
         """RMS linear density fluctuation σ(M, z) [dimensionless].
 
-        Computed at z=0 from the linear power spectrum, optionally rescaled to
-        match ``theta['sigma8']`` (needed when ``pk_func`` returns shape-only
-        spectra such as ``eisenstein_hu_pk``), converted to the cold field, then
-        multiplied by the growth factor D(z)/D(0):
+        Computed at z=0 from the linear power spectrum, converted to the cold
+        field, then multiplied by the growth factor D(z)/D(0):
 
         .. math::
 
@@ -1228,10 +1235,10 @@ class HaloMassFunction:
         ----------
         m_h : jnp.ndarray  Halo masses [M_sun/h].
         z : float  Redshift.
-        theta : dict  Cosmological parameters.  ``Omega_m`` required.
-                      ``sigma8`` optional — triggers amplitude normalisation.
+        theta : dict  Cosmological parameters.  ``Omega_m`` and
+                      ``ln10^{10}A_s`` required.
         """
-        omega_m = theta["Omega_m"]
+        require_as_amplitude(theta, "HaloMassFunction.sigma")
         # variant="total" on purpose -- see the warning above.  Passing the
         # backend object lets the default pk_ratio mode read D(z) off the very
         # spectra the 2-halo term grows by, closing the last 2.2e-4 inconsistency
@@ -1239,24 +1246,19 @@ class HaloMassFunction:
         # forecast's z-ignoring closures) this resolves to the growth ODE.
         growth = self._growth(z, theta)
 
-        # Dynamic rho_mean so grad w.r.t. Omega_m flows correctly
-        rho_mean = omega_m * _RHO_CRIT0        # total matter — defines sigma8
         rho_cold = self._rho_cold(theta)       # cold — defines the halo radius
 
+        # A sigma8 rescale used to sit below this, re-normalising the spectrum so
+        # that sigma(8 Mpc/h, 0) matched theta["sigma8"].  It existed because the
+        # forecast backends handed this method an amplitude-*free* shape; their
+        # as_hmf_pk_func now returns the physical P(k, 0), so the amplitude
+        # arrives with the spectrum and there is one amplitude in the package
+        # rather than two competing for precedence.  It also needed the
+        # total-matter rho_mean = Omega_m * _RHO_CRIT0 as its anchor, which is
+        # why that local is gone too.
         pk_z0 = self._pk(self._k_int, 0.0, theta)      # total matter
         pk_cold = pk_z0 * self._cold_factor(theta, z)  # cold, at this z
         s2 = self._sigma2_z0(m_h, pk_cold, rho_cold)
-
-        # Sigma8 rescaling: normalise spectrum so σ(8 Mpc/h, z=0) = sigma8.
-        # The anchor stays on the TOTAL-matter field, so sigma8 keeps its usual
-        # meaning and existing priors stay interpretable; the amplitude it fixes
-        # is primordial and therefore common to both spectra.
-        if "sigma8" in theta:
-            R8 = 8.0  # Mpc/h
-            M8 = (4.0 / 3.0) * jnp.pi * R8**3 * rho_mean
-            s2_8 = self._sigma2_z0(jnp.array([M8]), pk_z0, rho_mean)[0]
-            rescale2 = theta["sigma8"] ** 2 / s2_8
-            s2 = s2 * rescale2
 
         return jnp.sqrt(s2) * growth
 
