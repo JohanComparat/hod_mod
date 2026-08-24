@@ -657,11 +657,19 @@ class WpFitter:
     # Predictions
 
     def predict_wp(self, params: dict) -> np.ndarray:
-        """Predicted wp(rp) [Mpc/h]."""
+        """Predicted wp(rp) [Mpc/h].
+
+        The per-call cosmology matters here: under ``use_free_cosmo`` this is a
+        read-out of the *sampled* point, and it used to read ``self.theta_cosmo``
+        -- the fiducial -- so it returned the same curve for every cosmology.
+        The likelihood and the optimiser were always right (they go through
+        ``_theta_cosmo_call``); only the read-out was wrong, which is why the
+        stored chi2 tables are sound and the plotted MAP curves were not.
+        """
         return np.asarray(
             self.predictor.wp(
                 jnp.array(self.rp_arr), self.config.pi_max,
-                self.config.z, self.theta_cosmo, params,
+                self.config.z, self._theta_cosmo_call(params), params,
             )
         )
 
@@ -800,16 +808,34 @@ class JointFitter(WpFitter):
         }
 
     def predict_ds(self, params: dict) -> np.ndarray:
-        """Predicted ΔΣ(R) [M_sun h pc⁻²]."""
+        """Predicted ΔΣ(R) [M_sun h pc⁻²].
+
+        The per-call cosmology matters here: under ``use_free_cosmo`` this is a
+        read-out of the *sampled* point, and it used to read ``self.theta_cosmo``
+        -- the fiducial -- so it returned the same curve for every cosmology.
+        The likelihood and the optimiser were always right (they go through
+        ``_theta_cosmo_call``); only the read-out was wrong, which is why the
+        stored chi2 tables are sound and the plotted MAP curves were not.
+        """
         return np.asarray(
             self.predictor.delta_sigma(
-                jnp.array(self.R_arr), self.config.z, self.theta_cosmo, params,
+                jnp.array(self.R_arr), self.config.z,
+                self._theta_cosmo_call(params), params,
             )
         )
 
     def predict_ng(self, params: dict) -> float:
-        """Predicted galaxy number density n̄_g [h³ Mpc⁻³]."""
-        return self.predictor.n_gal(self.config.z, self.theta_cosmo, params)
+        """Predicted galaxy number density n̄_g [h³ Mpc⁻³].
+
+        The per-call cosmology matters here: under ``use_free_cosmo`` this is a
+        read-out of the *sampled* point, and it used to read ``self.theta_cosmo``
+        -- the fiducial -- so it returned the same curve for every cosmology.
+        The likelihood and the optimiser were always right (they go through
+        ``_theta_cosmo_call``); only the read-out was wrong, which is why the
+        stored chi2 tables are sound and the plotted MAP curves were not.
+        """
+        return self.predictor.n_gal(
+            self.config.z, self._theta_cosmo_call(params), params)
 
     def chi2_joint(self, params: dict) -> dict:
         """Per-observable χ² contributions and total."""
@@ -928,10 +954,19 @@ class DeltaSigmaFitter(WpFitter):
         }
 
     def predict_ds(self, params: dict) -> np.ndarray:
-        """Predicted ΔΣ(R) [M_sun h pc⁻²]."""
+        """Predicted ΔΣ(R) [M_sun h pc⁻²].
+
+        The per-call cosmology matters here: under ``use_free_cosmo`` this is a
+        read-out of the *sampled* point, and it used to read ``self.theta_cosmo``
+        -- the fiducial -- so it returned the same curve for every cosmology.
+        The likelihood and the optimiser were always right (they go through
+        ``_theta_cosmo_call``); only the read-out was wrong, which is why the
+        stored chi2 tables are sound and the plotted MAP curves were not.
+        """
         return np.asarray(
             self.predictor.delta_sigma(
-                jnp.array(self.R_arr), self.config.z, self.theta_cosmo, params,
+                jnp.array(self.R_arr), self.config.z,
+                self._theta_cosmo_call(params), params,
             )
         )
 
