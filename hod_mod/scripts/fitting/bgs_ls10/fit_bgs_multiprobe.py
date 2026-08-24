@@ -93,7 +93,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from hod_mod.core.beyond_linear_bias import BeyondLinearBiasMead21
-from hod_mod.core.power_spectrum import default_pk_linear
+from hod_mod.core.power_spectrum import default_pk_linear, omega_cdm
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.connection.hod import (

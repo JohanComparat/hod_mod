@@ -80,7 +80,18 @@ def mnu_sum(theta):
 
 
 def omega_nu(theta):
-    """Ω_ν = Σm_ν / (93.14 eV · h²) — a density parameter, not ω_ν = Ω_ν h²."""
+    """Ω_ν = Σm_ν / (93.14 eV · h²) — a density parameter, not ω_ν = Ω_ν h².
+
+    A ``theta`` with no neutrino sector returns ``0.0`` **without reading**
+    ``h``.  That is not a convenience: ``omega_cb``/``omega_cdm`` are called on
+    cosmology dicts that legitimately carry only the parameters their consumer
+    needs -- ``observables/baryon_fraction`` is handed ``{Omega_b, Omega_m}`` --
+    and requiring ``h`` to compute a quantity that is identically zero turned
+    those into a ``KeyError``.  The branch is on dict-key membership, which is
+    static under ``jit``.
+    """
+    if "sum_mnu" not in theta and "mnu" not in theta:
+        return 0.0
     return mnu_sum(theta) / (NU_DENOM_EV * theta["h"] ** 2)
 
 
