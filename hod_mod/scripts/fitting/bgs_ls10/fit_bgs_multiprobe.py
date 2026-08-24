@@ -331,7 +331,12 @@ def _build_theta_cosmo(all_params: dict, cosmo_default: dict) -> dict:
     if "Omega_m" in all_params:
         Omega_b = cosmo_default.get("Omega_b", PLANCK18_MEANS["Omega_b"])
         tc["Omega_m"]  = float(all_params["Omega_m"])
-        tc["Omega_cdm"] = tc["Omega_m"] - Omega_b
+        # Omega_nu comes out of the cold sector too, because Omega_m includes
+        # it; deriving Omega_cdm as Omega_m - Omega_b would raise Omega_m by
+        # Omega_nu behind the backend's back.
+        tc["Omega_b"] = float(Omega_b)
+        derived = {k: v for k, v in tc.items() if k != "Omega_cdm"}
+        tc["Omega_cdm"] = float(omega_cdm(derived))
     return tc
 
 

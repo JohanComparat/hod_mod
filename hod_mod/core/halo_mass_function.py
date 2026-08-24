@@ -1078,12 +1078,23 @@ class HaloMassFunction:
         return omega_cb(theta) * _RHO_CRIT0
 
     def _cold_factor(self, theta: dict, z=0.0):
-        """P_cb/P_m from the CLASS table; exactly 1 in the massless limit."""
+        r"""Convert the backend's :math:`P_{\rm m}(k,0)` to the cold spectrum.
+
+        The backend supplies :math:`P_{\rm m}(k,0;f_\nu) = P_{\rm m}(k,0;0)\,
+        S_{\rm m}(k,0)`, and what is wanted is :math:`P_{\rm cb}(k,z)/D^2(z) =
+        P_{\rm m}(k,0;0)\,S_{\rm cb}(k,z)`, since the growth factor is applied
+        separately.  The factor is therefore :math:`S_{\rm cb}(k,z)/
+        S_{\rm m}(k,0)` -- note the two different redshifts.  Freezing both at
+        zero, as this did at first, drops the redshift evolution of the
+        cold-to-total ratio: 1.0091 at z=0 against 1.0152 at z=3, so
+        :math:`\sigma` would be low by 0.3% there.  Exactly 1 in the massless
+        limit either way.
+        """
         if "sum_mnu" not in theta:
             return 1.0
         from hod_mod.core import nu_ratio          # deferred: reads the npz
         return (nu_ratio.suppression_cb(self._k_int, theta, z)
-                / nu_ratio.suppression_m(self._k_int, theta, z))
+                / nu_ratio.suppression_m(self._k_int, theta, 0.0))
 
     def sigma(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
         """RMS linear density fluctuation σ(M, z) [dimensionless].
@@ -1112,7 +1123,7 @@ class HaloMassFunction:
         rho_cold = self._rho_cold(theta)       # cold — defines the halo radius
 
         pk_z0 = self._pk(self._k_int, 0.0, theta)      # total matter
-        pk_cold = pk_z0 * self._cold_factor(theta)     # cold
+        pk_cold = pk_z0 * self._cold_factor(theta, z)  # cold, at this z
         s2 = self._sigma2_z0(m_h, pk_cold, rho_cold)
 
         # Sigma8 rescaling: normalise spectrum so σ(8 Mpc/h, z=0) = sigma8.

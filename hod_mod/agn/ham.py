@@ -436,7 +436,7 @@ class HamAGNModel:
         ham_table : (n_z, n_mh) — log10(L_X^hard / erg/s)
         """
         from hod_mod.core.halo_mass_function import (
-            _growth_factor_flat, _RHO_CRIT0,
+            _growth_factor_flat, growth_factor, _RHO_CRIT0,
         )
 
         if z_grid is None:
@@ -457,54 +457,62 @@ class HamAGNModel:
         dlnm   = 0.01
 
         # ------------------------------------------------------------------
-        # Precompute sigma(M, z=0) ONCE — avoids calling the power spectrum
-        # 60× (20 z-values × 3 finite-difference sigma calls).
-        # sigma(M, z) = sigma(M, 0) × D(z)/D(0) for the same cosmology.
+        # The linear power spectrum is evaluated ONCE, which is the expensive
+        # part (a Boltzmann solve, or an emulator call, per invocation).  The
+        # cold conversion and the top-hat quadrature are cheap and jitted, so
+        # they are done per redshift: the cold-to-total ratio evolves, 1.0091
+        # at z = 0 against 1.0152 at z = 3, and freezing it at zero would leave
+        # sigma 0.3% low at the top of the grid.  This mirrors
+        # HaloMassFunction.sigma exactly -- cold field for sigma(M), total for
+        # the sigma8 anchor.
         # ------------------------------------------------------------------
-        # Mirrors HaloMassFunction.sigma exactly: sigma(M) on the COLD field
-        # (rho_cb, P_cb), the sigma8 anchor on the total-matter field.
         omega_m  = float(theta["Omega_m"])
         rho_mean = omega_m * float(_RHO_CRIT0)
         rho_cold = float(self._hmf._rho_cold(theta))
 
         pk_z0 = self._hmf._pk(self._hmf._k_int, 0.0, theta)
-        pk_cold = pk_z0 * self._hmf._cold_factor(theta)
-        s2_arr = np.array(self._hmf._sigma2_z0(
-            jnp.array(mh_arr), pk_cold, jnp.array(rho_cold)
-        ))
-        s2_hi = np.array(self._hmf._sigma2_z0(
-            jnp.array(mh_arr * np.exp(dlnm)), pk_cold, jnp.array(rho_cold)
-        ))
-        s2_lo = np.array(self._hmf._sigma2_z0(
-            jnp.array(mh_arr * np.exp(-dlnm)), pk_cold, jnp.array(rho_cold)
-        ))
-        # sigma8 rescaling (only if theta has sigma8 key)
+
+        # sigma8 anchor: total-matter field, redshift-independent
+        rescale2 = 1.0
         if "sigma8" in theta:
             R8   = 8.0
             M8   = (4.0 / 3.0) * np.pi * R8**3 * rho_mean
             s2_8 = float(self._hmf._sigma2_z0(
                 jnp.array([M8]), pk_z0, jnp.array(rho_mean)
             )[0])
-            rescale2 = theta["sigma8"] ** 2 / s2_8
-            s2_arr *= rescale2
-            s2_hi  *= rescale2
-            s2_lo  *= rescale2
+            rescale2 = float(theta["sigma8"] ** 2 / s2_8)
 
-        sig0_arr = np.sqrt(s2_arr)
-        sig0_hi  = np.sqrt(s2_hi)
-        sig0_lo  = np.sqrt(s2_lo)
-        # Pre-compute dlns/dlnm at z=0 (growth factor cancels in ratio)
-        dlns_dlnm = (np.log(sig0_hi) - np.log(sig0_lo)) / (2.0 * dlnm)
+        _massless = "sum_mnu" not in theta
+        _cold_cache = {}
+
+        def _sigma_shape(z):
+            """(sigma(M, z)/D(z), dln sigma/dln M) on the cold field."""
+            key = 0.0 if _massless else round(float(z), 6)
+            if key not in _cold_cache:
+                pk_cold = pk_z0 * self._hmf._cold_factor(theta, key)
+                s2 = [np.array(self._hmf._sigma2_z0(
+                          jnp.array(mh_arr * f), pk_cold, jnp.array(rho_cold)))
+                      * rescale2
+                      for f in (1.0, np.exp(dlnm), np.exp(-dlnm))]
+                sig0 = np.sqrt(s2[0])
+                dlns = (np.log(np.sqrt(s2[1])) - np.log(np.sqrt(s2[2]))) \
+                    / (2.0 * dlnm)
+                _cold_cache[key] = (sig0, dlns)
+            return _cold_cache[key]
 
         ham_table = np.zeros((len(z_grid), len(log10mh_grid)), dtype=np.float64)
 
         for i_z, z in enumerate(z_grid):
             # --- Cumulative HMF: n(> M_h) in (Mpc/h)^{-3}
             # Scale sigma by growth factor; dlns/dlnm is growth-factor-independent
-            growth   = _growth_factor_flat(z, omega_m)
+            # growth through the package dispatcher, so a w0waCDM theta gets the
+            # CPL ODE rather than the LCDM fitting formula
+            growth   = float(growth_factor(float(z), theta))
+            sig0_arr, dlns_dlnm = _sigma_shape(z)
             sig      = sig0_arr * growth
             fsig     = np.array(self._hmf._fsigma_fn(jnp.array(sig), z))
-            dndm_arr = fsig * (rho_mean / mh_arr ** 2) * np.abs(dlns_dlnm)
+            # cold density in the prefactor too, matching HaloMassFunction.dndm
+            dndm_arr = fsig * (rho_cold / mh_arr ** 2) * np.abs(dlns_dlnm)
             dndlogmh = dndm_arr * mh_arr * np.log(10.0)    # (Mpc/h)^{-3} dex^{-1}
             n_halo_cumul = np.cumsum(dndlogmh[::-1] * dlogmh[::-1])[::-1]
 
