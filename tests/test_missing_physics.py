@@ -136,6 +136,17 @@ def test_nu_suppression_shape(model, fid):
     # small scales suppressed relative to large scales (σ8-anchored shape)
     assert r[-1] < r[0] - 0.01
 
+    # The minimal normal hierarchy too, not only 0.3 eV.  Testing 0.3 alone is
+    # what let the old closed tanh form stand: centred on k_nr it saturated
+    # about 1.5 decades of k too early, which shows up as a suppression that is
+    # already near its asymptote at k = 0.01 h/Mpc.
+    r6 = np.asarray(pk.pk_linear(k, 0.0, dict(c0, sum_mnu=0.06))) / p0
+    kk = np.asarray(k)
+    lo = float(np.interp(0.01, kk, r6)) - 1.0
+    hi = float(np.interp(1.0, kk, r6)) - 1.0
+    assert hi < lo < 0.0                                # monotone onset
+    assert lo / hi < 0.55                               # tanh form gave ~0.93
+
 
 def test_beyond_lcdm_params_are_plumbed(model, fid):
     """w0/wa/sum_mnu move the observables through growth AND geometry."""

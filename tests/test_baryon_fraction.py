@@ -186,7 +186,20 @@ class TestDeltaSigmaSplitConstant:
         )
 
     def test_cdm_fraction_matches_omega(self, pred_and_theta):
-        """With constant f_b, ds_cdm / ds_total = Omega_cdm / Omega_m."""
+        """With constant f_b, ds_cdm / ds_total = 1 - Omega_b / Omega_m.
+
+        The split is baryons versus everything else, and lensing responds to all
+        the matter -- so the "cdm" component carries Omega_m - Omega_b, which
+        with massive neutrinos is Omega_cdm + Omega_nu, not Omega_cdm. Asserting
+        against Omega_cdm / Omega_m was only ever right because the default
+        dictionary had Omega_cdm == Omega_m - Omega_b, i.e. no room for
+        neutrinos at all.
+
+        Lumping the neutrinos in with the CDM here is an f_nu-level
+        approximation: they do lens, but they do not follow the NFW profile the
+        component is given. At the 0.06 eV default that is a 0.46% misassignment
+        of the non-baryonic lensing amplitude.
+        """
         pred, theta = pred_and_theta
         R = jnp.logspace(-1, 1.0, 8)
         hod_p = {
@@ -194,7 +207,7 @@ class TestDeltaSigmaSplitConstant:
             "log10m0": 11.5, "log10m1": 12.5, "alpha": 1.0,
         }
         result = pred.delta_sigma_split(R, 0.1, theta, hod_p)
-        expected_fcdm = theta["Omega_cdm"] / theta["Omega_m"]
+        expected_fcdm = 1.0 - theta["Omega_b"] / theta["Omega_m"]
         ratio = np.asarray(result["cdm"] / result["total"])
         np.testing.assert_allclose(ratio, expected_fcdm, rtol=1e-6)
 

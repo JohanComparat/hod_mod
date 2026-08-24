@@ -30,6 +30,8 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
+from .power_spectrum import NU_DENOM_EV
+
 __all__ = ["ParameterContainer", "Cosmology"]
 
 
@@ -125,7 +127,9 @@ class Cosmology(ParameterContainer):
     Omega_m, sigma8, h, n_s, Omega_b : float
         Required.
     Omega_cdm, ln10_10_As, w0, wa, sum_mnu : float, optional
-        Optional; defaults are the flat-LCDM, massless-neutrino values.
+        Optional; defaults are flat LCDM with the minimal normal-hierarchy
+        neutrino mass, Sigma m_nu = 0.06 eV.  ``Omega_cdm`` defaults to
+        ``Omega_m - Omega_b - Omega_nu`` so the density budget closes.
     transfer, mass_def : str, optional
         Static configuration. Not differentiable *by construction* -- that is
         the point of separating them.
@@ -137,9 +141,11 @@ class Cosmology(ParameterContainer):
 
     def __init__(self, Omega_m, sigma8, h, n_s, Omega_b,
                  Omega_cdm=None, ln10_10_As=3.044, w0=-1.0, wa=0.0,
-                 sum_mnu=0.0, transfer="cosmopower", mass_def="200m"):
+                 sum_mnu=0.06, transfer="cosmopower", mass_def="200m"):
         if Omega_cdm is None:
-            Omega_cdm = Omega_m - Omega_b
+            # Omega_m includes the neutrinos, so Omega_nu comes out of the
+            # cold sector -- see power_spectrum.omega_cdm.
+            Omega_cdm = Omega_m - Omega_b - sum_mnu / (NU_DENOM_EV * h ** 2)
         super().__init__(
             Omega_m=Omega_m, sigma8=sigma8, h=h, n_s=n_s, Omega_b=Omega_b,
             Omega_cdm=Omega_cdm, ln10_10_As=ln10_10_As, w0=w0, wa=wa,
@@ -154,6 +160,7 @@ class Cosmology(ParameterContainer):
             "n_s": self.n_s, "Omega_b": self.Omega_b,
             "Omega_cdm": self.Omega_cdm,
             "ln10^{10}A_s": self.ln10_10_As,
+            "sum_mnu": self.sum_mnu,
             "w0": self.w0, "wa": self.wa,
         }
 
@@ -161,5 +168,6 @@ class Cosmology(ParameterContainer):
     def planck18(cls, **overrides):
         """Planck 2018 TT,TE,EE+lowE best fit."""
         base = dict(Omega_m=0.3100, sigma8=0.8111, h=0.6736,
-                    n_s=0.9649, Omega_b=0.0493, ln10_10_As=3.044)
+                    n_s=0.9649, Omega_b=0.0493, ln10_10_As=3.044,
+                    sum_mnu=0.06)
         return cls(**{**base, **overrides})

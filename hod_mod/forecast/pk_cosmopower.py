@@ -43,6 +43,8 @@ import jax
 import jax.numpy as jnp
 
 from hod_mod.core.halo_mass_function import growth_factor
+from hod_mod.core.power_spectrum import (
+    omega_cdm_cold_equivalent as _omega_cdm_cold)
 # Reuse the EH98 wrapper's σ8 machinery verbatim so the normalisation this class
 # derives is numerically identical to the one HaloMassFunction.sigma applies.
 from hod_mod.forecast.pk_eisenstein_hu import (
@@ -178,10 +180,10 @@ class CosmoPowerJaxPkLinear:
         k = jnp.asarray(k)
         h = theta["h"]
         Ob = theta["Omega_b"]
-        if "Omega_cdm" in theta:
-            Ocdm = theta["Omega_cdm"]
-        else:
-            Ocdm = theta["Omega_m"] - Ob
+        # The network is massless-trained, so it is evaluated at the massless-
+        # equivalent cold density and corrected by the nu_ratio table; see
+        # power_spectrum.omega_cdm_cold_equivalent.
+        Ocdm = _omega_cdm_cold(theta)
         n_s = theta["n_s"]
         omega_b, omega_cdm = Ob * h ** 2, Ocdm * h ** 2
         check_training_box({"omega_b": omega_b, "omega_cdm": omega_cdm, "h": h,
@@ -198,7 +200,9 @@ class CosmoPowerJaxPkLinear:
         logp_grid = jnp.log(pk_native) + 3.0 * jnp.log(h)
         pk = jnp.exp(_loglog_interp(jnp.log(k), logk_grid, logp_grid))
         if "sum_mnu" in theta:
-            pk = pk * _nu_suppression(k, theta)
+            # The network is trained massless, so the correction is applied at
+            # the emulated redshift rather than only at z = 0.
+            pk = pk * _nu_suppression(k, theta, z)
         return pk
 
     def _sigma8_shape2(self, theta: dict) -> jnp.ndarray:

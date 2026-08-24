@@ -85,7 +85,7 @@ and your machine's layout is set once in `~/.bashrc`.
 | `HOD_MOD_RESULTS` | `results_root()` | generated outputs (chains, figures) — **never** in the repo | `~/.local/share/hod_mod/results` |
 | `HOD_MOD_CACHE` | `cache_root()` | JAX/XLA compilation caches | OS user-cache dir |
 | `HOD_MOD_DATA_DOI` | — | pin a specific Zenodo version (default: pinned in code) | concept DOI |
-| `HOD_MOD_PK_BACKEND` | `default_pk_linear()` | linear-P(k) backend: `cosmopower` or `camb` | `cosmopower` |
+| `HOD_MOD_PK_BACKEND` | `default_pk_linear()` | linear-P(k) backend: `cosmopower`, `class` or `camb` | `cosmopower` |
 
 Recommended `~/.bashrc` setup:
 
@@ -107,13 +107,20 @@ Since **0.3.1** every fitting/prediction entry point obtains its linear power
 spectrum from `hod_mod.core.power_spectrum.default_pk_linear()`. The default
 backend is the **CosmoPower-JAX** neural emulator (CAMB-accuracy shape to
 <0.1%, JAX-differentiable, millisecond evaluation, networks bundled in the
-wheel — no runtime download); `HOD_MOD_PK_BACKEND=camb` restores the CAMB
-Boltzmann path.
+wheel — no runtime download). Two Boltzmann solvers are available for
+reference work: `HOD_MOD_PK_BACKEND=class` (the reference — an independent
+solver, and the only backend that treats massive neutrinos exactly) and
+`HOD_MOD_PK_BACKEND=camb`.
 
-> **Behaviour change.** The emulator is trained massless-ν while the CAMB
-> backend runs with Σm_ν = 0.06 eV, so at fixed A_s the default P(k) is
-> **~2.5% higher in amplitude** (≈1.3% in σ8) than results computed on
-> ≤ 0.3.0. Pin `HOD_MOD_PK_BACKEND=camb` to reproduce those numbers exactly.
+> **Behaviour change.** Σm_ν is now a first-class parameter (`sum_mnu`,
+> default 0.06 eV) and the density budget closes: Ω_cdm = Ω_m − Ω_b − Ω_ν =
+> 0.2593, not 0.2607. σ(M), dn/dM and b(M) are built from the **cold**
+> (CDM+baryon) field. The emulator, trained massless, is corrected onto the
+> massive-neutrino spectrum by the CLASS-distilled table in
+> `hod_mod/core/nu_ratio.py`, so the ~2.5% amplitude offset earlier releases
+> carried between the emulator and the Boltzmann backends is gone. Results
+> from before this change are not bit-comparable; set `sum_mnu = 0.0`
+> explicitly to recover the massless behaviour exactly.
 
 ```python
 from hod_mod.core.power_spectrum import default_pk_linear

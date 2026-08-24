@@ -47,6 +47,7 @@ from hod_mod.core.halo_mass_function import (
     growth_factor,
 )
 from hod_mod.core.halo_profiles import nfw_uk_jax, concentration_dutton14_jax
+from hod_mod.core.power_spectrum import NU_DENOM_EV
 from hod_mod.connection.hod.zumandelbaum15 import (
     _mh_from_mstar_zu15,
     _mstar_from_mh_zu15,
@@ -164,10 +165,11 @@ OBSERVABLES = ["wp", "ds", "cl_gX", "cl_gy", "cl_XX", "cl_kk",
 _C_OVER_H0 = 2997.92   # c/H0 [Mpc/h]  (H0 = 100 h km/s/Mpc)
 
 # Fixed (non-varied) cosmology + HOD nuisance held at Planck18 / ZM15-MAP values.
-# w0/wa/sum_mnu fallbacks are the ΛCDM/massless limits (the missing-physics
-# extension promotes them into the vector with these same fiducials).
+# w0/wa are the ΛCDM limit and sum_mnu the minimal normal hierarchy (the
+# missing-physics extension promotes all three into the vector with these same
+# fiducials, and they match LinearPowerSpectrum.default_cosmology()).
 _FIXED_COSMO = {"h": 0.6736, "Omega_b": 0.0493, "n_s": 0.9649,
-                "w0": -1.0, "wa": 0.0, "sum_mnu": 0.0}
+                "w0": -1.0, "wa": 0.0, "sum_mnu": 0.06}
 _FIXED_HOD = {
     "log10m_star_thresh": 10.0,   # BGS M* > 10 threshold sample
     "beta_sat": 0.9, "bcut": 0.86, "beta_cut": 0.41, "alpha_sat": 1.0,
@@ -720,11 +722,15 @@ class ForwardModel:
             return theta[_IDX[name]] if name in _IDX else _FIXED_COSMO[name]
         Om = theta[_IDX["Omega_m"]]
         Ob = g("Omega_b")
+        hh = g("h")
+        # Omega_m includes the neutrinos, so the cold sector is what is left
+        # after Omega_nu = sum_mnu / (93.14 eV h^2) is taken out.
+        Onu = g("sum_mnu") / (NU_DENOM_EV * hh ** 2)
         return {
-            "h": g("h"),
+            "h": hh,
             "Omega_b": Ob,
             "Omega_m": Om,
-            "Omega_cdm": Om - Ob,
+            "Omega_cdm": Om - Ob - Onu,
             "n_s": g("n_s"),
             "sigma8": theta[_IDX["sigma8"]],
             # beyond-ΛCDM sector (missing-physics extension).  Their presence
@@ -845,7 +851,10 @@ class ForwardModel:
         uniform-in-ln k grid (jnp.gradient with scalar spacing).
         """
         kappa = 0.42
-        rho_m = _RHO_CRIT0 * c["Omega_m"]
+        # Cold density, to match the Lagrangian radius sigma(M) is built on.
+        # The slope itself is taken from the total-matter shape: ln(P_cb/P_m)
+        # varies by ~3e-3 over four decades of k, i.e. ~0.03% of n_eff.
+        rho_m = _RHO_CRIT0 * (c["Omega_m"] - c["sum_mnu"] / (NU_DENOM_EV * c["h"] ** 2))
         R = (3.0 * self.m / (4.0 * jnp.pi * rho_m)) ** (1.0 / 3.0)
         kg = jnp.logspace(-3.0, 2.0, 256)
         lnk = jnp.log(kg)

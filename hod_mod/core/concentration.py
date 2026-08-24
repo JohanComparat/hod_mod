@@ -40,7 +40,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .power_spectrum import rho_critical_0, eisenstein_hu_pk
+from .power_spectrum import rho_critical_0, eisenstein_hu_pk, omega_cb
 from .halo_mass_function import _growth_factor_flat_jax
 
 _RHO_CRIT0 = rho_critical_0()  # (Msun/h)/(Mpc/h)³
@@ -355,7 +355,9 @@ def _neff_eisenstein_hu(m_h: jnp.ndarray, theta: dict,
     -------
     n_eff : jnp.ndarray, shape (NM,), effective slope (typically −3 to 0)
     """
-    rho_m = _RHO_CRIT0 * theta["Omega_m"]
+    # Cold density, to match the Lagrangian radius sigma(M) is built on.
+    rho_m = _RHO_CRIT0 * (omega_cb(theta) if "sum_mnu" in theta
+                          else theta["Omega_m"])
     m = jnp.asarray(m_h)
     R = (3.0 * m / (4.0 * jnp.pi * rho_m)) ** (1.0 / 3.0)     # Mpc/h
     k_R = kappa * 2.0 * jnp.pi / R                             # h/Mpc

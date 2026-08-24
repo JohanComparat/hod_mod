@@ -461,18 +461,22 @@ class HamAGNModel:
         # 60× (20 z-values × 3 finite-difference sigma calls).
         # sigma(M, z) = sigma(M, 0) × D(z)/D(0) for the same cosmology.
         # ------------------------------------------------------------------
+        # Mirrors HaloMassFunction.sigma exactly: sigma(M) on the COLD field
+        # (rho_cb, P_cb), the sigma8 anchor on the total-matter field.
         omega_m  = float(theta["Omega_m"])
         rho_mean = omega_m * float(_RHO_CRIT0)
+        rho_cold = float(self._hmf._rho_cold(theta))
 
         pk_z0 = self._hmf._pk(self._hmf._k_int, 0.0, theta)
+        pk_cold = pk_z0 * self._hmf._cold_factor(theta)
         s2_arr = np.array(self._hmf._sigma2_z0(
-            jnp.array(mh_arr), pk_z0, jnp.array(rho_mean)
+            jnp.array(mh_arr), pk_cold, jnp.array(rho_cold)
         ))
         s2_hi = np.array(self._hmf._sigma2_z0(
-            jnp.array(mh_arr * np.exp(dlnm)), pk_z0, jnp.array(rho_mean)
+            jnp.array(mh_arr * np.exp(dlnm)), pk_cold, jnp.array(rho_cold)
         ))
         s2_lo = np.array(self._hmf._sigma2_z0(
-            jnp.array(mh_arr * np.exp(-dlnm)), pk_z0, jnp.array(rho_mean)
+            jnp.array(mh_arr * np.exp(-dlnm)), pk_cold, jnp.array(rho_cold)
         ))
         # sigma8 rescaling (only if theta has sigma8 key)
         if "sigma8" in theta:

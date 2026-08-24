@@ -30,12 +30,17 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
+from hod_mod.core.power_spectrum import (
+    LinearPowerSpectrum as _LPS)
+
+_default_cosmology = _LPS.default_cosmology
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _OUT = os.path.normpath(os.path.join(_HERE, "..", "..", "benchmarks", "accuracy.json"))
 
 Z = 0.2
-THETA = {"Omega_m": 0.3100, "Omega_b": 0.0493, "Omega_cdm": 0.2607,
-         "h": 0.6736, "n_s": 0.9649, "ln10^{10}A_s": 3.044, "sigma8": 0.8111}
+# The package default, with the budget closed: Omega_cdm = Om - Ob - Onu.
+THETA = dict(_default_cosmology(), sigma8=0.8111)
 
 
 def _entry(quantity, reference, deviation, tolerance, metric, note,
@@ -123,45 +128,75 @@ def check_concentration_and_bias():
 
 
 def check_power_spectrum():
-    """Linear P(k) shape: the differentiable backends against CAMB, and CLASS against CAMB."""
+    """Linear P(k): every backend against the CLASS reference, plus the nu table."""
     out = []
     from hod_mod.core.power_spectrum import LinearPowerSpectrum, eisenstein_hu_pk
     k = np.logspace(-3, 1, 200)
     kj = jnp.array(k)
     i0 = int(np.argmin(abs(k - 0.05)))
     nrm = lambda p: np.asarray(p) / np.asarray(p)[i0]
-    ref = nrm(LinearPowerSpectrum().pk_linear(kj, 0.0, THETA))
+
+    # CLASS is the reference: an independent Boltzmann solver, and the only
+    # backend here that treats massive neutrinos exactly.  When classy is not
+    # installed the reference falls back to CAMB -- recorded in each row's
+    # "reference" field, so which solver was used is never implicit.
+    cl = None
+    try:
+        from hod_mod.core.power_spectrum import ClassPkLinear
+        cl = ClassPkLinear()
+        ref = nrm(cl.pk_linear(kj, 0.0, THETA))
+        ref_name = "CLASS"
+    except Exception:
+        ref = nrm(LinearPowerSpectrum().pk_linear(kj, 0.0, THETA))
+        ref_name = "CAMB"
+
+    if ref_name == "CLASS":
+        d = float(np.max(np.abs(nrm(LinearPowerSpectrum().pk_linear(kj, 0.0, THETA)) / ref - 1)))
+        out.append(_entry("P_lin(k) shape, CAMB", "CLASS", d, 0.02, "max |ratio-1|",
+                          "two Boltzmann solvers at matched N_eff and "
+                          "Sigma m_nu; bounds the reference's own error"))
+    else:
+        out.append(_entry("P_lin(k) shape, CAMB", "CLASS", None, 0.02,
+                          "max |ratio-1|", "unavailable: classy not installed",
+                          "skipped"))
+
     try:
         from hod_mod.forecast.pk_cosmopower import CosmoPowerJaxPkLinear
         d = float(np.max(np.abs(nrm(CosmoPowerJaxPkLinear().pk_shape(kj, THETA)) / ref - 1)))
-        out.append(_entry("P_lin(k) shape, CosmoPower-JAX", "CAMB", d, 0.05,
+        out.append(_entry("P_lin(k) shape, CosmoPower-JAX", ref_name, d, 0.05,
                           "max |ratio-1|",
-                          "normalised at k=0.05 h/Mpc; residual is the "
-                          "massless-neutrino training convention"))
+                          "normalised at k=0.05 h/Mpc; the emulator is trained "
+                          "massless and is corrected by the CLASS nu table"))
     except Exception as e:
-        out.append(_entry("P_lin(k) shape, CosmoPower-JAX", "CAMB", None, 0.05,
+        out.append(_entry("P_lin(k) shape, CosmoPower-JAX", ref_name, None, 0.05,
                           "max |ratio-1|", f"unavailable: {type(e).__name__}", "skipped"))
+
     d = float(np.max(np.abs(nrm(eisenstein_hu_pk(kj, THETA)) / ref - 1)))
-    out.append(_entry("P_lin(k) shape, EH98", "CAMB", d, 0.06, "max |ratio-1|",
+    out.append(_entry("P_lin(k) shape, EH98", ref_name, d, 0.06, "max |ratio-1|",
                       "oscillating acoustic-feature error of a fitting formula"))
-    try:
-        from classy import Class
-        h = THETA["h"]
-        c = Class()
-        c.set({"output": "mPk", "P_k_max_h/Mpc": 20.0, "h": h,
-               "omega_b": THETA["Omega_b"] * h ** 2,
-               "omega_cdm": THETA["Omega_cdm"] * h ** 2,
-               "n_s": THETA["n_s"], "ln10^{10}A_s": THETA["ln10^{10}A_s"],
-               "N_ncdm": 1, "m_ncdm": 0.06, "N_ur": 2.0328})
-        c.compute()
-        pc = np.array([c.pk_lin(kk * h, 0.0) * h ** 3 for kk in k])
-        c.struct_cleanup(); c.empty()
-        d = float(np.max(np.abs(nrm(pc) / ref - 1)))
-        out.append(_entry("P_lin(k) shape, CAMB", "CLASS", d, 0.02, "max |ratio-1|",
-                          "two Boltzmann solvers; bounds the reference's own error"))
-    except Exception as e:
-        out.append(_entry("P_lin(k) shape, CAMB", "CLASS", None, 0.02,
-                          "max |ratio-1|", f"unavailable: {type(e).__name__}", "skipped"))
+
+    # The distilled cold/total table against a live CLASS solve: this is what
+    # sigma(M) and the mass function are built on.
+    if cl is not None:
+        try:
+            from hod_mod.core.nu_ratio import suppression_cb, suppression_m
+            th = dict(THETA, sum_mnu=0.30)      # amplify the effect ~5x
+            live = (np.asarray(cl.pk_linear_cb(kj, 0.0, th))
+                    / np.asarray(cl.pk_linear(kj, 0.0, th)))
+            tab = (np.asarray(suppression_cb(kj, th))
+                   / np.asarray(suppression_m(kj, th)))
+            d = float(np.max(np.abs(tab / live - 1)))
+            out.append(_entry("P_cb/P_m table", "CLASS", d, 0.005, "max |ratio-1|",
+                              "shipped class_nu_ratio.npz vs a live solve at "
+                              "Sigma m_nu = 0.30 eV"))
+        except Exception as e:
+            out.append(_entry("P_cb/P_m table", "CLASS", None, 0.005,
+                              "max |ratio-1|", f"unavailable: {type(e).__name__}",
+                              "skipped"))
+        cl.clear_cache()
+    else:
+        out.append(_entry("P_cb/P_m table", "CLASS", None, 0.005, "max |ratio-1|",
+                          "unavailable: classy not installed", "skipped"))
     return out
 
 

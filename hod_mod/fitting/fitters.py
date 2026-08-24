@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import jax.numpy as jnp
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
+from hod_mod.core.power_spectrum import (
+    LinearPowerSpectrum, default_pk_linear, mnu_sum, omega_nu)
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.core.beyond_linear_bias import BeyondLinearBiasMead21
@@ -145,10 +146,14 @@ def log_prob_joint(
 class _CachedPkLinear:
     """Interpolation cache around LinearPowerSpectrum for free-cosmo MCMC.
 
-    On the first call for a given (z, Ω_m, ln10As, h) key a reference P(k)
-    is computed on a fixed k grid via CAMB and log-log interpolated on all
-    subsequent calls.  This reduces per-sample cost from ~30 s to <1 ms once
-    the cache warms up.
+    On the first call for a given cosmology the reference P(k) is computed on a
+    fixed k grid by the wrapped backend and log-log interpolated on every
+    subsequent call.  With a Boltzmann backend this takes the per-sample cost
+    from seconds to <1 ms once the cache warms up.
+
+    The key must name every parameter the spectrum depends on.  It previously
+    covered only (z, Ω_m, ln10As, h), so a chain that varied Ω_b, n_s, w0/wa or
+    Σm_ν would silently be served a spectrum computed at a different cosmology.
     """
 
     def __init__(self, pk_lin_obj, n_k: int = 512):
@@ -161,8 +166,13 @@ class _CachedPkLinear:
         return (
             round(float(z), 4),
             round(float(theta["Omega_m"]), 5),
+            round(float(theta["Omega_b"]), 6),
             round(float(theta["ln10^{10}A_s"]), 4),
+            round(float(theta["n_s"]), 5),
             round(float(theta.get("h", 0.6736)), 4),
+            round(float(mnu_sum(theta)), 5),
+            round(float(theta.get("w0", -1.0)), 5),
+            round(float(theta.get("wa", 0.0)), 5),
         )
 
     def pk_linear(self, k, z: float, theta: dict):
@@ -224,7 +234,8 @@ class WpFitter:
         if "Omega_m" in all_params:
             Omega_m = float(all_params["Omega_m"])
             tc["Omega_m"]   = Omega_m
-            tc["Omega_cdm"] = Omega_m - float(tc["Omega_b"])
+            tc["Omega_cdm"] = (Omega_m - float(tc["Omega_b"])
+                               - float(omega_nu({**tc, "Omega_m": Omega_m})))
         if "S8" in all_params:
             S8      = float(all_params["S8"])
             Omega_m = tc["Omega_m"]

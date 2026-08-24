@@ -60,13 +60,13 @@ _FIDUCIAL_DEFAULT = {
     # (fit_xray_joint_bands._GAMMA_AGN), ~30% obscured at NH=1e22.
     "t_prof_slope": 0.0, "z_gas_norm": 0.3, "z_gas_mslope": 0.0, "z_gas_zs": 0.0,
     "agn_gamma": 1.8, "agn_fabs": 0.3, "agn_mu_bh_zs": 0.0,
-    # --- missing-physics extension (docs/missing_physics.rst).  Fiducials
-    # preserve the tier-2 predictions: eps_sn = the former _EPS_SN constant;
-    # (w0, wa, sum_mnu) = the ΛCDM/massless limit (the CPL growth ODE and the
-    # ν suppression are exactly their tier-2 values there); the quenching and
-    # FP/HI parameters only touch the new opt-in observables.
+    # --- missing-physics extension (docs/missing_physics.rst).  eps_sn is the
+    # former _EPS_SN constant and (w0, wa) are the ΛCDM limit, so the CPL growth
+    # ODE reproduces the tier-2 prediction exactly.  sum_mnu is the minimal
+    # normal hierarchy, matching LinearPowerSpectrum.default_cosmology(); the
+    # quenching and FP/HI parameters only touch the new opt-in observables.
     "eps_sn": 0.1,
-    "w0": -1.0, "wa": 0.0, "sum_mnu": 0.0,
+    "w0": -1.0, "wa": 0.0, "sum_mnu": 0.06,
     # ZM16 halo-quenching MAP (Zu & Mandelbaum 2016, the in-repo fiducials)
     "log10_Mq_cen": 11.78, "mu_q_cen": 0.41,
     "log10_Mq_sat": 12.19, "mu_q_sat": 0.24,

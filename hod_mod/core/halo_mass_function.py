@@ -86,7 +86,7 @@ def _patch_cemulator_numpy2() -> None:
 
 _patch_cemulator_numpy2()
 
-from .power_spectrum import rho_critical_0
+from .power_spectrum import rho_critical_0, mnu_sum, omega_nu, omega_cb, omega_cdm
 
 _RHO_CRIT0 = rho_critical_0()          # (Msun/h)/(Mpc/h)³
 _RHO_MEAN_PLANCK18 = _RHO_CRIT0 * 0.3100  # Planck 2018 Ω_m default
@@ -1063,6 +1063,28 @@ class HaloMassFunction:
         r = (3.0 * m_h / (4.0 * jnp.pi * rho_mean)) ** (1.0 / 3.0)
         return jax.vmap(_s2_single)(r)
 
+    # -- cold (CDM + baryon) sector ------------------------------------
+    # Neutrinos count in Omega_m but do not cluster into halos, so sigma(M),
+    # dn/dM and b(M) are built from the cold field: the Lagrangian radius uses
+    # rho_cb, and the spectrum is P_cb rather than P_m.  Both reduce exactly to
+    # the total-matter quantities when sum_mnu is absent or zero, so every
+    # massless call path stays bit-identical to before.
+
+    @staticmethod
+    def _rho_cold(theta: dict):
+        """Mean comoving *cold* density [(Msun/h)/(Mpc/h)^3]."""
+        if "sum_mnu" not in theta:
+            return theta["Omega_m"] * _RHO_CRIT0
+        return omega_cb(theta) * _RHO_CRIT0
+
+    def _cold_factor(self, theta: dict, z=0.0):
+        """P_cb/P_m from the CLASS table; exactly 1 in the massless limit."""
+        if "sum_mnu" not in theta:
+            return 1.0
+        from hod_mod.core import nu_ratio          # deferred: reads the npz
+        return (nu_ratio.suppression_cb(self._k_int, theta, z)
+                / nu_ratio.suppression_m(self._k_int, theta, z))
+
     def sigma(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
         """RMS linear density fluctuation σ(M, z) [dimensionless].
 
@@ -1086,12 +1108,17 @@ class HaloMassFunction:
         growth = growth_factor(z, theta)   # CPL ODE if theta carries w0/wa
 
         # Dynamic rho_mean so grad w.r.t. Omega_m flows correctly
-        rho_mean = omega_m * _RHO_CRIT0
+        rho_mean = omega_m * _RHO_CRIT0        # total matter — defines sigma8
+        rho_cold = self._rho_cold(theta)       # cold — defines the halo radius
 
-        pk_z0 = self._pk(self._k_int, 0.0, theta)
-        s2 = self._sigma2_z0(m_h, pk_z0, rho_mean)
+        pk_z0 = self._pk(self._k_int, 0.0, theta)      # total matter
+        pk_cold = pk_z0 * self._cold_factor(theta)     # cold
+        s2 = self._sigma2_z0(m_h, pk_cold, rho_cold)
 
-        # Sigma8 rescaling: normalise spectrum so σ(8 Mpc/h, z=0) = sigma8
+        # Sigma8 rescaling: normalise spectrum so σ(8 Mpc/h, z=0) = sigma8.
+        # The anchor stays on the TOTAL-matter field, so sigma8 keeps its usual
+        # meaning and existing priors stay interpretable; the amplitude it fixes
+        # is primordial and therefore common to both spectra.
         if "sigma8" in theta:
             R8 = 8.0  # Mpc/h
             M8 = (4.0 / 3.0) * jnp.pi * R8**3 * rho_mean
@@ -1122,7 +1149,7 @@ class HaloMassFunction:
         z : float  Redshift.
         theta : dict  Cosmological parameters.
         """
-        rho_mean = theta["Omega_m"] * _RHO_CRIT0
+        rho_mean = self._rho_cold(theta)   # cold: halos form from the cold field
 
         dlnm = 0.01
         sig_hi = self.sigma(m_h * jnp.exp(dlnm), z, theta)
@@ -1215,13 +1242,13 @@ class CsstHaloMassFunction:
         import numpy as np
         emu.set_cosmos(
             Omegab=float(theta["Omega_b"]),
-            Omegac=float(theta["Omega_cdm"]),
+            Omegac=float(omega_cdm(theta)),
             H0=float(theta["h"]) * 100.0,
             As=np.exp(float(theta["ln10^{10}A_s"])) * 1e-10,
             ns=float(theta["n_s"]),
             w=float(theta.get("w0", -1.0)),
             wa=float(theta.get("wa", 0.0)),
-            mnu=float(theta.get("mnu", 0.06)),
+            mnu=float(mnu_sum(theta)),
         )
 
     def dndm(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
@@ -1354,8 +1381,8 @@ class AemulusNuHaloMassFunction:
             "H0":         h * 100.0,
             "w0":         float(theta.get("w0", -1.0)),
             "ombh2":      float(theta["Omega_b"])   * h**2,
-            "omch2":      float(theta["Omega_cdm"]) * h**2,
-            "nu_mass_ev": float(theta.get("mnu", 0.0)),
+            "omch2":      float(omega_cdm(theta)) * h**2,
+            "nu_mass_ev": float(mnu_sum(theta)),
         }
 
     def dndm(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:

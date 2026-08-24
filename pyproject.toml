@@ -36,6 +36,11 @@ hod-mod = "hod_mod.cli.__main__:main"
 
 [project.optional-dependencies]
 fitting   = ["emcee", "pyyaml", "pandas"]
+# CLASS is the reference P(k) backend (HOD_MOD_PK_BACKEND=class) and the only
+# one that treats massive neutrinos exactly; it also builds the distilled
+# cold/total table in core/nu_ratio.py.  An extra rather than a core dep: the
+# shipped npz means ordinary runs never need it, and it needs a compiler.
+reference = ["classy"]
 # blackjax powers the gradient-based NUTS sampler in fitting/jax_inference.py;
 # optional (run_nuts raises a clear ImportError if absent).
 inference = ["blackjax"]

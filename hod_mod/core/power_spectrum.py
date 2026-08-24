@@ -1,4 +1,13 @@
-"""Linear matter power spectrum via CAMB (Lewis, Challinor & Lasenby 2000)."""
+"""Linear matter power spectrum backends.
+
+CLASS (:class:`ClassPkLinear`) is the reference; CAMB
+(:class:`LinearPowerSpectrum`) is the second Boltzmann solver kept for
+cross-checks; :func:`eisenstein_hu_pk` is the analytic, differentiable
+fallback.  :func:`default_pk_linear` selects between them and defaults to
+the CosmoPower-JAX emulator, which lives in ``hod_mod.forecast``.
+"""
+
+from collections import OrderedDict
 
 import numpy as np
 import jax
@@ -35,6 +44,84 @@ def rho_critical_0() -> float:
     return float(rho_SI * Mpc_m**3 / Msun_kg)
 
 
+# ---------------------------------------------------------------------------
+# Massive neutrinos
+# ---------------------------------------------------------------------------
+
+#: Ω_ν h² = Σm_ν / 93.14 eV — the standard closure relation for three
+#: degenerate species at N_eff = 3.044 (Mangano et al. 2005).
+NU_DENOM_EV = 93.14
+
+_WARNED_MNU_ALIAS = False
+
+
+def mnu_sum(theta):
+    """Σm_ν [eV] from a cosmology dict; 0.0 when the key is absent.
+
+    ``"sum_mnu"`` is the canonical spelling across the package.  ``"mnu"`` is
+    accepted as a deprecated alias (it was the spelling the CSST and Aemulus-ν
+    paths used to read, though nothing ever wrote it) and warns once.
+
+    Traced values pass through unchanged, so this is safe under ``jax.jit``.
+    """
+    global _WARNED_MNU_ALIAS
+    if "sum_mnu" in theta:
+        return theta["sum_mnu"]
+    if "mnu" in theta:
+        if not _WARNED_MNU_ALIAS:
+            import warnings
+            warnings.warn(
+                "cosmology key 'mnu' is a deprecated alias for 'sum_mnu'; "
+                "update the dict to use 'sum_mnu'.",
+                DeprecationWarning, stacklevel=2)
+            _WARNED_MNU_ALIAS = True
+        return theta["mnu"]
+    return 0.0
+
+
+def omega_nu(theta):
+    """Ω_ν = Σm_ν / (93.14 eV · h²) — a density parameter, not ω_ν = Ω_ν h²."""
+    return mnu_sum(theta) / (NU_DENOM_EV * theta["h"] ** 2)
+
+
+def omega_cb(theta):
+    """Ω_cb = Ω_m − Ω_ν, the *cold* (CDM + baryon) density parameter.
+
+    This is the density that sets the Lagrangian radius of a halo and the
+    normalisation of the mass function: neutrinos contribute to Ω_m but do not
+    cluster into halos.  See the "Massive neutrinos" section of the cosmology
+    documentation page for the cold-versus-total convention.
+    """
+    return theta["Omega_m"] - omega_nu(theta)
+
+
+def omega_cdm_cold_equivalent(theta):
+    """Omega_cdm for a backend that has no neutrino sector of its own.
+
+    EH98 and the CosmoPower network are massless by construction, so the
+    spectrum they should return is the massless one at the *same* total
+    Omega_m -- which is exactly the reference
+    :mod:`hod_mod.core.nu_ratio` measured its ratios against.  The neutrinos
+    are therefore lumped back into the cold sector here and taken out again by
+    the ratio.  Feeding these backends the true (reduced) Omega_cdm *and* then
+    applying the ratio counts the cdm -> nu transfer twice: 1.16% against CLASS
+    instead of 0.14%.
+    """
+    return theta["Omega_m"] - theta["Omega_b"]
+
+
+def omega_cdm(theta):
+    """Ω_cdm = Ω_m − Ω_b − Ω_ν, or the explicit ``Omega_cdm`` entry if present.
+
+    Planck's Ω_m already *includes* the minimal neutrino mass, so subtracting
+    Ω_ν here is what keeps the budget closed: adding Σm_ν on top of a fixed
+    Ω_cdm would silently raise Ω_m instead.
+    """
+    if "Omega_cdm" in theta:
+        return theta["Omega_cdm"]
+    return theta["Omega_m"] - theta["Omega_b"] - omega_nu(theta)
+
+
 def default_pk_linear(backend: str = None):
     """Construct the default linear-P(k) backend for the production stack.
 
@@ -52,18 +139,36 @@ def default_pk_linear(backend: str = None):
        is also run massless.  Results produced before this became the default are not
        directly comparable; see the emulator's ``TRAINING_BOX`` for its validity range.
 
-    ``backend`` (or ``$HOD_MOD_PK_BACKEND``) overrides: ``"cosmopower"`` (default) or
-    ``"camb"`` to restore the CAMB path.
+    ``backend`` (or ``$HOD_MOD_PK_BACKEND``) overrides: ``"cosmopower"`` (default),
+    ``"class"`` for the CLASS reference backend, or ``"camb"`` for the second
+    Boltzmann solver.  Both Boltzmann paths cost seconds per cosmology and are
+    not differentiable, so they are for reference and validation work, not for
+    chains.
     """
     import os
     backend = (backend or os.environ.get("HOD_MOD_PK_BACKEND", "cosmopower")).lower()
     if backend == "camb":
         return LinearPowerSpectrum()
+    if backend == "class":
+        return ClassPkLinear()
     if backend == "cosmopower":
         from hod_mod.forecast.pk_cosmopower import CosmoPowerJaxPkLinear
         return CosmoPowerJaxPkLinear()
     raise ValueError(
-        f"pk backend must be 'cosmopower' or 'camb', got {backend!r}")
+        f"pk backend must be 'cosmopower', 'class' or 'camb', got {backend!r}")
+
+
+def _interp_pk_table(k, kh, pk):
+    """Log-log interpolate a tabulated P(k) onto the requested k grid.
+
+    Shared by the two Boltzmann backends so a CAMB table and a CLASS table are
+    resampled by exactly the same rule and can be differenced directly.
+    """
+    return jnp.power(
+        10.0,
+        jnp.interp(jnp.log(k), jnp.log(jnp.asarray(kh)),
+                   jnp.log10(jnp.maximum(jnp.asarray(pk), 1e-50))),
+    )
 
 
 class LinearPowerSpectrum:
@@ -92,7 +197,10 @@ class LinearPowerSpectrum:
         pars.set_cosmology(
             H0=100.0 * h,
             ombh2=float(theta["Omega_b"]) * h**2,
-            omch2=float(theta["Omega_cdm"]) * h**2,
+            omch2=float(omega_cdm(theta)) * h**2,
+            mnu=float(mnu_sum(theta)),
+            num_massive_neutrinos=3,
+            nnu=3.044,
         )
         pars.InitPower.set_params(
             ns=float(theta["n_s"]),
@@ -104,12 +212,7 @@ class LinearPowerSpectrum:
 
     def _interp_pk(self, k, kh, pk2d):
         """Log-log interpolate a CAMB P(k) table onto the requested k grid."""
-        pk_arr = jnp.asarray(pk2d[0])
-        k_arr = jnp.asarray(kh)
-        return jnp.power(
-            10.0,
-            jnp.interp(jnp.log(k), jnp.log(k_arr), jnp.log10(jnp.maximum(pk_arr, 1e-50))),
-        )
+        return _interp_pk_table(k, kh, pk2d[0])
 
     def pk_linear(self, k: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
         """Linear P(k) [(Mpc/h)^3] at redshift z (total matter).
@@ -179,17 +282,184 @@ class LinearPowerSpectrum:
 
     @staticmethod
     def default_cosmology() -> dict:
-        """Planck 2018 TT,TE,EE+lowE best-fit values (flat ΛCDM)."""
+        """Planck 2018 TT,TE,EE+lowE best-fit values (flat ΛCDM, Σm_ν = 0.06 eV).
+
+        The budget closes by construction: ``Omega_b + Omega_cdm + Omega_nu ==
+        Omega_m`` exactly.  Planck's Ω_m = 0.3100 already includes the minimal
+        normal-hierarchy neutrino mass, so Ω_cdm is 0.2593, not 0.2607 —
+        carrying 0.2607 *and* a massive neutrino would put the spectrum at
+        Ω_m ≈ 0.3114 while ρ̄, E(z) and D(z) still used 0.3100.
+        """
         return {
             "h": 0.6736,
             "Omega_b": 0.0493,
-            "Omega_cdm": 0.2607,
+            "Omega_cdm": 0.3100 - 0.0493 - 0.06 / (NU_DENOM_EV * 0.6736 ** 2),
             "Omega_m": 0.3100,
             "n_s": 0.9649,
             "ln10^{10}A_s": 3.044,
+            "sum_mnu": 0.06,
             "w0": -1.0,
             "wa": 0.0,
         }
+
+
+#: CLASS ``N_ur`` for three degenerate massive species sharing N_eff = 3.044
+#: (the recipe in CLASS's own ``explanatory.ini``).  Using the massless value
+#: 3.044 alongside ``deg_ncdm = 3`` would put N_eff near 5 and inflate the
+#: early-time radiation density -- a ~14% error in sigma8.
+_CLASS_N_UR_3NU = 0.00441
+_CLASS_N_UR_MASSLESS = 3.044
+
+
+class ClassPkLinear:
+    """Linear P(k, z) computed with CLASS (Blas, Lesgourgues & Tram 2011).
+
+    The reference backend.  CLASS is an independent Boltzmann solver, so
+    differencing it against CAMB bounds the numerical error of the reference
+    itself, and unlike every other backend here it treats massive neutrinos
+    exactly rather than through a fitting form.  It also exposes the *cold*
+    (CDM + baryon) spectrum through :meth:`pk_linear_cb`, which is what the
+    halo sector needs: neutrinos contribute to Omega_m but do not cluster into
+    halos.
+
+    One CLASS solve costs a few seconds and is entirely dominated by
+    ``compute()`` -- pulling P(k) out afterwards is milliseconds.  The solver
+    object is therefore cached per cosmology, so ``pk_linear`` and
+    ``pk_linear_cb`` at many redshifts all share a single solve.
+
+    Parameters
+    ----------
+    z_max : float
+        Largest redshift the cached solve can serve (CLASS ``z_max_pk``).
+    cache_size : int
+        How many distinct cosmologies to keep solved at once.  Evicted solvers
+        are freed with ``struct_cleanup()``/``empty()``.
+    """
+
+    #: Internal table grid -- identical to :class:`LinearPowerSpectrum` so the
+    #: two Boltzmann backends can be differenced without regridding.
+    _KMIN, _KMAX, _NK = 1e-4, 200.0, 1024
+
+    def __init__(self, z_max: float = 5.0, cache_size: int = 2):
+        try:
+            import classy
+        except ImportError as e:
+            raise ImportError("classy not installed — pip install classy") from e
+        self._classy = classy
+        self._z_max = float(z_max)
+        self._cache_size = max(1, int(cache_size))
+        self._cache = OrderedDict()
+        self._kh = np.logspace(np.log10(self._KMIN), np.log10(self._KMAX), self._NK)
+
+    # -- CLASS configuration -------------------------------------------
+    @staticmethod
+    def _key(theta: dict) -> tuple:
+        """Cache key: everything the CLASS solve depends on."""
+        return (round(float(theta["h"]), 8),
+                round(float(theta["Omega_b"]), 9),
+                round(float(omega_cdm(theta)), 9),
+                round(float(theta["n_s"]), 8),
+                round(float(theta["ln10^{10}A_s"]), 8),
+                round(float(mnu_sum(theta)), 8),
+                round(float(theta.get("w0", -1.0)), 8),
+                round(float(theta.get("wa", 0.0)), 8),
+                round(float(theta.get("T_cmb", 2.7255)), 6))
+
+    def _settings(self, theta: dict) -> dict:
+        h = float(theta["h"])
+        mnu = float(mnu_sum(theta))
+        pars = {
+            "output":          "mPk",
+            "h":               h,
+            "omega_b":         float(theta["Omega_b"]) * h ** 2,
+            "omega_cdm":       float(omega_cdm(theta)) * h ** 2,
+            "n_s":             float(theta["n_s"]),
+            "A_s":             float(np.exp(float(theta["ln10^{10}A_s"])) * 1e-10),
+            "P_k_max_h/Mpc":   self._KMAX,
+            "z_max_pk":        self._z_max,
+            "T_cmb":           float(theta.get("T_cmb", 2.7255)),
+        }
+        if mnu > 0.0:
+            pars.update({"N_ncdm": 1, "deg_ncdm": 3.0, "m_ncdm": mnu / 3.0,
+                         "N_ur": _CLASS_N_UR_3NU})
+        else:
+            pars["N_ur"] = _CLASS_N_UR_MASSLESS
+        w0 = float(theta.get("w0", -1.0))
+        wa = float(theta.get("wa", 0.0))
+        if w0 != -1.0 or wa != 0.0:
+            pars.update({"Omega_Lambda": 0.0, "w0_fld": w0, "wa_fld": wa,
+                         "use_ppf": "yes"})
+        return pars
+
+    def _solver(self, theta: dict):
+        """The cached CLASS instance for this cosmology, solving on a miss."""
+        key = self._key(theta)
+        hit = self._cache.pop(key, None)
+        if hit is None:
+            hit = self._classy.Class()
+            hit.set(self._settings(theta))
+            hit.compute()
+            while len(self._cache) >= self._cache_size:
+                _, stale = self._cache.popitem(last=False)
+                stale.struct_cleanup()
+                stale.empty()
+        self._cache[key] = hit          # re-insert as most-recently used
+        return hit
+
+    def clear_cache(self) -> None:
+        """Free every cached CLASS solve."""
+        while self._cache:
+            _, stale = self._cache.popitem()
+            stale.struct_cleanup()
+            stale.empty()
+
+    # -- spectra --------------------------------------------------------
+    def _table(self, z: float, theta: dict, cold: bool) -> np.ndarray:
+        cosmo = self._solver(theta)
+        h = float(theta["h"])
+        want_cb = cold and float(mnu_sum(theta)) > 0.0
+        pk_of = cosmo.pk_cb_lin if want_cb else cosmo.pk_lin
+        return np.array([pk_of(ki * h, float(z)) for ki in self._kh]) * h ** 3
+
+    def pk_linear(self, k: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
+        """Total-matter linear P(k) [(Mpc/h)^3] at redshift z.
+
+        Parameters
+        ----------
+        k : array_like, h/Mpc
+        z : float
+        theta : dict — keys: h, Omega_b, n_s, ln10^{10}A_s; optional
+                Omega_cdm (else Omega_m - Omega_b - Omega_nu), sum_mnu
+                (default 0), w0 (-1), wa (0), T_cmb (2.7255)
+        """
+        return _interp_pk_table(k, self._kh, self._table(z, theta, cold=False))
+
+    def pk_linear_cb(self, k: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
+        """Cold (CDM + baryon) linear P(k) [(Mpc/h)^3] at redshift z.
+
+        This is the spectrum the halo mass function and halo bias should be
+        built from when Sigma m_nu > 0.  It reduces to :meth:`pk_linear`
+        exactly in the massless limit.
+        """
+        return _interp_pk_table(k, self._kh, self._table(z, theta, cold=True))
+
+    def as_hmf_pk_func(self):
+        """Return a ``(k, z, theta) -> P_m`` callable for ``make_hmf``.
+
+        Total matter, like every other backend: ``HaloMassFunction`` converts to
+        the cold spectrum itself, uniformly, through the ``nu_ratio`` table.
+        Returning ``pk_linear_cb`` here would apply that conversion twice.
+        :meth:`pk_linear_cb` remains the exact cold spectrum for direct use and
+        is what the table is validated against.
+        """
+        def _pk_func(k, z, theta):
+            return self.pk_linear(k, z, theta)
+        return _pk_func
+
+    @staticmethod
+    def default_cosmology() -> dict:
+        """Same Planck 2018 dictionary the CAMB backend uses."""
+        return LinearPowerSpectrum.default_cosmology()
 
 
 @jax.jit
@@ -223,7 +493,7 @@ def eisenstein_hu_pk(k: jnp.ndarray, theta: dict) -> jnp.ndarray:
     ns   = theta["n_s"]
     Tcmb = theta.get("T_cmb", 2.7255)
 
-    oc   = theta.get("Omega_cdm", om - ob)
+    oc   = omega_cdm_cold_equivalent(theta)   # massless-trained: nu lumped into cdm
     fb   = ob / om          # baryon fraction
     fc   = oc / om          # CDM fraction
     omh2 = om * h * h
@@ -368,7 +638,7 @@ def eisenstein_hu_pk_phys(k: jnp.ndarray, theta: dict) -> jnp.ndarray:
     A_s = jnp.exp(lnAs) * 1e-10
 
     # Use Omega_cdm directly when present so jax.grad flows through it
-    oc   = theta.get("Omega_cdm", om - ob)
+    oc   = omega_cdm_cold_equivalent(theta)   # massless-trained: nu lumped into cdm
     fb   = ob / om
     fc   = oc / om
     omh2 = om * h * h
@@ -527,13 +797,13 @@ class CsstLinearPowerSpectrum:
         import numpy as np
         emu.set_cosmos(
             Omegab=float(theta["Omega_b"]),
-            Omegac=float(theta["Omega_cdm"]),
+            Omegac=float(omega_cdm(theta)),
             H0=float(theta["h"]) * 100.0,
             As=np.exp(float(theta["ln10^{10}A_s"])) * 1e-10,
             ns=float(theta["n_s"]),
             w=float(theta.get("w0", -1.0)),
             wa=float(theta.get("wa", 0.0)),
-            mnu=float(theta.get("mnu", 0.06)),
+            mnu=float(mnu_sum(theta)),
         )
 
     def pk_linear(self, k: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
