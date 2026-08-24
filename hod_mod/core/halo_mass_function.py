@@ -1275,6 +1275,16 @@ class CsstHaloMassFunction:
         pk2d    = self._pk_emu.get_pklin(z=0.0, k=k_np, type="CAMB")
         pk_z0   = jnp.asarray(pk2d[0])
 
+        # Cold field, matching HaloMassFunction.sigma: haloes collapse out of
+        # CDM and baryons.  Both reduce to the stored total-matter values when
+        # sum_mnu is absent, so the massless path is unchanged.
+        rho_mean = self.rho_mean
+        if "sum_mnu" in theta:
+            from hod_mod.core import nu_ratio
+            rho_mean = omega_cb(theta) * _RHO_CRIT0
+            pk_z0 = pk_z0 * (nu_ratio.suppression_cb(self._k_int, theta)
+                             / nu_ratio.suppression_m(self._k_int, theta))
+
         @partial(jax.jit, static_argnums=())
         def _s2(m_h_arr, pk_arr):
             k = self._k_int
@@ -1284,7 +1294,7 @@ class CsstHaloMassFunction:
                 w = 3.0 * (jnp.sin(x) - x * jnp.cos(x)) / x ** 3
                 return jnp.trapezoid(pk_arr * w ** 2 * k ** 2, k) / (2.0 * jnp.pi ** 2)
 
-            r = (3.0 * m_h_arr / (4.0 * jnp.pi * self.rho_mean)) ** (1.0 / 3.0)
+            r = (3.0 * m_h_arr / (4.0 * jnp.pi * rho_mean)) ** (1.0 / 3.0)
             return jax.vmap(_s2_single)(r)
 
         s2 = _s2(m_h, pk_z0)

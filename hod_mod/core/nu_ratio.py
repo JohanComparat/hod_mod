@@ -105,7 +105,15 @@ def build(npz_path: str = _NPZ, verbose: bool = True) -> dict:
 # ---------------------------------------------------------------------------
 
 def load(npz_path: str = _NPZ) -> dict:
-    """Load the table (cached per process) as jnp arrays."""
+    """Load the table (cached per process) as **numpy** arrays.
+
+    Deliberately not ``jnp``. The first caller may well be inside a
+    ``jax.jit``/``jax.grad`` trace, and a JAX array first materialised there and
+    then stashed in a module global escapes that trace -- the next
+    transformation sees it and raises ``UnexpectedTracerError``. Numpy arrays
+    are always concrete, and ``jnp.asarray`` at the point of use folds them into
+    the jaxpr as constants, so the conversion is free once compiled.
+    """
     global _TABLE
     if _TABLE is None:
         if not os.path.exists(npz_path):
@@ -113,10 +121,8 @@ def load(npz_path: str = _NPZ) -> dict:
                 f"{npz_path} not found — build it with "
                 "`python -m hod_mod.core.nu_ratio` (needs classy).")
         d = np.load(npz_path)
-        _TABLE = {"lnk": jnp.asarray(d["lnk"]), "z": jnp.asarray(d["z"]),
-                  "f_nu": jnp.asarray(d["f_nu"]),
-                  "lnr_m": jnp.asarray(d["lnr_m"]),
-                  "lnr_cb": jnp.asarray(d["lnr_cb"])}
+        _TABLE = {k: np.asarray(d[k]) for k in
+                  ("lnk", "z", "f_nu", "lnr_m", "lnr_cb")}
     return _TABLE
 
 

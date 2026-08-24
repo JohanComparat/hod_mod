@@ -198,6 +198,30 @@ class TestNuRatioTable:
         assert np.all(np.asarray(suppression_cb(k, th))
                       > np.asarray(suppression_m(k, th)))
 
+    def test_table_survives_being_first_touched_inside_a_trace(self):
+        """Regression: the cache must not hold JAX arrays.
+
+        ``load()`` used to stash ``jnp`` arrays. If the first call happened
+        inside a ``jax.jit`` trace -- which is exactly what happens when the
+        emulator is jitted before anything else touches the table -- the cached
+        arrays carried that trace with them, and the next transformation died
+        with ``UnexpectedTracerError``. Ordering matters here: jit first, then
+        grad.
+        """
+        import hod_mod.core.nu_ratio as nr
+        from hod_mod.forecast.pk_cosmopower import CosmoPowerJaxPkLinear
+        nr._TABLE = None                       # force a cold load inside the trace
+        th = dict(LinearPowerSpectrum.default_cosmology(), sigma8=0.8111)
+        k = jnp.logspace(-3, 1, 64)
+        cp = CosmoPowerJaxPkLinear()
+        jitted = jax.jit(lambda t: cp.pk_shape(k, t))
+        assert np.isfinite(float(jnp.sum(jitted(th))))
+        g = jax.jit(jax.grad(
+            lambda ns: jnp.sum(cp.pk_shape(k, {**th, "n_s": ns}))))
+        assert np.isfinite(float(g(0.9649)))
+        assert not isinstance(nr.load()["lnr_m"], jnp.ndarray), (
+            "the table cache must hold numpy, not JAX arrays")
+
     def test_differentiable_in_sum_mnu(self):
         from hod_mod.core.nu_ratio import suppression_m
         th = LinearPowerSpectrum.default_cosmology()

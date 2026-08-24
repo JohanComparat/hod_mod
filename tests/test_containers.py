@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 
 from hod_mod.core.containers import Cosmology, ParameterContainer
+from hod_mod.core.power_spectrum import NU_DENOM_EV
 
 
 class TestPytreeProtocol:
@@ -88,8 +89,24 @@ class TestConstruction:
             Cosmology.planck18(bogus=1.0)
 
     def test_omega_cdm_defaults_consistently(self):
+        """Omega_cdm = Omega_m - Omega_b - Omega_nu, i.e. the budget closes.
+
+        This asserted ``Omega_m - Omega_b`` while the default was massless.
+        Planck's Omega_m includes the minimal neutrino mass, so the cold sector
+        is what is left after Omega_nu comes out; carrying 0.2607 alongside a
+        massive neutrino is what used to put the spectrum at Omega_m ~ 0.3114.
+        """
         c = Cosmology.planck18()
-        assert float(c.Omega_cdm) == pytest.approx(0.3100 - 0.0493, rel=1e-9)
+        omega_nu = 0.06 / (NU_DENOM_EV * 0.6736 ** 2)
+        assert float(c.Omega_cdm) == pytest.approx(
+            0.3100 - 0.0493 - omega_nu, rel=1e-9)
+        assert float(c.Omega_b + c.Omega_cdm) + omega_nu == pytest.approx(
+            float(c.Omega_m), abs=1e-12)
+
+    def test_massless_cosmology_has_no_neutrino_share(self):
+        """At Sigma m_nu = 0 the cold sector is the whole matter budget."""
+        c = Cosmology.planck18(sum_mnu=0.0)
+        assert float(c.Omega_cdm) == pytest.approx(0.3100 - 0.0493, rel=1e-12)
 
     def test_explicit_omega_cdm_is_kept(self):
         c = Cosmology.planck18(Omega_cdm=0.25)

@@ -160,10 +160,14 @@ def main(argv=None):
 
     x0 = np.asarray(x_true, dtype=float)
     if not args.no_map:
-        print("[forecast-nuts] gradient MAP (L-BFGS-B) ...")
-        map_res = run_map_jax(like, x0)
+        print("[forecast-nuts] gradient MAP (L-BFGS-B, strict bounds) ...")
+        map_res = run_map_jax(like, x0, bounds=like.bounds_pairs())
         x0 = np.asarray(map_res["x"], dtype=float)
         print(f"[forecast-nuts]   MAP chi2 = {like.chi2(jnp.asarray(x0)):.2f}")
+        rail = like.bounds_violations(x0)
+        if rail:
+            print("[forecast-nuts]   WARNING: MAP is outside its bounds: "
+                  + ", ".join(n for n, *_ in rail))
 
     print(f"[forecast-nuts] NUTS: {args.n_warmup} warmup + {args.n_samples} samples ...")
     res = run_nuts(like, x0, n_warmup=args.n_warmup, n_samples=args.n_samples,
