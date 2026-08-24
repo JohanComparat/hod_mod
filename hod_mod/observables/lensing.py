@@ -230,20 +230,17 @@ def mean_sigma_from_tab(R, R_tab, sigma_tab):
 # ---------------------------------------------------------------------------
 
 def _pk_lin_tab(theta_cosmo: dict, n_k: int = 512):
-    """(log k, log P_lin(k, z=0)) table [(Mpc/h)³], σ8-rescaled if requested.
+    """(log k, log P_lin(k, z=0)) table [(Mpc/h)³].
 
-    Uses :func:`eisenstein_hu_pk_phys` (amplitude from ln10^{10}A_s); if
-    ``theta_cosmo`` carries 'sigma8', the amplitude is rescaled so the
-    top-hat σ(8 Mpc/h) matches it (same convention as
-    :meth:`HaloMassFunction.sigma`).
+    :func:`eisenstein_hu_pk_phys` is already physically normalised from
+    ``ln10^{10}A_s``.  This used to re-scale it to ``theta_cosmo['sigma8']``
+    when that key was present, which made the 2-halo amplitude depend on which
+    of two amplitudes the caller happened to supply; ``sigma8`` is no longer a
+    parameter and the rescale is gone with it.  σ8 for this cosmology is
+    :func:`hod_mod.core.amplitude.sigma8_from_pk`.
     """
     k = jnp.logspace(-4, 3, n_k)
     pk = eisenstein_hu_pk_phys(k, theta_cosmo)
-    if "sigma8" in theta_cosmo:
-        x = k * 8.0
-        w = 3.0 * (jnp.sin(x) - x * jnp.cos(x)) / x**3
-        s2_8 = jnp.trapezoid(pk * w**2 * k**2, k) / (2.0 * jnp.pi**2)
-        pk = pk * theta_cosmo["sigma8"] ** 2 / s2_8
     return jnp.log(k), jnp.log(pk)
 
 

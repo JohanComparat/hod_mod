@@ -40,7 +40,9 @@ _OUT = os.path.normpath(os.path.join(_HERE, "..", "..", "benchmarks", "accuracy.
 
 Z = 0.2
 # The package default, with the budget closed: Omega_cdm = Om - Ob - Onu.
-THETA = dict(_default_cosmology(), sigma8=0.8111)
+# It already carries ln10^{10}A_s = 3.044; a sigma8 used to be injected on top,
+# which made this THETA carry two amplitudes and take the retired branch.
+THETA = dict(_default_cosmology())
 
 
 def _entry(quantity, reference, deviation, tolerance, metric, note,

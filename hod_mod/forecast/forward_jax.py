@@ -68,7 +68,7 @@ from hod_mod.forecast.pk_eisenstein_hu import EisensteinHu98PkLinear
 # ---------------------------------------------------------------------------
 
 PARAM_NAMES = [
-    "Omega_m", "sigma8", "h", "n_s", "Omega_b",
+    "Omega_m", "ln10^{10}A_s", "h", "n_s", "Omega_b",
     "lg_m1h", "lg_m0star", "beta", "delta", "gamma",
     "sigma_lnmstar", "eta", "fc", "bsat",
     "lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max",
@@ -731,7 +731,7 @@ class ForwardModel:
             "Omega_m": Om,
             "Omega_cdm": Om - Ob - Onu,
             "n_s": g("n_s"),
-            "sigma8": theta[_IDX["sigma8"]],
+            "ln10^{10}A_s": theta[_IDX["ln10^{10}A_s"]],
             # beyond-ΛCDM sector (missing-physics extension).  Their presence
             # as dict KEYS statically routes growth to the CPL ODE and P(k) to
             # the ν-suppressed shape; the ΛCDM/massless fiducials keep both

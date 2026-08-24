@@ -29,7 +29,8 @@ from hod_mod.forecast.forward_jax import (
 
 # --- hard-coded fallbacks (values read from the MAP JSONs, see module docstring)
 _FIDUCIAL_DEFAULT = {
-    "Omega_m": 0.3100, "sigma8": 0.8111, "h": 0.6736, "n_s": 0.9649, "Omega_b": 0.0493,
+    "Omega_m": 0.3100, "ln10^{10}A_s": 3.044, "h": 0.6736, "n_s": 0.9649,
+    "Omega_b": 0.0493,
     "lg_m1h": 11.67701, "lg_m0star": 10.47679, "beta": 0.734685,
     "delta": 0.661630, "gamma": 0.540446, "sigma_lnmstar": 1.024268,
     "eta": -0.314724, "fc": 0.300001, "bsat": 36.37306,
@@ -143,10 +144,19 @@ PARAM_BOUNDS = {
     # power_spectrum.py:512 and the Carroll growth om**(4/7) at
     # halo_mass_function.py:116 both NaN at Omega_m<=0), but the ...
     'Omega_m': (0.1, 0.6),
-    # prior: sigma8 is an rms amplitude so it must be >0 --
-    # halo_mass_function.py:1126 uses rescale2=sigma8^2/s2_8 and therefore
-    # silently accepts sigma8<0 as |sigma8| -- and measured ...
-    'sigma8': (0.2, 1.6),
+    # validity: exactly TRAINING_BOX['ln10^{10}A_s'] in
+    # forecast/pk_cosmopower.py:72, the box of the default runtime backend,
+    # outside which the emulator extrapolates with no accuracy guarantee.  Same
+    # rationale as h and n_s below.  Maps to sigma8 in [0.40, 1.25] at the
+    # Planck-2018 fiducial -- wider than the sigma8 (0.2, 1.6) bound this
+    # replaces where it matters, narrower where the network has no warrant.
+    #
+    # The bound this replaces carried a different rationale: sigma8 is an rms
+    # amplitude, and the sigma8^2 rescale it fed accepted a negative sigma8 as
+    # |sigma8|, so the floor was there to stop a sampler exploring an unphysical
+    # sign.  A_s enters as exp(ln10As), which is positive by construction, so
+    # that failure mode no longer exists.
+    'ln10^{10}A_s': (1.61, 3.91),
     # validity: Exactly TRAINING_BOX['h'] in forecast/pk_cosmopower.py:69-76,
     # the box of the default runtime backend, outside which the network
     # extrapolates and the 0.141%-vs-CLASS ...
@@ -596,7 +606,10 @@ PARAM_BOUNDS = {
 
 # Planck 2018 1σ priors (planck_prior.PLANCK18_SIGMAS) on the free cosmo params.
 # Omega_b width is the BBN prior (Cooke+2018), tighter than Planck alone.
-PLANCK_PRIOR_SIGMA = {"Omega_m": 0.0073, "sigma8": 0.0060,
+# ln10^{10}A_s: 0.014 is both the published Planck-2018 width and the exact
+# propagation of the sigma8 entry this replaces -- 2 x 0.0060 / 0.8111 = 0.0148,
+# since sigma8 ~ sqrt(A_s).  They agree, which is a useful consistency check.
+PLANCK_PRIOR_SIGMA = {"Omega_m": 0.0073, "ln10^{10}A_s": 0.014,
                       "h": 0.0054, "n_s": 0.0042, "Omega_b": 0.0005}
 
 # Weakly-informative *regularizing* priors (plausible parameter ranges).  They
@@ -605,7 +618,9 @@ PLANCK_PRIOR_SIGMA = {"Omega_m": 0.0073, "sigma8": 0.0060,
 # (adding data or fixing a parameter can then only tighten σ, never loosen it).
 # Broad enough not to constrain the data-measured parameters.
 BROAD_PRIOR_SIGMA = {
-    "Omega_m": 0.3, "sigma8": 0.3,                      # ~uninformative on the targets
+    # 0.74 = 2 x 0.3 / 0.8111, the sigma8=0.3 width this replaces carried
+    # through sigma8 ~ sqrt(A_s), so "equivalently uninformative".
+    "Omega_m": 0.3, "ln10^{10}A_s": 0.74,               # ~uninformative on the targets
     # h, n_s, Omega_b are always externally calibrated (Planck/BBN); they are near-flat
     # directions for these low-z small-scale probes, so they carry their Planck/BBN
     # prior by default (differentiable and loosenable, but not spuriously free).
@@ -662,7 +677,7 @@ BROAD_PRIOR_SIGMA = {
 }
 
 PARAM_LATEX = {
-    "Omega_m": r"$\Omega_m$", "sigma8": r"$\sigma_8$",
+    "Omega_m": r"$\Omega_m$", "ln10^{10}A_s": r"$\ln(10^{10}A_s)$",
     "h": r"$h$", "n_s": r"$n_s$", "Omega_b": r"$\Omega_b$",
     "lg_m1h": r"$\lg M_{1}$", "lg_m0star": r"$\lg M_{0*}$",
     "beta": r"$\beta$", "delta": r"$\delta$", "gamma": r"$\gamma$",
@@ -743,7 +758,7 @@ PARAM_LATEX = {
 # (run_tier2_forecast): σ(sector) marginalised vs other-sectors-pinned, probe
 # attribution, and information gain per sector.  Covers all of PARAM_NAMES.
 SECTORS = {
-    "cosmology": ["Omega_m", "sigma8", "h", "n_s", "Omega_b",
+    "cosmology": ["Omega_m", "ln10^{10}A_s", "h", "n_s", "Omega_b",
                   "w0", "wa", "sum_mnu"],
     "shmr": ["lg_m1h", "lg_m0star", "beta", "delta", "gamma", "sigma_lnmstar",
              "eta", "fc", "bsat", "beta_sat", "bcut", "beta_cut", "alpha_sat",
