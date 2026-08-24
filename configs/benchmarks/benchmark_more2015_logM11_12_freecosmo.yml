@@ -31,7 +31,7 @@ joint:
 cosmology:
   Omega_m: 0.310
   h:       0.703
-  sigma8:  0.785
+  ln10^{10}A_s: 2.821921  # from sigma8 = 0.785, converted via CAMB
   n_s:     0.964
   Omega_b: 0.0451
 
@@ -57,10 +57,12 @@ parameters:
     bounds:      [0.15, 0.55]
     init:        0.310
 
-  S8:
+  # The amplitude, sampled directly; S8 is derived after the fit.  Flat and
+  # wide, inside the CosmoPower training box (1.61, 3.91).
+  ln10^{10}A_s:
     free:        true
-    bounds:      [0.55, 1.05]
-    init:        0.798
+    bounds:      [2.0, 3.9]
+    init:        3.044
 
   # h fitted with WMAP9-E prior (More+2015 Section 3.3)
   h:

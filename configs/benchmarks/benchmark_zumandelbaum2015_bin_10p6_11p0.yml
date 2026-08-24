@@ -19,7 +19,7 @@ joint:
 cosmology:
   Omega_m: 0.260
   h:       0.720
-  sigma8:  0.770
+  ln10^{10}A_s: 2.984243  # from sigma8 = 0.770, converted via CAMB
   n_s:     0.960
   Omega_b: 0.044
 
