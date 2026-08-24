@@ -138,14 +138,22 @@ def test_nu_suppression_shape(model, fid):
 
     # The minimal normal hierarchy too, not only 0.3 eV.  Testing 0.3 alone is
     # what let the old closed tanh form stand: centred on k_nr it saturated
-    # about 1.5 decades of k too early, which shows up as a suppression that is
-    # already near its asymptote at k = 0.01 h/Mpc.
-    r6 = np.asarray(pk.pk_linear(k, 0.0, dict(c0, sum_mnu=0.06))) / p0
+    # about 1.5 decades of k too early.
+    #
+    # The statistic has to be anchor-independent, because pk_linear is
+    # sigma8-normalised: suppressing small scales at fixed sigma8 pushes the
+    # large-scale ratio ABOVE one, so neither end has a fixed sign.  What is
+    # invariant is the SHAPE -- how much of the total fall from k = 1e-3 to
+    # k = 1 has already happened by k = 0.01.  CLASS puts 0.40 of it there at
+    # 0.06 eV and 0.23 at 0.30 eV; the tanh form put about 0.89.
     kk = np.asarray(k)
-    lo = float(np.interp(0.01, kk, r6)) - 1.0
-    hi = float(np.interp(1.0, kk, r6)) - 1.0
-    assert hi < lo < 0.0                                # monotone onset
-    assert lo / hi < 0.55                               # tanh form gave ~0.93
+    for mnu, ceiling in ((0.06, 0.55), (0.30, 0.40)):
+        r = np.asarray(pk.pk_linear(k, 0.0, dict(c0, sum_mnu=mnu))) / p0
+        v_lo, v_mid, v_hi = (float(np.interp(x, kk, r))
+                             for x in (1e-3, 0.01, 1.0))
+        assert v_hi < v_mid < v_lo, f"not monotone in k at {mnu} eV"
+        assert (v_lo - v_mid) / (v_lo - v_hi) < ceiling, (
+            f"suppression saturates too early at {mnu} eV")
 
 
 def test_beyond_lcdm_params_are_plumbed(model, fid):

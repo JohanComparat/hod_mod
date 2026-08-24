@@ -46,6 +46,8 @@ Zhang et al. 2025
 
 import jax
 import jax.numpy as jnp
+
+from hod_mod.core.power_spectrum import omega_cb
 from functools import partial
 
 
@@ -95,7 +97,7 @@ class BaryonFractionSigmoid:
         -------
         f_b : jnp.ndarray, same shape as m_h, values in [0, f_b^cosmic].
         """
-        f_b_cosmic = theta_cosmo["Omega_b"] / theta_cosmo["Omega_m"]
+        f_b_cosmic = theta_cosmo["Omega_b"] / omega_cb(theta_cosmo)
         M_pivot = 10.0 ** params["log10_M_pivot"]
         f_b_min = params.get("f_b_min", 0.0)
         fb = f_b_cosmic / (1.0 + (M_pivot / m_h) ** params["beta_b"])
@@ -170,7 +172,7 @@ class BaryonFractionPowerLaw:
         params : dict
             Model parameters: ``log10_M_ref`` [Msun/h], ``alpha_b`` (≥ 0).
         """
-        f_b_cosmic = theta_cosmo["Omega_b"] / theta_cosmo["Omega_m"]
+        f_b_cosmic = theta_cosmo["Omega_b"] / omega_cb(theta_cosmo)
         M_ref = 10.0 ** params["log10_M_ref"]
         raw = f_b_cosmic * (m_h / M_ref) ** params["alpha_b"]
         return jnp.clip(raw, 0.0, f_b_cosmic)
@@ -233,7 +235,7 @@ class BaryonFractionUpturn:
         -------
         f_b : jnp.ndarray, same shape as m_h.
         """
-        f_b_cosmic = theta_cosmo["Omega_b"] / theta_cosmo["Omega_m"]
+        f_b_cosmic = theta_cosmo["Omega_b"] / omega_cb(theta_cosmo)
         f_b_min    = params["f_b_min"]
         M_hi       = 10.0 ** params["log10_M_hi"]
         M_lo       = 10.0 ** params["log10_M_lo"]

@@ -105,6 +105,8 @@ if not _IN_NOTEBOOK:
 import matplotlib.pyplot as plt
 import numpy as np
 
+from hod_mod.core.power_spectrum import omega_cdm
+
 # Make the repository importable whether run as a script or inside a notebook:
 # walk up from the file (or cwd) until the directory holding the package is found.
 def _find_repo_root() -> str:
@@ -245,7 +247,8 @@ def fiducial_cosmology() -> dict:
     """ZM15 benchmark cosmology with a CAMB-calibrated ``ln10^{10}A_s``."""
     fid = {"Omega_m": 0.260, "Omega_b": 0.044, "h": 0.720,
            "n_s": 0.960, "sigma8": 0.770}
-    fid["Omega_cdm"] = fid["Omega_m"] - fid["Omega_b"]
+    fid["Omega_cdm"] = float(omega_cdm(
+        {k: v for k, v in fid.items() if k != "Omega_cdm"}))
     fid["ln10^{10}A_s"] = _sigma8_to_lnAs(fid)
     return fid
 
@@ -261,7 +264,8 @@ def perturb_cosmo(fid: dict, param: str, factor: float) -> dict:
     th = dict(fid)
     if param == "Omega_m":
         th["Omega_m"] = fid["Omega_m"] * factor
-        th["Omega_cdm"] = th["Omega_m"] - th["Omega_b"]
+        th["Omega_cdm"] = float(omega_cdm(
+            {k: v for k, v in th.items() if k != "Omega_cdm"}))
     elif param == "sigma8":
         th["sigma8"] = fid["sigma8"] * factor
         th["ln10^{10}A_s"] = fid["ln10^{10}A_s"] + 2.0 * np.log(factor)
