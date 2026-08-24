@@ -52,6 +52,37 @@ All notable changes to this project will be documented in this file.
   (a normalised shape, so the constant is degenerate with the amplitude and the
   anchor absorbs it).
 
+### Fixed: two production fits could never resume
+
+- **`JointZM15.sample` passed `self.lo`/`self.hi` to `revive_ensemble`, and that
+  class has neither** — it has `self.bounds`, a list of `(lo, hi)` pairs, which
+  its own fresh-run branch uses correctly three lines above. Every *resume* of
+  `bgs_zm15_joint_wp_ngal` and `bgs_zm15_thresh_joint` therefore died on its
+  first statement with `AttributeError`, seconds into the job.
+- **Size.** Those two fits only ever advanced during a fresh run and lost all
+  progress at the first walltime kill — which is why they have been stuck across
+  v0.3, v0.31 and v0.4 (351/2500 and 432/2500 at the time of the fix) and why
+  resubmitting them "to resume" never helped.
+- The resume branch is reached only when a chain already has steps on disk, so
+  no test touches it: it executes for the first time on the cluster, hours in,
+  where an `AttributeError` reads as a scheduler problem.
+  `tests/test_mcmc_resume_wiring.py` closes that statically — it parses every
+  `revive_ensemble(self.X, …)` call site and asserts the enclosing class really
+  assigns `self.X`. Verified to fail on the original code and pass on the fix.
+- The other five call sites are correct: `JointFull` genuinely has `.lo`/`.hi`,
+  and the rest pass `None`/`None` or explicit bounds.
+
+### Fixed: benchmark_observables was never staged to the cluster
+
+- **`fits/benchmark` has failed in every campaign for want of a 1.8 MB input.**
+  `fit_benchmark_observables` resolves `$HOD_MOD_DATA_DIR/benchmark_observables`
+  *only if that directory exists*, and otherwise falls back to a hard-coded
+  `/home/comparat/...` path that exists on the workstation and nowhere else — so
+  an absent tree reads as an empty one. On dahu the job died in seconds with
+  "no requested observable has a simulated entry", in v0.31 and again in v0.4.
+- `rsync_data_to_dahu.sh` stages sum_stat, zenodo, xray_bands, XLF, the eROSITA
+  response, the ZM15 posterior and the soxs tables — but never this tree. Added.
+
 ### Fixed: every 16-core OAR job threaded to 8
 
 - **`OAR_RES_NB_CORES` does not exist on this OAR.** All eight job scripts set

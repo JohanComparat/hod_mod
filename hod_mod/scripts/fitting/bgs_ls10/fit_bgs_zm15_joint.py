@@ -548,7 +548,13 @@ class JointZM15:
                   f"({remaining} steps left) ...")
             # A collapsed ensemble makes emcee refuse the resume outright; see
             # hod_mod.fitting.mcmc_resume for why skipping the check is not enough.
-            _start = revive_ensemble(backend, self.lo, self.hi, label="sample")
+            # self.bounds is a list of (lo, hi) pairs -- this class has no
+            # .lo/.hi, unlike JointFull.  Passing them raised AttributeError on
+            # EVERY resume, so these fits only ever advanced during a fresh run
+            # and lost all progress at the first walltime kill.
+            _lo = np.array([b[0] for b in self.bounds], dtype=float)
+            _hi = np.array([b[1] for b in self.bounds], dtype=float)
+            _start = revive_ensemble(backend, _lo, _hi, label="sample")
             sampler.run_mcmc(_start, remaining, progress=True, skip_initial_state_check=True)
 
         # Discard the burn-in only when reading the chain back out.
