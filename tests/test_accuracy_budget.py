@@ -23,7 +23,7 @@ _REQUIRED_KEYS = {"quantity", "reference", "deviation", "tolerance",
 _MUST_COVER = [
     "E(z)", "chi(z)", "c(M,z) Duffy08", "b(M,z) Tinker10",
     "P_lin(k) shape, EH98", "P_lin(k) shape, CAMB", "P_cb/P_m table",
-    "mass translation round trip",
+    "mass translation round trip", "D(z), growth ODE",
 ]
 
 

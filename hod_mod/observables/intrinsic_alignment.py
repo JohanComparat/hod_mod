@@ -41,12 +41,16 @@ C1_RHO_CRIT0: float = 0.0134
 def _linear_growth_factor(z: float, theta_cosmo: dict) -> float:
     """Linear growth factor D(z)/D(0), through the package-wide dispatcher.
 
-    ``growth_factor`` branches on dictionary membership: a theta carrying
-    ``w0``/``wa`` gets the CPL ODE, a plain LCDM one keeps the Carroll+1992
-    fitting formula.  This used to call the Carroll branch directly, which
-    silently gave a w0waCDM fit LCDM growth -- a 1.5e-3 error in D(z) at
-    z = 0.2, and twice that in the D^-2 of Eq. F_IA.  Returns a Python float so
-    it can be used outside JAX-traced code.
+    This used to call the Carroll+1992 formula directly, which silently gave a
+    w0waCDM fit LCDM growth -- a 1.5e-3 error in D(z) at z = 0.2, and twice that
+    in the :math:`D^{-2}` of Eq. F_IA.  It now goes through
+    :func:`hod_mod.core.growth.growth_factor`, which since 0.6 no longer decides
+    on dictionary-key membership: with no P(k) backend to hand it resolves to the
+    CPL growth ODE for every cosmology, LCDM included.
+
+    The NLA amplitude lives on the total-matter field, so ``variant`` stays at
+    its ``"total"`` default.  Returns a Python float so it can be used outside
+    JAX-traced code.
     """
     from hod_mod.core.halo_mass_function import growth_factor
     return float(growth_factor(float(z), theta_cosmo))

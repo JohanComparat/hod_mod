@@ -87,6 +87,7 @@ The package layout mirrors this: ``core`` (cosmology + halo model), ``connection
    :caption: API Reference
 
    cosmology
+   growth_factor
    halos
    lensing
    galaxies

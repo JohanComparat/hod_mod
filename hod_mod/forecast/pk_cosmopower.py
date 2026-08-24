@@ -157,6 +157,14 @@ class CosmoPowerJaxPkLinear:
         CosmoPower-JAX probe name for the linear matter spectrum (``"mpk_lin"``).
     """
 
+    #: The network is trained over ``z in [0, 5]``, so it supplies its own
+    #: growth -- but only through the **A_s branch** of :meth:`pk_linear`.  The
+    #: sigma8 branch's redshift dependence *is* the growth ODE, so this attribute
+    #: is a statement about the branch that
+    #: :func:`hod_mod.core.growth._as_amplitude_theta` forces, not about the
+    #: class as a whole.  That coupling is deliberate and load-bearing.
+    has_native_z = True
+
     def __init__(self, R8: float = 8.0, probe: str = "mpk_lin"):
         self._R8 = float(R8)
         self._probe = str(probe)
@@ -234,7 +242,11 @@ class CosmoPowerJaxPkLinear:
         if "sigma8" in theta:
             pk_shape = self.pk_shape(k, theta)
             norm = theta["sigma8"] ** 2 / self._sigma8_shape2(theta)
-            growth = growth_factor(float(z), theta)  # D(z)/D(0); CPL ODE if w0/wa
+            # mode="ode" is not a preference but a necessity: this branch is
+            # *defining* P(k,z) = shape x D(z)^2, so asking the dispatcher for
+            # its default pk_ratio -- which reads D off a P(k,z) -- would be
+            # circular.  The ODE matches the emulator ratio to <=5e-5 anyway.
+            growth = growth_factor(float(z), theta, mode="ode")
             return pk_shape * norm * growth ** 2
         if "ln10^{10}A_s" in theta:
             return self._emulate(k, theta, theta["ln10^{10}A_s"], z)
