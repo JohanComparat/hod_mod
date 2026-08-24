@@ -43,22 +43,35 @@ def _sigma2_tophat(pk: jnp.ndarray, k: jnp.ndarray, R: float) -> jnp.ndarray:
     return jnp.trapezoid(pk * w ** 2 * k ** 2, k) / (2.0 * jnp.pi ** 2)
 
 
-def _nu_suppression(k: jnp.ndarray, theta: dict) -> jnp.ndarray:
-    r"""Massive-neutrino small-scale suppression of the linear P(k) shape.
+def _nu_suppression(k: jnp.ndarray, theta: dict, z=0.0) -> jnp.ndarray:
+    r"""Massive-neutrino suppression of the linear P(k) shape.
 
-    First-order, differentiable form: the asymptotic ΔP/P ≃ −8 f_ν
-    (f_ν = Ω_ν/Ω_m, Ω_ν h² = Σm_ν/93.14 eV) switched on smoothly across the
-    free-streaming scale with a tanh in ln k around
-    k_nr ≈ 0.018 √(Ω_m m_ν,i/1 eV) h/Mpc (three degenerate species).
-    Exactly 1 at Σm_ν = 0 (the massless fiducial is bit-identical); the small
-    mass floor inside √ keeps the jacfwd column finite at 0.  A distilled CAMB
-    ratio table is the documented accuracy upgrade (docs/missing_physics.rst).
+    :math:`P_{\rm m}(k,z;\Sigma m_\nu)/P_{\rm m}(k,z;0)`, read from the
+    CLASS-distilled table of :mod:`hod_mod.core.nu_ratio` and interpolated in
+    :math:`(\ln k, z, f_\nu)`, so it stays differentiable with respect to
+    :math:`\Sigma m_\nu`.  Exactly 1 at :math:`\Sigma m_\nu = 0`, so the
+    massless fiducial is bit-identical to an uncorrected spectrum.
+
+    This replaces the first-order closed form
+    :math:`1 - 8f_\nu\cdot\tfrac12[1+\tanh(\ln(k/k_{\rm nr})/1.5)]` that
+    stood here.  Its :math:`-8f_\nu` asymptote was sound, but centring the
+    transition on the non-relativistic scale :math:`k_{\rm nr}` saturated it
+    about 1.5 decades of :math:`k` too early: against CLASS it over-suppressed
+    by ~2 percentage points at 0.06 eV and ~11 at 0.3 eV, right across the
+    scales the mass function and the 2-halo term use.
     """
-    mnu = theta["sum_mnu"]
-    f_nu = (mnu / 93.14) / (theta["Omega_m"] * theta["h"] ** 2)
-    k_nr = 0.018 * jnp.sqrt(theta["Omega_m"] * (mnu / 3.0 + 1e-6))
-    step = 0.5 * (1.0 + jnp.tanh(jnp.log(k / k_nr) / 1.5))
-    return 1.0 - 8.0 * f_nu * step
+    from hod_mod.core.nu_ratio import suppression_m
+    return suppression_m(k, theta, z)
+
+
+def _nu_cold_ratio(k: jnp.ndarray, theta: dict, z=0.0) -> jnp.ndarray:
+    r"""Cold-spectrum ratio :math:`P_{\rm cb}(k,z)/P_{\rm m}(k,z;0)`.
+
+    What :math:`\sigma(M)` and the mass function need: neutrinos count in
+    :math:`\Omega_{\rm m}` but do not cluster into halos.
+    """
+    from hod_mod.core.nu_ratio import suppression_cb
+    return suppression_cb(k, theta, z)
 
 
 class EisensteinHu98PkLinear:

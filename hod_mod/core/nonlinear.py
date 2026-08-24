@@ -4,6 +4,8 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
+from hod_mod.core.power_spectrum import mnu_sum, omega_cdm
+
 
 class NonLinearPowerSpectrum:
     """Non-linear P(k, z) via the Aletheia or CSST CEmulator.
@@ -53,7 +55,7 @@ class NonLinearPowerSpectrum:
         return AletheiaEmu.create_cosmo_dict(
             h       = h,
             omega_b = float(theta["Omega_b"])   * h ** 2,
-            omega_c = float(theta["Omega_cdm"]) * h ** 2,
+            omega_c = float(omega_cdm(theta)) * h ** 2,
             n_s     = float(theta["n_s"]),
             A_s     = np.exp(lnAs) * 1e-10,
             model   = "LCDM",
@@ -68,13 +70,13 @@ class NonLinearPowerSpectrum:
         """Push hod_mod theta dict into the CEmulator cosmology state."""
         emu.set_cosmos(
             Omegab=float(theta["Omega_b"]),
-            Omegac=float(theta["Omega_cdm"]),
+            Omegac=float(omega_cdm(theta)),
             H0=float(theta["h"]) * 100.0,
             As=np.exp(float(theta["ln10^{10}A_s"])) * 1e-10,
             ns=float(theta["n_s"]),
             w=float(theta.get("w0", -1.0)),
             wa=float(theta.get("wa", 0.0)),
-            mnu=float(theta.get("mnu", 0.06)),
+            mnu=float(mnu_sum(theta)),
         )
 
     # ------------------------------------------------------------------
@@ -239,8 +241,15 @@ class HALOFITSpectrum:
         pars.set_cosmology(
             H0=h * 100.0,
             ombh2=float(theta["Omega_b"])   * h ** 2,
-            omch2=float(theta["Omega_cdm"]) * h ** 2,
+            omch2=float(omega_cdm(theta)) * h ** 2,
+            mnu=float(mnu_sum(theta)),
+            num_massive_neutrinos=3,
+            nnu=3.044,
         )
+        w0 = float(theta.get("w0", -1.0))
+        wa = float(theta.get("wa", 0.0))
+        if w0 != -1.0 or wa != 0.0:
+            pars.set_dark_energy(w=w0, wa=wa, dark_energy_model="ppf")
         pars.InitPower.set_params(
             As=np.exp(lnAs) * 1e-10,
             ns=float(theta["n_s"]),
@@ -343,7 +352,10 @@ class WHMSpectrum:
         pars.set_cosmology(
             H0=h * 100.0,
             ombh2=float(theta["Omega_b"])   * h ** 2,
-            omch2=float(theta["Omega_cdm"]) * h ** 2,
+            omch2=float(omega_cdm(theta)) * h ** 2,
+            mnu=float(mnu_sum(theta)),
+            num_massive_neutrinos=3,
+            nnu=3.044,
         )
         w0 = float(theta.get("w0", -1.0))
         wa = float(theta.get("wa", 0.0))
@@ -413,8 +425,13 @@ class CachedPkNonlinear:
         return (
             round(float(z), 4),
             round(float(theta["Omega_m"]), 5),
+            round(float(theta["Omega_b"]), 6),
             round(float(theta["ln10^{10}A_s"]), 4),
+            round(float(theta["n_s"]), 5),
             round(float(theta.get("h", 0.72)), 4),
+            round(float(mnu_sum(theta)), 5),
+            round(float(theta.get("w0", -1.0)), 5),
+            round(float(theta.get("wa", 0.0)), 5),
         )
 
     def pk_nonlinear(self, k, z: float, theta: dict) -> jnp.ndarray:

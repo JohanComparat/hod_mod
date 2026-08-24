@@ -166,27 +166,9 @@ def _load_all_results():
     return records
 
 
-class _CachedPkLinear:
-    """Minimal CAMB cache shared across models."""
-    def __init__(self, pk_lin_obj, n_k=512):
-        self._base = pk_lin_obj
-        self._k_ref = np.logspace(-4, 1.5, n_k)
-        self._log_k_ref = np.log(self._k_ref)
-        self._cache = {}
-
-    def _key(self, z, theta):
-        return (round(float(z), 4),
-                round(float(theta["Omega_m"]), 5),
-                round(float(theta["ln10^{10}A_s"]), 4),
-                round(float(theta.get("h", 0.6736)), 4))
-
-    def pk_linear(self, k, z, theta):
-        key = self._key(z, theta)
-        if key not in self._cache:
-            pk_ref = np.asarray(self._base.pk_linear(self._k_ref, float(z), theta))
-            self._cache[key] = np.log(np.maximum(pk_ref, 1e-50))
-        log_k = np.log(np.asarray(k, dtype=float))
-        return jnp.asarray(np.exp(np.interp(log_k, self._log_k_ref, self._cache[key])))
+# The cache lives in hod_mod.fitting.fitters; this file used to carry a
+# verbatim copy, which meant a cache-key fix had to be made three times.
+from hod_mod.fitting.fitters import _CachedPkLinear  # noqa: E402
 
 
 def _build_predictor_for(hod_model, profile, pk_cached):

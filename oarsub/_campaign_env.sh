@@ -71,7 +71,9 @@ if [ -z "${HOD_MOD_PK_BACKEND:-}" ]; then
     case "${VTAG}" in
         v0.3) export HOD_MOD_PK_BACKEND=camb ;;        # Hankel fix, CAMB P(k)
         *)    export HOD_MOD_PK_BACKEND=cosmopower ;;  # v0.31+: emulator
-    esac
+    esac                                               # "class" is the third
+                                                       # option (reference only:
+                                                       # seconds per cosmology)
 else
     export HOD_MOD_PK_BACKEND
 fi

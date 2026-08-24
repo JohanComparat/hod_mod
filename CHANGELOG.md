@@ -4,6 +4,86 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: Sigma m_nu as a first-class parameter, and CLASS as the reference P(k)
+
+Neutrino mass was previously not a parameter of this package at all. The default
+cosmology dictionary had no neutrino key, and each backend substituted its own
+value: CAMB, HALOFIT and CSST assumed 0.06 eV, while Aemulus-nu, the forecast
+vector and the pytree `Cosmology` container assumed zero. Nothing ever wrote a
+key, so those defaults were what every run actually used.
+
+- **The density budget now closes.** `default_cosmology()` carries
+  `sum_mnu = 0.06` and `Omega_cdm = Omega_m - Omega_b - Omega_nu = 0.25928`.
+  It previously carried `0.2607`, i.e. `Omega_b + Omega_cdm == Omega_m` with no
+  room for neutrinos, while `LinearPowerSpectrum` let CAMB add its own 0.06 eV
+  on top — so the reference spectrum ran at `Omega_m ~ 0.3114` against a package
+  that used `0.3100` for rho_bar, `E(z)` and `D(z)`. New helpers `mnu_sum`,
+  `omega_nu`, `omega_cb` and `omega_cdm` in `core/power_spectrum.py` are the one
+  place this is computed.
+- **One key.** `sum_mnu` is canonical; `mnu` is a deprecated alias that warns
+  once. The four sites that read `mnu` (CSST P(k), CSST HMF, Aemulus-nu HMF,
+  the CSST non-linear path) were the only readers and had no writer.
+- **`Cosmology.to_theta()` no longer drops `sum_mnu`** — it silently returned a
+  massless dict for any `Cosmology(sum_mnu=...)`.
+- **The halo sector uses the cold field.** `sigma(M)`, `dn/dM` and `b(M)` are
+  built from the CDM+baryon spectrum with `rho_bar_cb`; `sigma8`, lensing, the
+  matter 2-halo term and halo mass definitions stay on total matter. At
+  0.06 eV this moves `dn/dM` by -0.7% at 1e11 Msun/h to +2.3% at 1e15.
+- **`ClassPkLinear`** (`HOD_MOD_PK_BACKEND=class`) is the new reference backend:
+  an independent Boltzmann solver that agrees with CAMB to 0.28% in shape, and
+  the only backend treating massive neutrinos exactly. It exposes the cold
+  spectrum via `pk_linear_cb` and caches its solver per cosmology, so extra
+  redshifts cost milliseconds. `classy` is an optional extra (`[reference]`).
+- **`core/nu_ratio.py`** ships `class_nu_ratio.npz`: CLASS-measured
+  `P_m(f_nu)/P_m(0)` and `P_cb(f_nu)/P_m(0)` on a `(f_nu, z, ln k)` grid,
+  differentiable via `jnp.interp`, exactly one at `f_nu = 0`.
+
+### Fixed: the massive-neutrino suppression saturated ~1.5 decades of k too early
+
+`_nu_suppression` used `1 - 8 f_nu * 0.5[1 + tanh(ln(k/k_nr)/1.5)]` centred on
+the non-relativistic scale `k_nr ~ 0.0014 h/Mpc`. The `-8 f_nu` asymptote was
+sound but the transition was not: measured against CLASS the form
+over-suppressed by ~2 percentage points at 0.06 eV and ~11 at 0.3 eV, across
+exactly the scales the mass function and the 2-halo term use. It is now read
+from the CLASS table. `test_nu_suppression_shape` only exercised 0.3 eV, where
+the error is least visible as a fraction; it now covers 0.06 eV too.
+
+### Fixed: the `sum_mnu` row of the CAMB/EH98 ratio table cancelled the signal
+
+`pk_camb_ratio.build()` passed CAMB a `"mnu"` key that `LinearPowerSpectrum`
+never read, so both finite-difference steps ran at the same neutrino mass and
+`d ln P_CAMB / d sum_mnu` was identically zero. The stored row was therefore
+exactly minus the EH98 suppression — `max|dlnR/dSigma m_nu| = 0.6142` against
+the analytic `8 f_nu / Sigma m_nu = 0.6106`. Under
+`pk_correction="camb_linear"` this **cancelled** the neutrino response of the
+linear shape to first order instead of making it CAMB-accurate. Rebuilt: the
+row is now 0.055. `test_camb_ratio_correction` asserted only the row *names*,
+which is why this stood.
+
+### Fixed: the P(k) caches could serve a spectrum from the wrong cosmology
+
+`_CachedPkLinear` and `CachedPkNonlinear` keyed on `(z, Omega_m, ln10As, h)`
+only. A free-cosmology chain that varied `Omega_b`, `n_s`, `w0`/`wa` — or now
+`sum_mnu` — was silently handed a cached spectrum computed at a different
+cosmology. All of those are in the key now. The three verbatim copies of
+`_CachedPkLinear` (`fitting/fitters.py`, `fit_bgs_multiprobe.py`,
+`plot_wp_survey.py`) are down to one; the scripts import it.
+
+### Changed
+
+- The forecast fiducial `sum_mnu` moves from 0.0 to 0.06 eV (`params.py`,
+  `forward_jax._FIXED_COSMO`), so tier-2/3/4 forecast numbers shift.
+- `HALOFITSpectrum` and `WHMSpectrum` now pass the neutrino mass to CAMB;
+  HALOFIT additionally gained the `w0`/`wa` it was silently dropping.
+- The accuracy budget's reference for `P_lin(k)` is CLASS rather than CAMB, and
+  it gained a `P_cb/P_m table` row checking the shipped npz against a live
+  solve. `P_lin(k) shape, CAMB` and `P_cb/P_m table` are now in `_MUST_COVER`,
+  so a classy-less environment can no longer drop them unnoticed.
+
+**Not bit-comparable.** Results produced before this change differ. Setting
+`sum_mnu = 0.0` explicitly recovers the massless behaviour exactly: every
+correction added here is the identity at zero neutrino mass.
+
 ### Fixed: `--ecf` ran every fit with no AGN component
 
 - **The S1 anchor was measured by a non-negative solve that clipped to zero.**

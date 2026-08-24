@@ -8,6 +8,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from hod_mod.paths import repo_root as _repo_root, results_root
+from hod_mod.core.power_spectrum import mnu_sum, omega_cdm
 
 
 
@@ -108,9 +109,11 @@ def _sigma8_to_lnAs(cosmo: dict) -> float:
     import camb
     h  = cosmo["h"]
     ob = cosmo["Omega_b"]
-    oc = cosmo.get("Omega_cdm", cosmo["Omega_m"] - ob)
+    oc = omega_cdm(cosmo)
     pars = camb.CAMBparams()
-    pars.set_cosmology(H0=100.0 * h, ombh2=ob * h**2, omch2=oc * h**2)
+    pars.set_cosmology(H0=100.0 * h, ombh2=ob * h**2, omch2=oc * h**2,
+                       mnu=float(mnu_sum(cosmo)), num_massive_neutrinos=3,
+                       nnu=3.044)
     pars.InitPower.set_params(ns=cosmo["n_s"], As=1e-10)
     pars.set_matter_power(redshifts=[0.0], kmax=200.0)
     res = camb.get_results(pars)
@@ -156,7 +159,7 @@ def load_config(path: str) -> FitConfig:
     cosmology  = {k: float(v) for k, v in cosmo_cfg.items()} if cosmo_cfg else None
     if cosmology is not None:
         if "Omega_cdm" not in cosmology and "Omega_m" in cosmology:
-            cosmology["Omega_cdm"] = cosmology["Omega_m"] - cosmology["Omega_b"]
+            cosmology["Omega_cdm"] = omega_cdm(cosmology)
         if "sigma8" in cosmology and "ln10^{10}A_s" not in cosmology:
             cosmology["ln10^{10}A_s"] = _sigma8_to_lnAs(cosmology)
 

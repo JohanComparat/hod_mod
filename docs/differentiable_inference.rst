@@ -37,7 +37,7 @@ Two differentiable backends
 
   Since 0.3.1 the package-wide default linear P(k) is the **CosmoPower-JAX
   emulator** (:func:`~hod_mod.core.power_spectrum.default_pk_linear`,
-  ``HOD_MOD_PK_BACKEND=cosmopower|camb``) — CAMB-accuracy *and*
+  ``HOD_MOD_PK_BACKEND=cosmopower|class|camb``) — Boltzmann accuracy *and*
   JAX-differentiable, so the production predictions and the gradient stack
   finally share one P(k).  The config-driven ``FitConfig``/``WpFitter`` path
   routes through the same factory; ``eh98_jax`` remains the dependency-free
