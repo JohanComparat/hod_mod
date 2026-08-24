@@ -40,7 +40,7 @@ import jax
 jax.config.update("jax_enable_x64", True)
 
 from hod_mod.forecast.forward_jax import PARAM_NAMES, _IDX, TIER2_ZSLOPES  # noqa: E402
-from hod_mod.forecast import params, fisher  # noqa: E402
+from hod_mod.forecast import params, fisher, derived  # noqa: E402
 from hod_mod.forecast.tier2 import Tier2Forecast  # noqa: E402
 
 # probe groups for the cumulative attribution (galaxy grid → lensing →
@@ -69,13 +69,13 @@ def _out_dir():
 
 
 def _s8_sigma(cov, fid):
-    """σ(S8), S8 = σ8 (Ω_m/0.3)^0.5, by linear propagation."""
-    iom, is8 = _IDX["Omega_m"], _IDX["sigma8"]
-    om, s8 = fid[iom], fid[is8]
-    g = np.zeros(len(fid))
-    g[is8] = (om / 0.3) ** 0.5
-    g[iom] = 0.5 * s8 * (om / 0.3) ** 0.5 / om
-    return float(np.sqrt(g @ cov @ g))
+    """σ(S8), S8 = σ8 (Ω_m/0.3)^0.5, by linear propagation.
+
+    σ8 is a derived quantity now, not a Fisher coordinate, so the gradient comes
+    from autodiff through the spectrum rather than the closed form this used to
+    carry.  See hod_mod.forecast.derived for why the number moves.
+    """
+    return derived.s8_sigma(cov, fid)[0]
 
 
 def _sig(d0, J, mask, rel, prior, scale):
@@ -240,10 +240,10 @@ def main():
         i = _IDX[n]
         lines.append(f"{n:20s} sigma={r0['sigma'][i]:9.3e}  (prior {prior[i]:.2g})")
     lines.append("")
-    lines.append("--- cumulative probe attribution: sigma(Omega_m), sigma(sigma8) ---")
+    lines.append("--- cumulative probe attribution: sigma(Omega_m), sigma(ln10^{10}A_s) ---")
     for label, s_c in r0["cumulative"].items():
         lines.append(f"{label:14s} sigma(Om)={s_c[_IDX['Omega_m']]:9.3e}  "
-                     f"sigma(s8)={s_c[_IDX['sigma8']]:9.3e}")
+                     f"sigma(lnAs)={s_c[_IDX['ln10^{10}A_s']]:9.3e}")
     lines.append("")
     lines.append("--- top degeneracies ---")
     for a, n1, n2, c in fisher.top_degeneracies(r0["corr"], names, k=10):
