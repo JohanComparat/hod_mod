@@ -171,15 +171,80 @@ about 1.5 decades of :math:`k` too early — against CLASS it over-suppressed by
 ~2 percentage points at 0.06 eV and ~11 at 0.3 eV, across exactly the scales the
 mass function and the 2-halo term use.
 
+Strict parameter bounds
+-----------------------
+
+A Gaussian prior width cannot say *never negative*.  With
+:math:`\sigma = 0.25` eV about a 0.06 eV fiducial, roughly 40% of the prior mass
+on :math:`\Sigma m_\nu` sits below zero, and the forward model returns a number
+there rather than complaining.
+:data:`~hod_mod.forecast.params.PARAM_BOUNDS` is the piece the precision vector
+cannot express: a hard ``(lo, hi)`` for every one of the 111 forecast
+parameters.
+
+Each bound is tagged with what kind of statement it is, because that determines
+how freely it may be relaxed:
+
+``physical``
+    a law forbids the outside — a density or mass cannot be negative,
+    :math:`\Sigma m_\nu \ge 0`
+``definitional``
+    a fraction lies in [0, 1]; a width the model divides by is strictly
+    positive; an ordering holds
+``validity``
+    the calibration or training range of whatever consumes it — the
+    CosmoPower ``TRAINING_BOX``, the APEC table edges, the
+    :math:`f_\nu` grid the distilled neutrino ratios were measured on
+``prior``
+    a defensible but conventional range, used only where none of the above
+    applies.  These are the ones to argue with.
+
+The bounds are deliberately the *widest* defensible choice.  A bound that
+excludes a value the literature reports, or that this package itself fits to, is
+a bug — ``tests/test_param_bounds.py`` checks the shipped best-fit results
+against the table for exactly that reason, and carries an explicit list of
+result files whose keys collide with a forecast parameter name while meaning
+something else.
+
+Helpers, all in :mod:`hod_mod.forecast.params`:
+
+.. code-block:: python
+
+   bounds_vector()               # (111, 2) array in PARAM_NAMES order
+   bounds_pairs()                # [(lo, hi), ...] for scipy.optimize
+   bounds_violations(theta)      # [(name, value, lo, hi)], empty when clean
+   clip_to_bounds(theta)
+   log_prior_bounds(theta)       # 0.0 inside, -inf outside
+   perturb_inside_bounds(...)    # walker seeds that land strictly inside
+
+Enforcement reaches the samplers through
+:class:`~hod_mod.fitting.jax_inference.MultiProbeGaussianLikelihood`, whose
+``log_prior`` multiplies the Gaussian by the indicator of the box.  The bound is
+``jnp.where``-selected rather than added, so the gradient inside is exactly the
+Gaussian one and NUTS simply rejects a proposal that leaves it; MAP receives the
+same box through ``bounds_pairs()``.  Pass ``enforce_bounds=False`` to opt out.
+
 .. note::
 
-   :math:`\Sigma m_\nu` is index 64 of the forecast vector, with a broad
-   Gaussian prior of 0.25 eV and a fiducial that is now 0.06 eV rather than
-   zero.  The prior does not encode :math:`\Sigma m_\nu \ge 0` — the Gaussian
-   precision vector has no way to express a bound.  This is separate from the
-   ``Sigma m_nu -> infinity`` direction listed in :doc:`tier4_forecast`, which
-   is an eigenvalue-floor artefact in ``fisher.constraints`` rather than a
-   prior problem.
+   :math:`\Sigma m_\nu` is index 64 of the forecast vector, bounded to
+   [0, 0.4] eV with a fiducial of 0.06 eV.  The upper bound is a *validity*
+   limit, not a cosmological one: above it the distilled table of
+   :mod:`hod_mod.core.nu_ratio` extrapolates flat off its :math:`f_\nu` grid and
+   would silently understate the suppression.
+
+.. note::
+
+   One fiducial sits *on* a bound by construction: ``eta_w_norm``, the wave-2
+   mass-loading normalisation, is zero because the wind sector is off by
+   default, and zero is also the physical wall.  A Fisher derivative there is
+   one-sided and a walker initialised there must be nudged inward.  Such cases
+   are declared in
+   :data:`~hod_mod.forecast.params.BOUNDARY_FIDUCIALS` and the test suite fails
+   if an *undeclared* one appears.
+
+   This is separate from the ``Sigma m_nu -> infinity`` direction listed in
+   :doc:`tier4_forecast`, which is an eigenvalue-floor artefact in
+   ``fisher.constraints`` rather than a prior problem — a bound does not fix it.
 
 **Eisenstein-Hu 1998 fitting formula** (fast)
 

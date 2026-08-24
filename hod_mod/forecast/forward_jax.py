@@ -1077,10 +1077,38 @@ class ForwardModel:
         return u_shape * P_dpm[None, :]
 
     # ---- AGN spectral helpers (Γ power law + obscured fraction) ------
+    @staticmethod
+    def _pow_diff_over_p(a, b, p, _eps=1e-6):
+        r"""$(a^p - b^p)/p$, finite and differentiable through $p = 0$.
+
+        Every band ratio below is a quotient of two such differences, and at
+        :math:`\Gamma = 2` (so :math:`p = 0`) both go to zero: the quotient is
+        finite but the naive form evaluates 0/0 and returns NaN at exactly that
+        point while being perfectly smooth on either side of it. Dividing the
+        removable zero out first is what makes :math:`\Gamma = 2` --- an
+        entirely ordinary photon index --- usable rather than a hole in the
+        parameter space. The series is the limit
+        :math:`\ln(a/b) + \tfrac{p}{2}(\ln^2 a - \ln^2 b)`; the double
+        ``where`` keeps the gradient finite at the switch.
+        """
+        la, lb = jnp.log(a), jnp.log(b)
+        d = la - lb
+        x = p * d
+        # Factoring out b**p turns the catastrophic cancellation of
+        # a**p - b**p into expm1, which is accurate for small argument; only
+        # the final division by p still needs guarding.
+        small = jnp.abs(x) < _eps
+        safe_p = jnp.where(jnp.abs(p) < _eps, 1.0, p)
+        ratio = jnp.where(small,
+                          d * (1.0 + 0.5 * x + x * x / 6.0),
+                          jnp.expm1(x) / safe_p)
+        return jnp.exp(p * lb) * ratio
+
     def _k_h2s(self, theta):
         """Differentiable hard→soft flux ratio k_h2s(Γ), == _K_H2S_FID at Γ=1.8."""
         p = 2.0 - theta[_IDX["agn_gamma"]]
-        r = (2.0 ** p - 0.5 ** p) / (10.0 ** p - 2.0 ** p)
+        r = (self._pow_diff_over_p(2.0, 0.5, p)
+             / self._pow_diff_over_p(10.0, 2.0, p))
         return _K_H2S_FID * r / _R_H2S_FID
 
     def _agn_band_fractions(self, theta):
@@ -1088,7 +1116,8 @@ class ForwardModel:
         the 0.5–2 keV soft band (so bands spanning it sum to 1), (Nb,)."""
         p = 2.0 - theta[_IDX["agn_gamma"]]
         lo, hi = self._band_edges[:, 0], self._band_edges[:, 1]
-        return (hi ** p - lo ** p) / (2.0 ** p - 0.5 ** p)
+        return (self._pow_diff_over_p(hi, lo, p)
+                / self._pow_diff_over_p(2.0, 0.5, p))
 
     def _abs_survival_soft(self, theta):
         """Mean broad-soft-band flux survival of the AGN population:

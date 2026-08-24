@@ -40,7 +40,8 @@ class MultiProbeGaussianLikelihood:
     """
 
     def __init__(self, model_fn, data, icov, free_idx, theta0,
-                 prior_mean=None, prior_sigma=None, param_names=None):
+                 prior_mean=None, prior_sigma=None, param_names=None,
+                 enforce_bounds: bool = True):
         self._f = model_fn                                   # f(theta_full)->vec
         self._data = jnp.asarray(data)
         self._icov = jnp.asarray(icov)
@@ -59,6 +60,28 @@ class MultiProbeGaussianLikelihood:
         self._prior_prec = jnp.asarray(np.where(np.isfinite(sig) & (sig > 0),
                                                 1.0 / np.where(sig > 0, sig, 1.0) ** 2,
                                                 0.0))
+        # Strict bounds for the free subset.  A Gaussian precision cannot say
+        # "never negative": with sigma = 0.25 eV about a 0.06 eV fiducial some
+        # 40% of the prior mass sits at sum_mnu < 0, and the forward model
+        # returns a number there rather than complaining.  Parameters whose
+        # names are not in the forecast registry (the production backend passes
+        # its own layout) are left unbounded.
+        lo = np.full(n_free, -np.inf)
+        hi = np.full(n_free, np.inf)
+        if enforce_bounds:
+            for j, i in enumerate(np.asarray(self._free_idx)):
+                nm = self._param_names[int(i)]
+                b = _fparams.PARAM_BOUNDS.get(nm)
+                if b is not None:
+                    lo[j] = -np.inf if b[0] <= -_fparams._INF else b[0]
+                    hi[j] = np.inf if b[1] >= _fparams._INF else b[1]
+        # float64 copies for the reporting/scipy paths, so a bound is not
+        # reported as 0.4000000059604645; the jnp pair is what the traced
+        # log_prior compares against.
+        self._bound_lo_f64, self._bound_hi_f64 = lo, hi
+        self._bound_lo = jnp.asarray(lo)
+        self._bound_hi = jnp.asarray(hi)
+        self._enforce_bounds = bool(enforce_bounds)
 
     # -- parameter packing ------------------------------------------------
     def unpack(self, x):
@@ -71,8 +94,31 @@ class MultiProbeGaussianLikelihood:
 
     # -- log-probability terms -------------------------------------------
     def log_prior(self, x):
+        """Gaussian regularisation, times the indicator of the strict bounds.
+
+        The bound term is ``jnp.where``-selected rather than added, so the
+        gradient inside the box is exactly the Gaussian one and NUTS simply
+        rejects any proposal that leaves it.
+        """
         d = x - self._prior_mean
-        return -0.5 * jnp.sum(self._prior_prec * d * d)
+        gauss = -0.5 * jnp.sum(self._prior_prec * d * d)
+        inside = jnp.all((x >= self._bound_lo) & (x <= self._bound_hi))
+        return jnp.where(inside, gauss, -jnp.inf)
+
+    def bounds_pairs(self):
+        """Free-parameter bounds as ``[(lo, hi), ...]`` for ``scipy.optimize``."""
+        return [(None if not np.isfinite(l) else float(l),
+                 None if not np.isfinite(h) else float(h))
+                for l, h in zip(self._bound_lo_f64, self._bound_hi_f64)]
+
+    def bounds_violations(self, x):
+        """``[(name, value, lo, hi)]`` for free parameters outside their bounds."""
+        out = []
+        for n, v, l, h in zip(self.free_names, np.asarray(x),
+                              self._bound_lo_f64, self._bound_hi_f64):
+            if not np.isfinite(v) or v < l or v > h:
+                out.append((n, float(v), float(l), float(h)))
+        return out
 
     def log_likelihood(self, x):
         r = self.model(x) - self._data

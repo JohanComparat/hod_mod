@@ -38,14 +38,18 @@ from hod_mod.observables.clustering import _pk_to_xi, _rho_m
 C1_RHO_CRIT0: float = 0.0134
 
 
-def _linear_growth_factor(z: float, omega_m: float) -> float:
-    """Linear growth factor D(z)/D(0), flat ΛCDM (Carroll+1992 fitting formula).
+def _linear_growth_factor(z: float, theta_cosmo: dict) -> float:
+    """Linear growth factor D(z)/D(0), through the package-wide dispatcher.
 
-    Reuses ``_growth_factor_flat_jax`` from the HMF module; returns a Python
-    float so it can be used outside JAX-traced code.
+    ``growth_factor`` branches on dictionary membership: a theta carrying
+    ``w0``/``wa`` gets the CPL ODE, a plain LCDM one keeps the Carroll+1992
+    fitting formula.  This used to call the Carroll branch directly, which
+    silently gave a w0waCDM fit LCDM growth -- a 1.5e-3 error in D(z) at
+    z = 0.2, and twice that in the D^-2 of Eq. F_IA.  Returns a Python float so
+    it can be used outside JAX-traced code.
     """
-    from hod_mod.core.halo_mass_function import _growth_factor_flat_jax
-    return float(_growth_factor_flat_jax(float(z), float(omega_m)))
+    from hod_mod.core.halo_mass_function import growth_factor
+    return float(growth_factor(float(z), theta_cosmo))
 
 
 def _ia_amplitude(z: float, theta_cosmo: dict, A_ia: float, eta_ia: float) -> float:
@@ -70,7 +74,7 @@ def _ia_amplitude(z: float, theta_cosmo: dict, A_ia: float, eta_ia: float) -> fl
     -------
     F_IA : float [dimensionless] — sign convention: positive F_IA suppresses ΔΣ.
     """
-    D_z = _linear_growth_factor(float(z), float(theta_cosmo["Omega_m"]))
+    D_z = _linear_growth_factor(float(z), theta_cosmo)
     rho_bar_m = float(theta_cosmo["Omega_m"]) * 2.775e11   # Msun h^2 Mpc^-3
     # C1 * rho_bar_m in (Msun h Mpc^-3) * (Mpc^3 h^-3) units cancel → dimensionless
     c1_rho = C1_RHO_CRIT0 * float(theta_cosmo["Omega_m"])

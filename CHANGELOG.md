@@ -4,6 +4,75 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: strict bounds on every forecast parameter
+
+A Gaussian prior width cannot say "never negative". With sigma = 0.25 eV about a
+0.06 eV fiducial, roughly 40% of the prior mass on `sum_mnu` sat below zero, and
+the forward model returned a number there rather than complaining. There were no
+bounds at all on the 111-parameter forecast vector -- only Gaussian precisions.
+
+- **`forecast/params.py::PARAM_BOUNDS`** gives every parameter a hard
+  `(lo, hi)`, each tagged `physical`, `definitional`, `validity` or `prior` so
+  that the difference between a law and a convention is explicit. The bounds are
+  the widest defensible choice: a bound that excludes a value the literature
+  reports, or that this package itself fits to, is a bug.
+- Helpers: `bounds_vector`, `bounds_pairs` (for `scipy.optimize`),
+  `bounds_violations`, `clip_to_bounds`, `log_prior_bounds`,
+  `perturb_inside_bounds`.
+- **Enforcement reaches the samplers.** `MultiProbeGaussianLikelihood.log_prior`
+  multiplies the Gaussian by the indicator of the box, `jnp.where`-selected so
+  the gradient inside is exactly the Gaussian one and NUTS rejects anything that
+  leaves it; the MAP optimiser gets the same box. `enforce_bounds=False` opts
+  out. `run_forecast_nuts` now passes the bounds to its MAP call and warns if
+  the result rails.
+- `sum_mnu` is bounded to [0, 0.4] eV. The upper bound is a *validity* limit:
+  above it the distilled table extrapolates flat off its f_nu grid and would
+  silently understate the suppression.
+- `tests/test_param_bounds.py` (24 tests) guards both directions -- every
+  parameter has a bound and every fiducial sits strictly inside it, *and* the
+  bounds admit the best-fit values in the shipped results tree. That second test
+  found two name collisions across parameter layouts, now recorded: the forecast
+  `beta_pressure` is a tilt on DPM's beta_P = 0.85 while the duty-cycle script
+  fits the absolute slope, and `_v2_pivotM1` results carry `kt_norm` under a
+  superseded pivot convention.
+- One fiducial sits on a bound by construction (`eta_w_norm`: the wind sector is
+  off by default and zero is also the physical wall). Such cases are declared in
+  `BOUNDARY_FIDUCIALS`; the suite fails if an undeclared one appears.
+
+### Fixed: the AGN k-correction returned NaN at Gamma = 2
+
+`_k_h2s` and `_agn_band_fractions` both evaluate `(a**p - b**p)` with
+`p = 2 - Gamma`, so at Gamma = 2 they compute 0/0 exactly, while being perfectly
+smooth on either side (0.81980 at 1.9999, 0.82005 at 2.0001). Gamma = 2 is an
+entirely ordinary photon index sitting 0.67 sigma from the fiducial, so this was
+a hole in the middle of the prior. Both now divide the removable zero out first,
+via an `expm1` form that stays accurate and differentiable through p = 0.
+
+### Fixed: the neutrino ratio table leaked a tracer
+
+`nu_ratio.load()` cached `jnp` arrays. When the first call happened inside a
+`jax.jit` trace -- which is what happens when the emulator is jitted before
+anything else touches the table -- the cached arrays carried that trace with
+them, and the next transformation died with `UnexpectedTracerError`. Gradients
+through the emulator were broken whenever jit came first. The cache now holds
+numpy; `jnp.asarray` at the point of use folds it into the jaxpr as a constant,
+which is also 1.6x faster eagerly.
+
+### Fixed: intrinsic alignment ignored w0/wa
+
+`intrinsic_alignment._linear_growth_factor` hard-wired the Carroll+1992 LCDM
+formula instead of the package-wide `growth_factor` dispatcher, so a w0waCDM fit
+silently used LCDM growth in the NLA amplitude: 1.5e-3 in D(z) at z = 0.2, and
+twice that in the D^-2 the amplitude carries. Caught by the paper's equation
+audit once the default dictionary started carrying w0/wa.
+
+### Fixed: the CSST mass function paired two definitions of sigma
+
+`CsstHaloMassFunction.sigma` kept a fixed total-matter density and the raw
+emulated spectrum, so its companion Tinker10 bias was evaluated on a different
+sigma(M) from the one its own dn/dM was trained against. It now takes the same
+cold-field path as `HaloMassFunction.sigma`.
+
 ### Added: Sigma m_nu as a first-class parameter, and CLASS as the reference P(k)
 
 Neutrino mass was previously not a parameter of this package at all. The default
