@@ -12,7 +12,7 @@ data:
 cosmology:
   Omega_m: 0.3153
   h:       0.6736
-  sigma8:  0.8111
+  ln10^{10}A_s: 3.008785  # from sigma8 = 0.8111, converted via CAMB
   n_s:     0.9649
   Omega_b: 0.0493
 
@@ -38,13 +38,16 @@ parameters:
     prior_type:  gaussian
     prior_mean:  0.3153
     prior_sigma: 0.0073
-  S8:
+  # The amplitude, sampled directly.  This was S8 with a Planck Gaussian
+  # prior; S8 is now DERIVED from (ln10^{10}A_s, Omega_m) after the fit.  Flat
+  # and wide on purpose -- the point of this benchmark is to measure the
+  # amplitude from the data, so it carries no amplitude prior.  The upper edge
+  # stays inside the CosmoPower training box (1.61, 3.91) so a walker cannot
+  # leave it; the range spans sigma8 ~ 0.48-1.24, ~20 sigma on the published S8.
+  ln10^{10}A_s:
     free:        true
-    bounds:      [0.775, 0.889]
-    init:        0.832
-    prior_type:  gaussian
-    prior_mean:  0.832
-    prior_sigma: 0.0114
+    bounds:      [2.0, 3.9]
+    init:        3.044
 
 fitting:
   method:         map

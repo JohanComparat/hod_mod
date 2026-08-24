@@ -16,7 +16,7 @@ ds:
 cosmology:
   Omega_m: 0.339
   h:       0.677
-  sigma8:  0.760
+  ln10^{10}A_s: 2.723866  # from sigma8 = 0.760, converted via CAMB
   n_s:     0.968
   Omega_b: 0.046
 
