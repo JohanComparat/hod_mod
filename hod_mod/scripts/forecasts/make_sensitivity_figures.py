@@ -91,9 +91,9 @@ def fig_derivative_cascade(model, fid, d0, J, row_obs, row_x, out):
     z = model.z_eff
     k = np.asarray(model.k)
     m = np.asarray(model.m)
-    cosmo_ps = ["Omega_m", "sigma8", "h", "n_s", "Omega_b"]
-    colors = {"Omega_m": "C0", "sigma8": "C3", "h": "C2", "n_s": "C4", "Omega_b": "C1"}
-    lab = {"Omega_m": r"$\Omega_m$", "sigma8": r"$\sigma_8$", "h": r"$h$",
+    cosmo_ps = ["Omega_m", "ln10^{10}A_s", "h", "n_s", "Omega_b"]
+    colors = {"Omega_m": "C0", "ln10^{10}A_s": "C3", "h": "C2", "n_s": "C4", "Omega_b": "C1"}
+    lab = {"Omega_m": r"$\Omega_m$", "ln10^{10}A_s": r"$\ln(10^{10}A_s)$", "h": r"$h$",
            "n_s": r"$n_s$", "Omega_b": r"$\Omega_b$"}
 
     # --- upstream pipeline stages (fresh autodiff): P(k) → σ(M) → dn/dM ---
@@ -169,7 +169,7 @@ def fig_derivative_cascade(model, fid, d0, J, row_obs, row_x, out):
 # ---------------------------------------------------------------------------
 
 def fig_response_functions(model, fid, d0, J, row_obs, row_x, out):
-    show = ["Omega_m", "sigma8", "fc", "lg_m1h", "bsat", "lx_norm", "p2",
+    show = ["Omega_m", "ln10^{10}A_s", "fc", "lg_m1h", "bsat", "lx_norm", "p2",
             "log10DC", "log10_M_pivot", "agn_log10_ferdf"]
     col = {p: f"C{i}" for i, p in enumerate(show)}
     TITLE = {"wp": r"$w_p$", "ds": r"$\Delta\Sigma$", "cl_gX": r"$C_\ell^{gX}$",
@@ -242,7 +242,7 @@ def _ellipse(ax, cov, i, j, cx, cy, color, label, ls="-"):
 def fig_degeneracy_breaking(model, fid, d0, J, row_obs, row_x, out, rmin=0.1, rel_err=0.01):
     # pairs showing the cosmology↔(HOD, baryon) degeneracies broken as the data
     # vector grows cumulatively from wp+ΔΣ to all twelve summary statistics
-    pairs = [("sigma8", "Omega_m"), ("sigma8", "log10_M_pivot"), ("sigma8", "bsat")]
+    pairs = [("ln10^{10}A_s", "Omega_m"), ("ln10^{10}A_s", "log10_M_pivot"), ("ln10^{10}A_s", "bsat")]
     s_cl = ["wp", "ds", "cl_gy", "cl_gX", "cl_XX"]                       # + SZ + X-ray
     s_le = s_cl + ["cl_kk", "cl_kCMB", "cl_gkCMB", "cl_shear_kCMB"]      # + lensing spectra
     sets = [("wp+ΔΣ", ["wp", "ds"], "C0", "-"),
@@ -292,9 +292,9 @@ def fig_sigma_vs_scale(model, fid, d0, J, row_obs, row_x, out,
             (r"+ cosmic + CMB lensing ($C_\ell^{\kappa\kappa}$ + CMB-$\kappa$)", s_le, "C2", "s"),
             (r"all twelve (+ $n_{\rm gal}$, SMF, XLF)", list(OBSERVABLES), "C3", "D")]
     prior = params.regularizing_prior(add_planck=False)
-    sig_label = {"sigma8": r"$\sigma(\sigma_8)$", "Omega_m": r"$\sigma(\Omega_m)$"}
+    sig_label = {"ln10^{10}A_s": r"$\sigma(\ln 10^{10}A_s)$", "Omega_m": r"$\sigma(\Omega_m)$"}
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.4))
-    for ax, tgt in zip(axes, ["sigma8", "Omega_m"]):
+    for ax, tgt in zip(axes, ["ln10^{10}A_s", "Omega_m"]):
         j = PARAM_NAMES.index(tgt)
         for label, obs, color, mk in sets:
             ys = []
@@ -356,7 +356,7 @@ def fig_baryon_suppression(model, fid, out):
 
 def fig_baryon_recovery(model, fid, d0, J, row_obs, row_x, out,
                         rmins=(0.1, 0.5, 2.5, 10.0), rel_err=0.01):
-    js8 = PARAM_NAMES.index("sigma8")
+    js8 = PARAM_NAMES.index("ln10^{10}A_s")
     pri_fix = params.regularizing_prior(fix=("log10_M_pivot", "log10_eta_min"))
     pri_marg = params.regularizing_prior()
 
@@ -382,7 +382,7 @@ def fig_baryon_recovery(model, fid, d0, J, row_obs, row_x, out,
     ax.annotate("baryon\ncontamination", (rmins[0], np.sqrt(y_fix[0] * y_marg[0])),
                 fontsize=8, color="C3", ha="left", va="center")
     ax.set_xlabel(r"scale cut  $R_{\min}\;[\mathrm{Mpc}/h]$  (use scales $>R_{\min}$)")
-    ax.set_ylabel(r"$\sigma(\sigma_8)$")
+    ax.set_ylabel(r"$\sigma(\ln 10^{10}A_s)$")
     ax.set_title("Baryons limit small-scale lensing;\nthe full data vector self-calibrates them")
     ax.invert_xaxis()
     ax.legend(fontsize=8.5)
@@ -391,7 +391,7 @@ def fig_baryon_recovery(model, fid, d0, J, row_obs, row_x, out,
     fig.savefig(p, dpi=120); plt.close(fig)
     print("[fig]", p)
     # numbers for the doc text
-    print(f"[baryon] Rmin=0.1: sigma8 fixed={y_fix[0]:.3e} marg={y_marg[0]:.3e} "
+    print(f"[baryon] Rmin=0.1: ln10As fixed={y_fix[0]:.3e} marg={y_marg[0]:.3e} "
           f"recovered={y_rec[0]:.3e}  degrade x{y_marg[0]/y_fix[0]:.2f}  recover x{y_marg[0]/y_rec[0]:.2f}")
     print(f"[baryon] Rmin=0.1 all-twelve: known={y_all_fix[0]:.3e} marg={y_all[0]:.3e} "
           f"baryon-degrade x{y_all[0]/y_all_fix[0]:.3f}  (below wp+ΔΣ ideal x{y_fix[0]/y_all[0]:.2f})")
@@ -495,7 +495,7 @@ def fig_xlf_cosmology(model, fid, d0, J, row_obs, row_x, out,
     """
     row_obs = np.asarray(row_obs)
     is_xlf = row_obs == "xlf"
-    iom, is8 = _IDX["Omega_m"], _IDX["sigma8"]
+    iom, is8 = _IDX["Omega_m"], _IDX["ln10^{10}A_s"]
 
     fig, axes = plt.subplots(1, 3, figsize=(15.5, 4.5))
 
@@ -506,7 +506,7 @@ def fig_xlf_cosmology(model, fid, d0, J, row_obs, row_x, out,
     ax = axes[0]
     # d Φ / d θ  normalised to the fiducial Φ (so all curves are O(1) and the
     # amplitude-vs-shape contrast is legible; μ_BH's huge response is off-scale).
-    for nm, col in [("Omega_m", "C3"), ("sigma8", "C0"),
+    for nm, col in [("Omega_m", "C3"), ("ln10^{10}A_s", "C0"),
                     ("agn_log10_ferdf", "0.4"), ("agn_delta2", "C1")]:
         dln = Jx[:, _IDX[nm]] / phi0                  # d lnΦ / d θ
         ls = "--" if nm == "agn_log10_ferdf" else "-"
@@ -553,13 +553,13 @@ def fig_xlf_cosmology(model, fid, d0, J, row_obs, row_x, out,
         _ellipse(ax, cN, iom, is8, cx, cy, "0.5", "6 obs (no XLF)", ls="--")
         _ellipse(ax, cY, iom, is8, cx, cy, "C3", "+ XLF", ls="-")
         ax.plot(cx, cy, "k+", ms=9)
-        ax.set_xlabel(params.PARAM_LATEX["Omega_m"]); ax.set_ylabel(params.PARAM_LATEX["sigma8"])
-        ax.set_title(r"$(\Omega_m,\sigma_8)$ at $R_{\min}=10$ Mpc/h"
+        ax.set_xlabel(params.PARAM_LATEX["Omega_m"]); ax.set_ylabel(params.PARAM_LATEX["ln10^{10}A_s"])
+        ax.set_title(r"$(\Omega_m,\ln 10^{10}A_s)$ at $R_{\min}=10$ Mpc/h"
                      "\n(AGN sector pinned, 1% errors)")
         ax.legend(fontsize=9); ax.relim(); ax.autoscale_view()
 
     fig.suptitle("The AGN X-ray luminosity function as a cosmology probe: its amplitude carries "
-                 r"$dn/dM(\Omega_m,\sigma_8)$ but is degenerate with the active fraction", fontsize=11.5)
+                 r"$dn/dM(\Omega_m,A_s)$ but is degenerate with the active fraction", fontsize=11.5)
     fig.tight_layout(rect=[0, 0, 1, 0.93])
     p = os.path.join(out, _PFX + "xlf_cosmology.png")
     fig.savefig(p, dpi=120); plt.close(fig)
@@ -575,7 +575,7 @@ def fig_xlf_cosmology(model, fid, d0, J, row_obs, row_x, out,
 # reproduces that run from the same Jacobian, so the comparison below isolates
 # the effect of parameter freedom alone.
 _PUBLISHED_31 = [
-    "Omega_m", "sigma8", "h", "n_s", "Omega_b",
+    "Omega_m", "ln10^{10}A_s", "h", "n_s", "Omega_b",
     "lg_m1h", "lg_m0star", "beta", "delta", "gamma", "sigma_lnmstar", "eta",
     "fc", "bsat", "lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max",
     "log10DC", "beta_pressure", "log10_M_pivot", "log10_eta_min",
@@ -592,7 +592,7 @@ def fig_param_freedom(model, fid, d0, J, row_obs, row_x, out,
                  p for p in PARAM_NAMES if p not in _PUBLISHED_31)), "C0", "o", "-"),
             (f"all {len(PARAM_NAMES)} parameters free",
              params.regularizing_prior(add_planck=False), "C3", "D", "-")]
-    iom, is8 = _IDX["Omega_m"], _IDX["sigma8"]
+    iom, is8 = _IDX["Omega_m"], _IDX["ln10^{10}A_s"]
 
     sig = {}   # label -> (n_rmin, n_param) marginalised sigmas
     cov01 = {}  # label -> covariance at the smallest scale cut
@@ -609,15 +609,15 @@ def fig_param_freedom(model, fid, d0, J, row_obs, row_x, out,
 
     fig, axes = plt.subplots(1, 3, figsize=(14, 4.3))
 
-    # --- panel 1: (Omega_m, sigma8) 1σ ellipses at the smallest scale cut ---
+    # --- panel 1: (Omega_m, ln10As) 1σ ellipses at the smallest scale cut ---
     ax = axes[0]
     cx, cy = fid[iom], fid[is8]
     for label, _, color, _, ls in runs:
         _ellipse(ax, cov01[label], iom, is8, cx, cy, color, label, ls)
     ax.plot(cx, cy, "k+", ms=9)
     ax.set_xlabel(params.PARAM_LATEX["Omega_m"])
-    ax.set_ylabel(params.PARAM_LATEX["sigma8"])
-    ax.set_title(rf"$(\Omega_m,\sigma_8)$ at $R_{{\min}}={min(rmins)}$ Mpc/h")
+    ax.set_ylabel(params.PARAM_LATEX["ln10^{10}A_s"])
+    ax.set_title(rf"$(\Omega_m,\ln 10^{{10}}A_s)$ at $R_{{\min}}={min(rmins)}$ Mpc/h")
     ax.legend(fontsize=8.5, loc="best")
     ax.relim(); ax.autoscale_view()
 
@@ -625,7 +625,7 @@ def fig_param_freedom(model, fid, d0, J, row_obs, row_x, out,
     ax = axes[1]
     for label, _, color, mk, _ in runs:
         ax.loglog(rmins, sig[label][:, is8], mk + "-", color=color,
-                  label=label + r"  ($\sigma_8$)")
+                  label=label + r"  ($\ln 10^{10}A_s$)")
         ax.loglog(rmins, sig[label][:, iom], mk + "--", color=color, mfc="none",
                   label=label + r"  ($\Omega_m$)")
     ax.set_xlabel(r"scale cut  $R_{\min}\;[\mathrm{Mpc}/h]$")
@@ -638,7 +638,7 @@ def fig_param_freedom(model, fid, d0, J, row_obs, row_x, out,
     ax = axes[2]
     l31, lfree = runs[0][0], runs[1][0]
     ax.semilogx(rmins, sig[lfree][:, is8] / sig[l31][:, is8], "s-", color="C2",
-                label=r"$\sigma_8$")
+                label=r"$\ln 10^{10}A_s$")
     ax.semilogx(rmins, sig[lfree][:, iom] / sig[l31][:, iom], "^--", color="C4",
                 label=r"$\Omega_m$")
     ax.axhline(1.0, color="k", lw=0.6, ls=":")
@@ -656,7 +656,7 @@ def fig_param_freedom(model, fid, d0, J, row_obs, row_x, out,
     fig.savefig(p, dpi=120); plt.close(fig)
     print("[fig]", p)
     # numbers for the doc text
-    for j, nm in [(is8, "sigma8"), (iom, "Omega_m")]:
+    for j, nm in [(is8, "ln10^{10}A_s"), (iom, "Omega_m")]:
         r = sig[lfree][:, j] / sig[l31][:, j]
         print(f"[freedom] {nm}: sigma31={sig[l31][0, j]:.3e} free={sig[lfree][0, j]:.3e} "
               f"inflation Rmin=0.1: x{r[0]:.2f}  Rmin=10: x{r[-1]:.2f}")
