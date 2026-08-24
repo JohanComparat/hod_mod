@@ -436,7 +436,7 @@ class HamAGNModel:
         ham_table : (n_z, n_mh) — log10(L_X^hard / erg/s)
         """
         from hod_mod.core.halo_mass_function import (
-            _growth_factor_flat, growth_factor, _RHO_CRIT0,
+            growth_factor, _RHO_CRIT0,
         )
 
         if z_grid is None:

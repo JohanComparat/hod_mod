@@ -86,7 +86,9 @@ print(f"  {'z':>5} {'jaxace':>12} {'hod_mod':>12} {'reldiff':>10}")
 for z, a, b in zip(zgrid, D_ja, D_hm):
     print(f"  {z:5.2f} {a:12.6f} {b:12.6f} {reldiff(a,b):10.2e}")
 print(f"  max reldiff = {reldiff(D_ja, D_hm).max():.2e}")
-print("  (hod_mod uses Carroll+92 fitting fn; jaxace integrates the ODE)\n")
+print("  (both integrate the growth ODE since hod_mod 0.6; before that hod_mod\n"
+      "   used the Carroll+92 fitting formula, so the 2026-07-15 numbers quoted\n"
+      "   in docs/cosmology.rst are a Carroll-vs-ODE comparison, not ODE-vs-ODE)\n")
 
 # ---------------------------------------------------------------- GRADIENTS
 # Clean common parameter: w0 (enters the DE sector identically in both).

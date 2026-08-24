@@ -44,19 +44,19 @@ def R_arr():
 class TestLinearGrowthFactor:
     def test_z0_is_one(self):
         from hod_mod.observables.intrinsic_alignment import _linear_growth_factor
-        assert _linear_growth_factor(0.0, 0.31) == pytest.approx(1.0, rel=1e-6)
+        assert _linear_growth_factor(0.0, {"Omega_m": 0.31}) == pytest.approx(1.0, rel=1e-6)
 
     def test_decreases_with_z(self):
         from hod_mod.observables.intrinsic_alignment import _linear_growth_factor
-        D0 = _linear_growth_factor(0.0, 0.31)
-        D1 = _linear_growth_factor(1.0, 0.31)
-        D3 = _linear_growth_factor(3.0, 0.31)
+        D0 = _linear_growth_factor(0.0, {"Omega_m": 0.31})
+        D1 = _linear_growth_factor(1.0, {"Omega_m": 0.31})
+        D3 = _linear_growth_factor(3.0, {"Omega_m": 0.31})
         assert D0 > D1 > D3 > 0
 
     def test_physical_range(self):
         from hod_mod.observables.intrinsic_alignment import _linear_growth_factor
         for z in [0.0, 0.3, 0.5, 1.0, 2.0]:
-            D = _linear_growth_factor(z, 0.31)
+            D = _linear_growth_factor(z, {"Omega_m": 0.31})
             assert 0.0 < D <= 1.0
 
 
@@ -99,8 +99,8 @@ class TestNLAModel:
         ds1 = np.asarray(nla.delta_sigma_ia(R_arr, z1, theta, params))
         ds2 = np.asarray(nla.delta_sigma_ia(R_arr, z2, theta, params))
 
-        D1 = _linear_growth_factor(z1, theta["Omega_m"])
-        D2 = _linear_growth_factor(z2, theta["Omega_m"])
+        D1 = _linear_growth_factor(z1, theta)
+        D2 = _linear_growth_factor(z2, theta)
         expected_ratio = ((1 + z2) ** eta / D2 ** 2) / ((1 + z1) ** eta / D1 ** 2)
         # ratio of ΔΣ at fixed R (pick midpoint)
         mid = len(R_arr) // 2

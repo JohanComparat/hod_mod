@@ -262,12 +262,29 @@ in JAX; differentiable with respect to all cosmological parameters.
 
 **Growth factor**
 
-Linear growth is encoded as :math:`P(k,z) = D^2(z) P(k,0)` with the growth factor
+Linear growth is encoded as :math:`P(k,z) = D^2(z) P(k,0)`.  The growth factor
+itself comes from :mod:`hod_mod.core.growth`, which offers three routes —
+the ratio of the active backend's own spectra (the default), the flat-CPL growth
+ODE, and the Carroll+1992 fitting formula — selected by ``mode`` /
+``$HOD_MOD_GROWTH``.  :doc:`growth_factor` is the study that says which to use
+and what the others cost.
 
-.. math::
+.. warning::
 
-   D(z) = \frac{5\Omega_m}{2} H(z) / H_0
-   \int_z^\infty \frac{(1+z')}{[H(z')/H_0]^3}\,dz'.
+   **Corrected in 0.6.**  This section used to print the :math:`\Lambda`\ CDM
+   quadrature
+
+   .. math::
+
+      D(z) = \frac{5\Omega_m}{2} \frac{H(z)}{H_0}
+      \int_z^\infty \frac{(1+z')}{[H(z')/H_0]^3}\,{\rm d}z'
+
+   as though it were what ran.  It never was: the package implemented the
+   Carroll+1992 *fitting formula* to that integral, which is a different number
+   — off by 1.8e-3 at :math:`\Omega_m = 0.31` and 3.9e-3 at 0.24.  The
+   quadrature above is now used only as the independent reference the growth ODE
+   is checked against, in ``benchmarks/accuracy.json`` and
+   ``tests/test_growth.py``.
 
 .. note::
 
@@ -290,7 +307,14 @@ Linear growth is encoded as :math:`P(k,z) = D^2(z) P(k,0)` with the growth facto
    ``growth_factor`` on a flat :math:`w_0w_a`\ CDM fiducial, the two
    implementations agree to **< 0.05 % on values** (:math:`E(z)` 4e-4,
    :math:`\chi(z)` 2e-4, :math:`D(z)/D(0)` 1e-4) and **< 0.04 % on autodiff
-   gradients** (:math:`d\chi/dw_0` to 3.5e-4).  Integration caveats if ever
+   gradients** (:math:`d\chi/dw_0` to 3.5e-4).
+
+   The :math:`D(z)/D(0)` figure carries a caveat: it was measured on
+   2026-07-15, when this package's growth was the Carroll+1992 fitting formula,
+   so 1e-4 is a Carroll-versus-ODE number.  Both sides integrate the ODE since
+   0.6, and the agreement should now be better; it has not been re-measured
+   (``jaxace`` is not in the environment).  Do not quote it as a current
+   ODE-to-ODE cross-check.  Integration caveats if ever
    adopted: the Julia originals break the JAX autodiff chain, and ``jaxace``
    is parameterised by physical densities (:math:`\omega_b, \omega_c`)
    rather than this repo's :math:`(\Omega_m, h)`.

@@ -88,6 +88,11 @@ class EisensteinHu98PkLinear:
         derivatives become CAMB-accurate near the fiducial.
     """
 
+    #: EH98 is an analytic *shape*: its ``pk_linear`` gets every bit of its
+    #: redshift dependence from the growth factor it multiplies in.  Asking it
+    #: for a growth ratio would be circular, so the dispatcher must not.
+    has_native_z = False
+
     def __init__(self, R8: float = 8.0, camb_ratio: dict = None):
         self._R8 = float(R8)
         self._camb_ratio = camb_ratio
@@ -127,7 +132,10 @@ class EisensteinHu98PkLinear:
         k = jnp.asarray(k)
         pk_shape = self.pk_shape(k, theta)
         norm = theta["sigma8"] ** 2 / self._sigma8_shape2(theta)
-        growth = growth_factor(float(z), theta)   # D(z)/D(0); CPL ODE if w0/wa present
+        # mode="ode" is required, not preferred: EH98 has no redshift
+        # dependence of its own, so this line *is* the growth model.  See the
+        # matching note in pk_cosmopower.pk_linear.
+        growth = growth_factor(float(z), theta, mode="ode")
         return pk_shape * norm * growth ** 2
 
     # -- convenience: a plain callable for make_hmf(pk_func=...) --------

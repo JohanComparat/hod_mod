@@ -42,7 +42,6 @@ import jax.numpy as jnp
 
 from hod_mod.core.halo_mass_function import (
     HaloMassFunction,
-    _growth_factor_flat_jax,
     _RHO_CRIT0,
     growth_factor,
 )

@@ -156,6 +156,29 @@ class _CachedPkLinear:
     Σm_ν would silently be served a spectrum computed at a different cosmology.
     """
 
+    @property
+    def has_native_z(self):
+        """Delegate the redshift-capability declaration to the wrapped backend.
+
+        Without this the growth dispatcher sees an unrecognised class, refuses to
+        assume it is z-aware and falls back to the ODE -- precisely in the
+        free-cosmology runs that paid for a Boltzmann solver.  A wrapper must
+        answer for what it wraps.
+        """
+        from hod_mod.core.growth import backend_has_native_z
+        return backend_has_native_z(self._base)
+
+    def pk_linear_cb(self, k, z: float, theta: dict):
+        """Forward the cold spectrum when the wrapped backend has one.
+
+        Not cached: the cold path is used only by the growth ratio, which is
+        called once per (cosmology, redshift), not per likelihood evaluation.
+        """
+        if not hasattr(self._base, "pk_linear_cb"):
+            raise AttributeError(
+                f"{type(self._base).__name__} has no cold spectrum to forward")
+        return self._base.pk_linear_cb(k, z, theta)
+
     def __init__(self, pk_lin_obj, n_k: int = 512):
         self._base      = pk_lin_obj
         self._k_ref     = np.logspace(-4, 1.5, n_k)

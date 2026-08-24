@@ -179,6 +179,10 @@ class LinearPowerSpectrum:
     (none — no pre-trained weights required)
     """
 
+    #: CAMB solves at whatever redshift it is asked for, so ``growth`` can be
+    #: read straight off its own spectra (see :mod:`hod_mod.core.growth`).
+    has_native_z = True
+
     def __init__(self):
         try:
             import camb
@@ -335,6 +339,10 @@ class ClassPkLinear:
         How many distinct cosmologies to keep solved at once.  Evicted solvers
         are freed with ``struct_cleanup()``/``empty()``.
     """
+
+    #: CLASS solves at arbitrary redshift, and its cached solver returns many
+    #: redshifts from one ``compute()`` -- so a growth ratio here is nearly free.
+    has_native_z = True
 
     #: Internal table grid -- identical to :class:`LinearPowerSpectrum` so the
     #: two Boltzmann backends can be differenced without regridding.
@@ -783,6 +791,10 @@ class CsstLinearPowerSpectrum:
     * wa       ∈ [−0.5, 0.5]
     * m_nu     ∈ [0, 0.3] eV  (default 0.06 eV when not in theta)
     """
+
+    #: The CSST emulator is trained over redshift, so it can supply its own
+    #: growth.  Note its stated validity caps (z <= 3, Sigma m_nu <= 0.3 eV).
+    has_native_z = True
 
     def __init__(self):
         try:
