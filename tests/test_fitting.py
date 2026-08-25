@@ -67,10 +67,61 @@ class TestPlanckPrior:
         assert "h" in PLANCK18_MEANS
         assert abs(PLANCK18_MEANS["h"] - 0.6736) < 1e-4
 
-    def test_sigma8_exists(self):
-        from hod_mod.fitting.planck_prior import PLANCK18_MEANS, PLANCK18_SIGMAS
-        assert "sigma8" in PLANCK18_MEANS
-        assert 0.004 < PLANCK18_SIGMAS["sigma8"] < 0.010
+    def test_sigma8_is_derived_not_a_prior_direction(self):
+        """sigma8/S8/Omega_cdm moved out of the scored table when they stopped
+        being independent -- a Gaussian on each of them at once counts the same
+        Planck information more than once."""
+        from hod_mod.fitting.planck_prior import (
+            PLANCK18_MEANS, PLANCK18_SIGMAS,
+            PLANCK18_DERIVED_MEANS, PLANCK18_DERIVED_SIGMAS,
+        )
+        for name in ("sigma8", "S8", "Omega_cdm"):
+            assert name not in PLANCK18_MEANS
+            assert name not in PLANCK18_SIGMAS
+            assert name in PLANCK18_DERIVED_MEANS
+        assert 0.004 < PLANCK18_DERIVED_SIGMAS["sigma8"] < 0.010
+
+    def test_independent_directions_are_exactly_the_sampleable_ones(self):
+        from hod_mod.fitting.planck_prior import PLANCK18_MEANS
+        assert set(PLANCK18_MEANS) == {
+            "h", "Omega_m", "Omega_b", "n_s", "ln10^{10}A_s"}
+
+    def test_omega_cdm_does_not_double_count_the_matter_density(self):
+        """Omega_cdm = Omega_m - Omega_b - Omega_nu, and default_cosmology()
+        carries all of them; scoring it too used to double the chi2 of an
+        Omega_m shift (measured: 1.0 -> 2.0)."""
+        from hod_mod.fitting.planck_prior import (
+            PLANCK18_MEANS, PLANCK18_SIGMAS, PLANCK18_DERIVED_MEANS,
+            planck18_log_prior,
+        )
+        shifted = dict(PLANCK18_MEANS)
+        shifted["Omega_m"] += PLANCK18_SIGMAS["Omega_m"]
+        alone = -2.0 * planck18_log_prior(shifted)
+        with_cdm = dict(shifted)
+        with_cdm["Omega_cdm"] = (PLANCK18_DERIVED_MEANS["Omega_cdm"]
+                                 + PLANCK18_SIGMAS["Omega_m"])
+        assert abs(alone - 1.0) < 1e-9
+        assert abs(-2.0 * planck18_log_prior(with_cdm) - alone) < 1e-9
+
+    def test_retired_amplitude_key_is_refused(self):
+        from hod_mod.fitting.planck_prior import PLANCK18_MEANS, planck18_log_prior
+        for retired in ("sigma8", "S8"):
+            with pytest.raises(ValueError, match="no longer a parameter"):
+                planck18_log_prior(dict(PLANCK18_MEANS, **{retired: 0.81}))
+
+    def test_naming_a_derived_direction_is_refused(self):
+        from hod_mod.fitting.planck_prior import PLANCK18_MEANS, planck18_log_prior
+        with pytest.raises(ValueError, match="derived quantity"):
+            planck18_log_prior(PLANCK18_MEANS, params=["Omega_cdm"])
+
+    def test_full_default_cosmology_is_scored_once(self):
+        """default_cosmology() carries Omega_m, Omega_b AND Omega_cdm."""
+        from hod_mod.core.power_spectrum import LinearPowerSpectrum
+        from hod_mod.fitting.planck_prior import planck18_log_prior, PLANCK18_MEANS
+        theta = LinearPowerSpectrum.default_cosmology()
+        scored = {k: theta[k] for k in PLANCK18_MEANS if k in theta}
+        assert abs(planck18_log_prior(theta)
+                   - planck18_log_prior(scored)) < 1e-12
 
     def test_3sigma_bounds_width(self):
         from hod_mod.fitting.planck_prior import PLANCK18_SIGMAS, PLANCK18_3SIGMA

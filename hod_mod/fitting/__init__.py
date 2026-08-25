@@ -25,6 +25,8 @@ from .planck_prior import (
     PLANCK18_MEANS,
     PLANCK18_SIGMAS,
     PLANCK18_3SIGMA,
+    PLANCK18_DERIVED_MEANS,
+    PLANCK18_DERIVED_SIGMAS,
     planck18_log_prior,
     gaussian_log_prior,
 )

@@ -37,5 +37,7 @@ from .fitting import (
     load_config,
     PLANCK18_MEANS,
     PLANCK18_SIGMAS,
+    PLANCK18_DERIVED_MEANS,
+    PLANCK18_DERIVED_SIGMAS,
     planck18_log_prior,
 )
