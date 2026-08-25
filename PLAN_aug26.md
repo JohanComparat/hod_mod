@@ -20,7 +20,8 @@ Legend: **DONE** · **WIP** · **TODO** · **DEFERRED**
 | 0 | Reroot onto `feature/single-amplitude-lnAs` | **DONE** | — |
 | 1 | Baryon split unreachable; two paths fell out of the trace (`38ed29e`) | **DONE** | yes (ΔΣ, for anyone who passed `baryon_params`) |
 | 2 | Name the two flavours: `core/backend.py` (`3c42845`) | **DONE** | no |
-| 3 | Amplitude residuals: `planck_prior` double-counting, migration-only `_sigma8_to_lnAs`, derived σ8/S8 in chains | **TODO** | yes (priors) |
+| 3a | Planck priors: independent vs derived directions (`23a45a1`) | **DONE** | no (public API only) |
+| 3b | Migration-only `_sigma8_to_lnAs`; derived σ8/S8 recorded in chains | **TODO** | no |
 | 4 | `core/distances.py`: radiation + massive-ν `E(z)` | **TODO** | yes (χ(z) ~1e-4) |
 | 5 | `core/cosmology_state.py::CosmologySnapshot` | **TODO** | no |
 | 6 | Delete Carroll+1992 | **TODO** | only for `HOD_MOD_GROWTH=carroll` |
@@ -116,20 +117,33 @@ the σ8 branch deleted from CosmoPower, the σ8 anchor deleted from
 `HaloMassFunction.sigma`, 37 config files migrated, the forecast vector
 reindexed, and referee A20.
 
-**Remaining (commit 3):**
+**Commit 3a — DONE (`23a45a1`), and the measurement corrected the plan.**
+The predicted defect was a double-counted *amplitude* prior. Measured, that one
+is **latent, not active**: a stale `sigma8` sitting at its Planck mean
+contributes exactly zero, and after the retirement nothing writes the key. What
+*was* live is a double-counted **matter density** — `Omega_cdm` is a function of
+`Omega_m`, `Omega_b` and `sum_mnu`, and `default_cosmology()` carries all of
+them, so a 1σ `Omega_m` shift scored −2lnL = 1.0 alone and **2.0** with the
+implied `Omega_cdm` present. Scope, stated plainly: `planck18_log_prior` is
+re-exported publicly but **called by no fitter** (config-driven fits use
+per-parameter `gaussian_log_prior`), so this was a public-API defect, not a
+corrupted posterior. `PLANCK18_MEANS` now holds only the independent
+directions; `PLANCK18_DERIVED_MEANS`/`SIGMAS` hold `Omega_cdm`, `sigma8`, `S8`.
+Also fixed a site the amplitude migration missed: `scripts/forecasts/show_HMF.py`
+set `th["sigma8"]` on a theta.
 
-- `fitting/planck_prior.py:47-75` still carries `sigma8`, `S8` *and*
-  `ln10^{10}A_s`, and `planck18_log_prior` adds a term for **every** key present
-  → double-counted amplitude prior. Delete the retired entries; raise if
-  `params=` names one. A Planck σ8 prior, if wanted, is a prior on a *derived*
-  quantity and belongs in a separate function that computes σ8 from the current
-  theta — not a third independent Gaussian.
+**Remaining (commit 3b):**
+
 - `fitting/config.py:107-123 _sigma8_to_lnAs` must delete the `sigma8` key after
   converting and be reachable only from a `--migrate` path, never from
   `load_config`. Delete the verbatim copy at
   `scripts/benchmarks/run_benchmark_hsc_wp_lange25.py:182-190`.
 - Record derived σ8/S8 as blobs at every MCMC sample so posteriors carry them
   without a post-processing pass (`fitting/fitters.py`, `fitting/jax_inference.py`).
+- **Sweep for theta dicts still carrying `sigma8`.** `show_HMF.py` proves the
+  migration was not exhaustive. Note most `"sigma8"` hits under `scripts/` are
+  *colossus* parameter dicts, which legitimately take one — the sweep must
+  distinguish them, not delete them.
 - `CsstHaloMassFunction.sigma` — referee B12 remainder ("Ω_m ignored on the
   massless path"), close in commit 8.
 
@@ -512,3 +526,12 @@ forecast (Fisher finite, `ln10^{10}A_s` constrained, sane `probe_decomposition`)
   optional arguments, two traced-path fixes; `tests/test_baryon_plumbing.py`,
   static half verified to fail on the original code) and `3c42845`
   (`core/backend.py`, `tests/test_backend.py`, 26 tests).
+- **2026-08-25** — `23a45a1`: Planck prior directions split. The plan predicted
+  an active amplitude double-count; measurement found that one latent and a
+  *matter-density* double-count live instead (§4). `tests/test_fitting.py`
+  planck block rewritten: 44 pass.
+- **Workflow note.** Full-suite runs go in a **detached worktree pinned to the
+  commit under test**
+  (`git worktree add --detach <scratch>/testrun HEAD`), not in the working
+  tree. Two earlier runs had to be discarded because edits landed under them
+  mid-run, which makes the result unattributable to any commit.
