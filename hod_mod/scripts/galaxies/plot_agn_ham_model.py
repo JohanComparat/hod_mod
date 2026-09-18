@@ -29,6 +29,7 @@ from hod_mod.agn.ham import (
     HamAGNModel,
     _aird15_lade_np,
     _ueda14_ldde_np,
+    _xlf_in_h_units,
     obscured_fraction,
     _f_compton_thick,
     _duty_cycle_interp,
@@ -195,17 +196,17 @@ def make_fig02_hard_xlf(model: HamAGNModel) -> None:
 
     for z, col in zip(zs, colors):
         xlf_pred = _xlf_from_model(model, log10lx, z, band="hard")
-        xlf_a15  = _aird15_lade_np(log10lx, z)
-        xlf_u14  = _ueda14_ldde_np(log10lx, z)
         h_planck = model._theta_cosmo.get("h", 0.6736)
-        h_fac    = (0.70 / h_planck) ** 3  # same conversion as precomputation
+        # the published fits in the model's (Mpc/h)^-3, at its own L_X
+        xlf_a15  = _xlf_in_h_units(_aird15_lade_np, log10lx, z, h_planck)
+        xlf_u14  = _xlf_in_h_units(_ueda14_ldde_np, log10lx, z, h_planck)
 
         lbl = f"z={z}"
         ax.semilogy(log10lx, xlf_pred,          color=col, lw=2,
                     label=lbl + " model (HAM)")
-        ax.semilogy(log10lx, xlf_a15 * h_fac,   color=col, lw=1.5, ls="--",
+        ax.semilogy(log10lx, xlf_a15,   color=col, lw=1.5, ls="--",
                     label=lbl + " Aird+15")
-        ax.semilogy(log10lx, xlf_u14 * h_fac,   color=col, lw=1.0, ls=":",
+        ax.semilogy(log10lx, xlf_u14,   color=col, lw=1.0, ls=":",
                     label=lbl + " Ueda+14")
 
     ax.set_xlabel(r"$\log_{10}(L_X^{2-10\,\mathrm{keV}}\,[\mathrm{erg/s}])$",

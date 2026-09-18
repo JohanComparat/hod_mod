@@ -62,6 +62,7 @@ from scipy.interpolate import interp1d
 from hod_mod.agn.ham import (
     _XLF_FUNCS,
     _H_XLF,
+    _xlf_in_h_units,
     _ZU15_DEFAULT_SHMR,
     setup_kcorrection,
     mean_k_eff,
@@ -260,12 +261,12 @@ class HODAgnModel:
         z = self._z_mean
         th = self._theta_cosmo
         h = float(th["h"])
-        h_factor = (_H_XLF / h) ** 3   # XLF Mpc^-3 (h=0.70) → (Mpc/h)^-3
 
         # ---- 1. Luminosity (hard-band) grid + XLF density ----
         log10lx_hard = np.linspace(self._log10lx_min, 47.0, self._n_lx_grid)
         dlx = np.gradient(log10lx_hard)
-        phi_h3 = np.asarray(self._xlf_func(log10lx_hard, z)) * h_factor  # (Mpc/h)^-3 dex^-1
+        # (Mpc/h)^-3 dex^-1 at this model's L_X: /0.70^3 and an L_X shift.
+        phi_h3 = _xlf_in_h_units(self._xlf_func, log10lx_hard, z, h)
 
         # ---- 2. Hard → observed soft luminosity and flux ----
         k_eff = np.asarray(mean_k_eff(self._kcorr_interp, self._kcorr_mode,
