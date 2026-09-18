@@ -47,6 +47,7 @@ from hod_mod.agn.xray import (
     _scatter_boost,
     _DEFAULT_SCATTER_LX,
 )
+from hod_mod.agn.ham import _ueda14_ldde_np, _xlf_in_h_units
 from hod_mod.core.power_spectrum import LinearPowerSpectrum, rho_critical_0
 from hod_mod.core.halo_mass_function import HaloMassFunction
 
@@ -344,11 +345,11 @@ def make_fig04_xlf():
             0.5 * (integrand[:, :-1] + integrand[:, 1:]) * dm[None, :], axis=1
         )  # (N_lx,) in h³ Mpc⁻³ dex⁻¹
 
-        # Convert to Mpc⁻³ dex⁻¹ (divide by h³)
-        xlf_pred = xlf_h3 / h ** 3
+        # Kept in (Mpc/h)^-3 dex^-1; the references are converted to it.
+        xlf_pred = xlf_h3
 
         # Hasinger+2005 reference
-        xlf_has = _hasinger05_ldde(log10lx_arr, z)
+        xlf_has = _xlf_in_h_units(_hasinger05_ldde, log10lx_arr, z, h)
 
         lbl = rf"$z={z:.1f}$"
         ax.semilogy(log10lx_arr, xlf_pred, color=col, lw=2, label=lbl + " (model)")
@@ -359,7 +360,7 @@ def make_fig04_xlf():
     ax.set_ylim(1e-10, 1e-3)
     ax.set_xlabel(r"$\log_{10}(L_X^{0.5-2\,\mathrm{keV}}\;[\mathrm{erg\,s}^{-1}])$",
                   fontsize=12)
-    ax.set_ylabel(r"$\Phi\;[\mathrm{Mpc}^{-3}\,\mathrm{dex}^{-1}]$", fontsize=12)
+    ax.set_ylabel(r"$\Phi\;[(\mathrm{Mpc}/h)^{-3}\,\mathrm{dex}^{-1}]$", fontsize=12)
     ax.set_title("Soft X-ray AGN luminosity function: model vs Hasinger+2005 LDDE",
                  fontsize=11)
     ax.legend(fontsize=8, ncol=2, loc="lower left")
@@ -379,33 +380,9 @@ def make_fig04_xlf():
     print(f"Saved → {out}")
 
 
-def _ueda14_ldde(log10_lx_arr: np.ndarray, z: float) -> np.ndarray:
-    """Ueda et al. 2014 LDDE total hard (2-10 keV) XLF.
-
-    Parameters from Table 3 of arXiv:1402.7902.
-    Cosmology: h=0.70, Ω_m=0.3, Ω_Λ=0.7.
-    Counts ALL AGN (type 1 + type 2 + Compton-thick).
-
-    Returns Φ [Mpc⁻³ dex⁻¹].
-    """
-    phi0   = 3.31e-6
-    Ls     = 10.0 ** 43.97
-    gamma1 = 0.96
-    gamma2 = 2.71
-    e1, e2 = 5.54, -0.36
-    zc0    = 1.84
-    alpha  = 0.335
-    La     = 10.0 ** 44.61
-
-    L   = 10.0 ** log10_lx_arr
-    phi = phi0 / ((L / Ls) ** gamma1 + (L / Ls) ** gamma2)
-    zc  = np.where(L < La, zc0 * (L / La) ** alpha, zc0)
-    ed  = np.where(
-        z <= zc,
-        (1.0 + z) ** e1,
-        (1.0 + zc) ** e1 * ((1.0 + z) / (1.0 + zc)) ** e2,
-    )
-    return phi * ed
+# Ueda+14 Table 4 (arXiv:1402.1836), Compton-thin AGN; one copy, in ham.py.
+# This file carried a second copy of the wrong parameter set until 2026-09-18.
+_ueda14_ldde = _ueda14_ldde_np
 
 
 def _hasinger_to_hard(log10_lx_hard: np.ndarray, z: float) -> np.ndarray:
@@ -451,14 +428,14 @@ def make_fig05_hard_xlf():
         xlf_h3    = np.sum(
             0.5 * (integrand[:, :-1] + integrand[:, 1:]) * dm[None, :], axis=1
         )
-        xlf_pred = xlf_h3 / h ** 3
+        xlf_pred = xlf_h3   # (Mpc/h)^-3 dex^-1
 
         lbl = rf"$z={z:.1f}$"
         ax.semilogy(log10lx_arr, xlf_pred,
                     color=col, lw=2,   label=lbl + " (model, type-1)")
-        ax.semilogy(log10lx_arr, _ueda14_ldde(log10lx_arr, z),
+        ax.semilogy(log10lx_arr, _xlf_in_h_units(_ueda14_ldde, log10lx_arr, z, h),
                     color=col, lw=1.5, ls="--",  label=lbl + " (Ueda+14 total)")
-        ax.semilogy(log10lx_arr, _hasinger_to_hard(log10lx_arr, z),
+        ax.semilogy(log10lx_arr, _xlf_in_h_units(_hasinger_to_hard, log10lx_arr, z, h),
                     color=col, lw=1.0, ls=":",   label=lbl + " (Has+05→hard)")
 
     ax.set_xlim(41.5, 46.5)
@@ -467,7 +444,7 @@ def make_fig05_hard_xlf():
         r"$\log_{10}(L_X^{2-10\,\mathrm{keV}}\;[\mathrm{erg\,s}^{-1}])$",
         fontsize=12,
     )
-    ax.set_ylabel(r"$\Phi\;[\mathrm{Mpc}^{-3}\,\mathrm{dex}^{-1}]$", fontsize=12)
+    ax.set_ylabel(r"$\Phi\;[(\mathrm{Mpc}/h)^{-3}\,\mathrm{dex}^{-1}]$", fontsize=12)
     ax.set_title(
         "Hard X-ray AGN luminosity function: model vs references", fontsize=11
     )
