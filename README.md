@@ -1,5 +1,10 @@
 # hod_mod
 
+> [!WARNING]
+> `hod_mod` is no longer developed; its development continues in [`ggah_mod`](https://github.com/JohanComparat/ggah_mod).
+> `ggah_mod` predicts the power spectrum of any pair of tracers (galaxies, active nuclei, hot and cold gas), and its projections, from one set of cosmological and astrophysical parameters (documentation: <https://ggah-mod.readthedocs.io>).
+> New work should start from `ggah_mod`; this repository stays available for the results that used it.
+
 JAX-accelerated HOD galaxy clustering, weak lensing, and gas cross-correlation
 predictions and fitting.
 
