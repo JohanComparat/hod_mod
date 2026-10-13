@@ -708,7 +708,7 @@ class HaloModelCrossSpectra:
         if self._ecf_gas_table is not None:
             w_ecf = np.asarray(self._ecf_gas_table(np.asarray(m_np, dtype=float)),
                                dtype=float)
-            X_uk = np.asarray(X_uk) * w_ecf[None, :]
+            X_uk = jnp.asarray(X_uk) * jnp.asarray(w_ecf)[None, :]
 
         m_jnp    = jnp.asarray(m_np)
         dndm_j   = jnp.asarray(dndm)
@@ -880,7 +880,7 @@ class HaloModelCrossSpectra:
             )
             # Normalise to the n_e²-scale so the squared gas×gas term does not
             # underflow float32 (see _pk_tables_gX); retains Λ(T,Z)/Λ_ref.
-            X_uk = np.asarray(X_uk) / lambda_ref
+            X_uk = jnp.asarray(X_uk) / lambda_ref
         else:
             X_uk = self._density_uk_cached(z, theta_cosmo, sc, emissivity=True)
 

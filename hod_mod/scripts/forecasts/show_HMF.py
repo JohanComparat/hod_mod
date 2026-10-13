@@ -36,12 +36,18 @@ from hod_mod.core.halo_profiles import concentration_dutton14_jax
 from hod_mod.core.distances import comoving_volume, comoving_volume_element
 from hod_mod.core.power_spectrum import rho_critical_0
 from hod_mod.gas.conversions import m200_to_m500c
-from hod_mod.fitting.planck_prior import PLANCK18_MEANS, PLANCK18_SIGMAS
+from hod_mod.fitting.planck_prior import (
+    PLANCK18_MEANS, PLANCK18_SIGMAS,
+    PLANCK18_DERIVED_MEANS, PLANCK18_DERIVED_SIGMAS,
+)
 
 _RHO_CRIT0 = float(rho_critical_0())          # (Msun/h)/(Mpc/h)^3, z=0
-_S8_FID = float(PLANCK18_MEANS["S8"])         # 0.8319
-_S8_SIG = float(PLANCK18_SIGMAS["S8"])        # 0.0114
-_SIG8_FID = float(PLANCK18_MEANS["sigma8"])   # 0.8111
+# S8 and sigma8 are OUTPUTS of this package, so they come from the derived
+# table.  They are used here only to *label* the three curves and to set the
+# amplitude that reproduces each label; nothing downstream is handed a sigma8.
+_S8_FID = float(PLANCK18_DERIVED_MEANS["S8"])         # 0.8319
+_S8_SIG = float(PLANCK18_DERIVED_SIGMAS["S8"])        # 0.0114
+_SIG8_FID = float(PLANCK18_DERIVED_MEANS["sigma8"])   # 0.8111
 _LNAS_FID = float(PLANCK18_MEANS["ln10^{10}A_s"])
 _H = float(PLANCK18_MEANS["h"])               # 0.6736
 _OM = float(PLANCK18_MEANS["Omega_m"])        # 0.3153
@@ -62,16 +68,20 @@ def _rho_crit_z(z: float, om: float = _OM) -> float:
 
 
 def _theta_for_S8(S8: float) -> dict:
-    """Planck theta dict with sigma8/A_s set to reproduce the target S8.
+    """Planck theta whose *amplitude* reproduces the target S8.
 
-    S8 = sigma8 (Omega_m/0.3)^0.5, so at fixed Omega_m, sigma8 ∝ S8.  A_s is
-    scaled via the sigma8^2 ∝ A_s relation (fitters.py convention).
+    S8 = sigma8 (Omega_m/0.3)^0.5, so at fixed Omega_m sigma8 is proportional to
+    S8, and sigma8^2 is proportional to A_s.  The conversion happens once, here,
+    and what leaves this function carries only ``ln10^{10}A_s``: a theta holding
+    both amplitudes is over-determined, and ``core.amplitude`` refuses one.  The
+    realised sigma8 of the returned theta is an output -- read it back with
+    ``core.amplitude.sigma8_from_theta`` if you need it.
     """
     th = {k: float(PLANCK18_MEANS[k]) for k in
-          ("Omega_b", "Omega_cdm", "h", "n_s", "Omega_m")}
+          ("Omega_b", "h", "n_s", "Omega_m")}
+    th["Omega_cdm"] = float(PLANCK18_DERIVED_MEANS["Omega_cdm"])
     sig8 = _SIG8_FID * (S8 / _S8_FID)
     th["ln10^{10}A_s"] = _LNAS_FID + 2.0 * np.log(sig8 / _SIG8_FID)
-    th["sigma8"] = sig8
     return th
 
 

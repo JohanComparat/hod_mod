@@ -69,6 +69,7 @@ import jax.numpy as jnp
 from hod_mod.agn.ham import (
     _XLF_FUNCS,
     _H_XLF,
+    _xlf_in_h_units,
     setup_kcorrection,
     mean_k_eff,
 )
@@ -211,7 +212,6 @@ def compute_w_agn_kernel(
     f_lo, f_hi = float(flux_range[0]), float(flux_range[1])
 
     kcorr_interp, kcorr_mode = setup_kcorrection(kcorr_path)
-    h_factor = (_H_XLF / h) ** 3   # XLF Mpc^-3 (h=0.70) -> (Mpc/h)^-3
 
     # Pre-allocate 2-D (z, L) component arrays + 1-D (z,) results.
     phi_dex      = np.zeros((n_z, n_lx))
@@ -230,7 +230,8 @@ def compute_w_agn_kernel(
 
     for i, z in enumerate(z_grid):
         # 1. XLF density (per dex), converted to (Mpc/h)^-3 dex^-1.
-        phi = np.asarray(xlf_func(log10lx_hard, float(z))) * h_factor
+        # (Mpc/h)^-3 dex^-1 at this model's L_X: /0.70^3 and an L_X shift.
+        phi = _xlf_in_h_units(xlf_func, log10lx_hard, float(z), h)
         # 2. obscuration-weighted hard -> observed soft luminosity.
         keff = np.asarray(mean_k_eff(kcorr_interp, kcorr_mode, log10lx_hard, float(z)))
         keff = np.clip(keff, 1e-30, 1.0)

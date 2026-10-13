@@ -123,9 +123,12 @@ Where the model stands
 The differentiable forecast is strictly flat-ΛCDM: the linear power spectrum is
 the Eisenstein & Hu transfer function
 (:class:`~hod_mod.forecast.pk_eisenstein_hu.EisensteinHu98PkLinear`) and the
-growth factor is the Carroll et al. (1992) fitting formula, which takes
+growth factor was the Carroll et al. (1992) fitting formula, which takes
 **only** :math:`\Omega_m` (``_growth_factor_flat_jax`` in
-:mod:`hod_mod.core.halo_mass_function`).  Ironically, the *geometry* is already
+:mod:`hod_mod.core.halo_mass_function`).  Since 0.6 that route is opt-in only:
+:mod:`hod_mod.core.growth` dispatches to the backend P(k) ratio or the CPL
+growth ODE instead, both of which see the full dark-energy sector — see
+:doc:`growth_factor`.  Ironically, the *geometry* is already
 more general: :mod:`hod_mod.core.distances` implements the full CPL dark energy
 :math:`w(a) = w_0 + w_a(1-a)` in JAX, and the non-differentiable production
 paths (CAMB in :mod:`hod_mod.core.power_spectrum`, the CSST emulator in

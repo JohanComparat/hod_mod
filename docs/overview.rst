@@ -37,9 +37,10 @@ The pipeline proceeds through six sequential steps:
 
 Since 0.3.1, step 1 defaults to the CosmoPower-JAX neural emulator
 (:func:`~hod_mod.core.power_spectrum.default_pk_linear`), which reproduces
-CAMB's P(k) shape to <0.1% in milliseconds.  The reference CAMB backend
-(``HOD_MOD_PK_BACKEND=camb``, ~30 s per run) remains available; in MCMC mode
-its caching layer (``CachedPkLinear``) interpolates on a pre-computed grid,
+CAMB's P(k) shape to <0.1% in milliseconds.  Two Boltzmann solvers remain
+available for reference work: CLASS (``HOD_MOD_PK_BACKEND=class``, the
+reference) and CAMB (``HOD_MOD_PK_BACKEND=camb``), both seconds per cosmology.
+In MCMC mode the ``CachedPkLinear`` layer interpolates on a pre-computed grid,
 reducing per-step cost to < 1 s.
 
 ---
@@ -48,8 +49,11 @@ Installation
 ------------
 
 Requires Python ≥ 3.11, JAX ≥ 0.4, ``cosmopower-jax`` (the default linear-P(k)
-emulator) and CAMB (the reference backend behind ``HOD_MOD_PK_BACKEND=camb``,
-the non-linear HMcode spectra and the emulator validation tests).
+emulator) and CAMB (behind ``HOD_MOD_PK_BACKEND=camb``, the non-linear HMcode
+spectra and the emulator validation tests).  ``classy`` is an optional extra
+(``pip install hod-mod[reference]``) providing the CLASS reference backend; the
+distilled neutrino table it produces ships with the package, so ordinary runs
+never need it.
 The package is available on `PyPI <https://pypi.org/project/hod-mod/>`_:
 
 .. code-block:: bash

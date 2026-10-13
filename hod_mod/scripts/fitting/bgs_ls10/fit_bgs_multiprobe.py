@@ -93,7 +93,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from hod_mod.core.beyond_linear_bias import BeyondLinearBiasMead21
-from hod_mod.core.power_spectrum import default_pk_linear
+from hod_mod.core.power_spectrum import default_pk_linear, omega_cdm
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.connection.hod import (
@@ -331,7 +331,12 @@ def _build_theta_cosmo(all_params: dict, cosmo_default: dict) -> dict:
     if "Omega_m" in all_params:
         Omega_b = cosmo_default.get("Omega_b", PLANCK18_MEANS["Omega_b"])
         tc["Omega_m"]  = float(all_params["Omega_m"])
-        tc["Omega_cdm"] = tc["Omega_m"] - Omega_b
+        # Omega_nu comes out of the cold sector too, because Omega_m includes
+        # it; deriving Omega_cdm as Omega_m - Omega_b would raise Omega_m by
+        # Omega_nu behind the backend's back.
+        tc["Omega_b"] = float(Omega_b)
+        derived = {k: v for k, v in tc.items() if k != "Omega_cdm"}
+        tc["Omega_cdm"] = float(omega_cdm(derived))
     return tc
 
 
@@ -488,36 +493,9 @@ def _log_prob_multiprobe(
 # Cached linear power spectrum — avoids repeated CAMB calls during MCMC
 # ---------------------------------------------------------------------------
 
-class _CachedPkLinear:
-    """Thin interpolation cache around LinearPowerSpectrum.
-
-    On the first call for a given (z, Ω_m, ln10As, h) key, a reference P(k)
-    is computed on a fixed k grid via CAMB and log-log interpolated on all
-    subsequent calls.  This reduces per-sample cost from ~30 s to <1 ms once
-    the cache warms up.
-    """
-
-    def __init__(self, pk_lin_obj, n_k: int = 512):
-        self._base       = pk_lin_obj
-        self._k_ref      = np.logspace(-4, 1.5, n_k)
-        self._log_k_ref  = np.log(self._k_ref)
-        self._cache: dict = {}
-
-    def _key(self, z: float, theta: dict) -> tuple:
-        return (
-            round(float(z), 4),
-            round(float(theta["Omega_m"]), 5),
-            round(float(theta["ln10^{10}A_s"]), 4),
-            round(float(theta.get("h", 0.6736)), 4),
-        )
-
-    def pk_linear(self, k, z: float, theta: dict):
-        key = self._key(z, theta)
-        if key not in self._cache:
-            pk_ref = np.asarray(self._base.pk_linear(self._k_ref, float(z), theta))
-            self._cache[key] = np.log(np.maximum(pk_ref, 1e-50))
-        log_k = np.log(np.asarray(k, dtype=float))
-        return jnp.asarray(np.exp(np.interp(log_k, self._log_k_ref, self._cache[key])))
+# The cache lives in hod_mod.fitting.fitters; this file used to carry a
+# verbatim copy, which meant a cache-key fix had to be made three times.
+from hod_mod.fitting.fitters import _CachedPkLinear  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

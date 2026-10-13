@@ -1376,6 +1376,8 @@ class FullHaloModelPrediction:
         z: float,
         theta_cosmo: dict,
         hod_params: dict,
+        *,
+        baryon_params: dict = None,
     ) -> jnp.ndarray:
         """3D galaxy–galaxy correlation function ξ_gg(r) [Mpc/h]⁻¹.
 
@@ -1383,7 +1385,7 @@ class FullHaloModelPrediction:
         ----------
         r : [Mpc/h], shape (Nr,)
         """
-        tables = self._pk_tables_full(z, theta_cosmo, hod_params)
+        tables = self._pk_tables_full(z, theta_cosmo, hod_params, baryon_params)
         return _pk_to_xi(jnp.asarray(r), tables["log_k"], tables["log_pgg"])
 
     def wp(
@@ -1393,7 +1395,9 @@ class FullHaloModelPrediction:
         z: float,
         theta_cosmo: dict,
         hod_params: dict,
+        *,
         n_pi: int = 512,
+        baryon_params: dict = None,
     ) -> jnp.ndarray:
         """Projected correlation function wp(rp) [Mpc/h].
 
@@ -1403,7 +1407,8 @@ class FullHaloModelPrediction:
         pi_max : line-of-sight integration limit [Mpc/h]
         """
         r_tab = jnp.logspace(-2, 2.5, 512)
-        xi_tab = self.xi_3d(r_tab, z, theta_cosmo, hod_params)
+        xi_tab = self.xi_3d(r_tab, z, theta_cosmo, hod_params,
+                            baryon_params=baryon_params)
         pi_grid = jnp.linspace(0.0, float(pi_max), n_pi)
 
         def _one(rp_i):
@@ -1419,11 +1424,13 @@ class FullHaloModelPrediction:
         z: float,
         theta_cosmo: dict,
         hod_params: dict,
+        *,
         chi_max: float = 300.0,
         n_chi: int = 512,
         n_R_tab: int = 256,
         ia_model=None,
         ia_params: dict = None,
+        baryon_params: dict = None,
     ) -> jnp.ndarray:
         """Excess projected surface mass density ΔΣ(R) [Msun h pc⁻²].
 
@@ -1439,7 +1446,7 @@ class FullHaloModelPrediction:
         ia_model : NLAModel or TATTModel, optional
         ia_params : dict, optional — parameters for ``ia_model``
         """
-        tables = self._pk_tables_full(z, theta_cosmo, hod_params)
+        tables = self._pk_tables_full(z, theta_cosmo, hod_params, baryon_params)
         ds = self._delta_sigma_from_pgm(
             R, tables["log_k"], tables["log_pgm"], theta_cosmo,
             chi_max=chi_max, n_chi=n_chi, n_R_tab=n_R_tab,
@@ -2031,7 +2038,8 @@ class NonLinearHaloModelPrediction:
         hod_params : HOD/CLF parameter dict
         baryon_params : optional baryon fraction parameters
         """
-        return self._pred.wp(rp, pi_max, z, theta_cosmo, hod_params, baryon_params)
+        return self._pred.wp(rp, pi_max, z, theta_cosmo, hod_params,
+                             baryon_params=baryon_params)
 
     def delta_sigma(
         self,
@@ -2051,7 +2059,8 @@ class NonLinearHaloModelPrediction:
         hod_params : HOD/CLF parameter dict
         baryon_params : optional baryon fraction parameters
         """
-        return self._pred.delta_sigma(R, z, theta_cosmo, hod_params, baryon_params)
+        return self._pred.delta_sigma(R, z, theta_cosmo, hod_params,
+                                      baryon_params=baryon_params)
 
     def xi_3d(
         self,

@@ -27,7 +27,7 @@ References
 ----------
 Comparat et al. 2019, A&A 622, A12 (arXiv:1901.10866)
 Aird et al. 2015, ApJ 815, 66 (arXiv:1503.01120) — LADE hard XLF
-Ueda et al. 2014, ApJ 786, 104 (arXiv:1402.7902) — LDDE total hard XLF
+Ueda et al. 2014, ApJ 786, 104 (arXiv:1402.1836) — LDDE hard XLF, Table 4
 Zu & Mandelbaum 2015, MNRAS 454, 1161 (arXiv:1505.02781) — iHOD SHMR
 """
 
@@ -111,25 +111,56 @@ def _aird15_lade_np(log10_lx_arr: np.ndarray, z: float) -> np.ndarray:
 
 
 def _ueda14_ldde_np(log10_lx_arr: np.ndarray, z: float) -> np.ndarray:
-    """Ueda+2014 LDDE total hard (2–10 keV) XLF — Table 3 of arXiv:1402.7902.
+    """Ueda+2014 LDDE hard (2–10 keV) XLF — Table 4 and Eqs. 16–19 of
+    arXiv:1402.1836.
 
-    Counts all AGN (type-1 + type-2 + Compton-thick).
+    The XLF of Compton-thin AGN (log NH < 24), de-absorbed: Compton-thick AGN
+    enter that paper through the absorption function, not through this XLF.
     Returns Φ [Mpc^{-3} dex^{-1}] at h=0.70.
+
+    Until 2026-09-18 this carried a different parameter set under the same
+    name (a constant p1 = 5.54, p2 = -0.36, zc0 = 1.84, alpha = 0.335,
+    A = 3.31e-6, no third regime), cited to a wrong arXiv number.  Only L*,
+    gamma1, gamma2 and La1 were Table 4's; at z = 0.2 it sat 0.3–0.5 dex high.
     """
-    phi0, Ls, g1, g2 = 3.31e-6, 10.0 ** 43.97, 0.96, 2.71
-    e1, e2, zc0, alpha, La = 5.54, -0.36, 1.84, 0.335, 10.0 ** 44.61
-    L = 10.0 ** log10_lx_arr
-    phi = phi0 / ((L / Ls) ** g1 + (L / Ls) ** g2)
-    zc = np.where(L < La, zc0 * (L / La) ** alpha, zc0)
-    ed = np.where(
-        z <= zc,
-        (1.0 + z) ** e1,
-        (1.0 + zc) ** e1 * ((1.0 + z) / (1.0 + zc)) ** e2,
-    )
+    lg = np.asarray(log10_lx_arr, dtype=float)
+    A, log_ls, g1, g2 = 2.91e-6, 43.97, 0.96, 2.71
+    p1s, beta1, log_lp, p2, p3 = 4.78, 0.84, 44.0, -1.5, -6.2
+    zc1s, log_la1, alpha1 = 1.86, 44.61, 0.29
+    zc2s, log_la2, alpha2 = 3.0, 44.0, -0.1
+    r = 10.0 ** (lg - log_ls)
+    phi = A / (r ** g1 + r ** g2)
+    p1 = p1s + beta1 * (lg - log_lp)                                   # Eq. 17
+    zc1 = np.where(lg <= log_la1, zc1s * 10.0 ** (alpha1 * (lg - log_la1)), zc1s)
+    zc2 = np.where(lg <= log_la2, zc2s * 10.0 ** (alpha2 * (lg - log_la2)), zc2s)
+    e1 = (1.0 + z) ** p1
+    e2 = (1.0 + zc1) ** p1 * ((1.0 + z) / (1.0 + zc1)) ** p2
+    e3 = ((1.0 + zc1) ** p1 * ((1.0 + zc2) / (1.0 + zc1)) ** p2
+          * ((1.0 + z) / (1.0 + zc2)) ** p3)
+    ed = np.where(z <= zc1, e1, np.where(z <= zc2, e2, e3))           # Eq. 16
     return phi * ed
 
 
 _XLF_FUNCS = {"aird15": _aird15_lade_np, "ueda14": _ueda14_ldde_np}
+
+
+def _xlf_in_h_units(xlf_func, log10_lx_arr, z, h):
+    """A published XLF (Mpc^-3 dex^-1 at h=0.70) in (Mpc/h)^-3 dex^-1, at the
+    model's own L_X [erg/s in a universe with this h].
+
+    The volume: a comoving volume in (Mpc/h)^3 does not depend on h, so a
+    published Phi = N / V_Mpc at h = 0.70 is Phi / 0.70^3 in (Mpc/h)^-3,
+    whatever the model's h.  The luminosity: L = 4 pi d_L^2 F with
+    d_L ∝ 1/h, so the model's L_X corresponds to the published
+    L_X - 2 log10(0.70 / h).
+
+    This replaces a factor (0.70 / h)^3 applied at the call sites until
+    2026-09-18: 1.122 at Planck 2018 instead of 2.915, a target 0.415 dex too
+    low, with no luminosity shift.  ggah_mod's ``xlf_in_h_units`` made the
+    same correction the same day.
+    """
+    lg_pub = np.asarray(log10_lx_arr, dtype=float) - 2.0 * np.log10(_H_XLF / h)
+    return np.asarray(xlf_func(lg_pub, z)) / _H_XLF ** 3
 
 
 # ---------------------------------------------------------------------------
@@ -435,9 +466,7 @@ class HamAGNModel:
         log10mh_grid : (n_mh,)
         ham_table : (n_z, n_mh) — log10(L_X^hard / erg/s)
         """
-        from hod_mod.core.halo_mass_function import (
-            _growth_factor_flat, _RHO_CRIT0,
-        )
+        from hod_mod.core.halo_mass_function import growth_factor
 
         if z_grid is None:
             z_grid = np.linspace(0.05, 2.0, 20)
@@ -446,9 +475,9 @@ class HamAGNModel:
         if log10lx_grid is None:
             log10lx_grid = np.linspace(_LOG10_LX_MIN_PHYSICAL, 46.5, 500)
 
-        # Unit conversion: XLF is at h=0.70, HMF at h=theta_cosmo['h']
+        # Unit conversion: XLF is at h=0.70, HMF at h=theta_cosmo['h'];
+        # _xlf_in_h_units divides by 0.70^3 and shifts L_X to this h.
         h_planck = float(self._theta_cosmo.get("h", 0.6736))
-        h_factor = (_H_XLF / h_planck) ** 3   # Mpc^-3 → (Mpc/h)^-3
 
         theta  = self._theta_cosmo
         dlx    = np.gradient(log10lx_grid)    # dex step on LX grid
@@ -457,56 +486,61 @@ class HamAGNModel:
         dlnm   = 0.01
 
         # ------------------------------------------------------------------
-        # Precompute sigma(M, z=0) ONCE — avoids calling the power spectrum
-        # 60× (20 z-values × 3 finite-difference sigma calls).
-        # sigma(M, z) = sigma(M, 0) × D(z)/D(0) for the same cosmology.
+        # The linear power spectrum is evaluated ONCE, which is the expensive
+        # part (a Boltzmann solve, or an emulator call, per invocation).  The
+        # cold conversion and the top-hat quadrature are cheap and jitted, so
+        # they are done per redshift: the cold-to-total ratio evolves, 1.0091
+        # at z = 0 against 1.0152 at z = 3, and freezing it at zero would leave
+        # sigma 0.3% low at the top of the grid.  This mirrors
+        # HaloMassFunction.sigma exactly -- cold field for sigma(M).
+        #
+        # There used to be a sigma8 anchor here too, re-normalising the spectrum
+        # on the total-matter field when theta carried a 'sigma8'.  It mirrored
+        # the one in HaloMassFunction.sigma, and it is gone for the same reason:
+        # the backend's spectrum already carries its amplitude from
+        # ln10^{10}A_s, and a second amplitude in theta only made the answer
+        # depend on which of the two the caller supplied.
         # ------------------------------------------------------------------
-        omega_m  = float(theta["Omega_m"])
-        rho_mean = omega_m * float(_RHO_CRIT0)
+        rho_cold = float(self._hmf._rho_cold(theta))
 
         pk_z0 = self._hmf._pk(self._hmf._k_int, 0.0, theta)
-        s2_arr = np.array(self._hmf._sigma2_z0(
-            jnp.array(mh_arr), pk_z0, jnp.array(rho_mean)
-        ))
-        s2_hi = np.array(self._hmf._sigma2_z0(
-            jnp.array(mh_arr * np.exp(dlnm)), pk_z0, jnp.array(rho_mean)
-        ))
-        s2_lo = np.array(self._hmf._sigma2_z0(
-            jnp.array(mh_arr * np.exp(-dlnm)), pk_z0, jnp.array(rho_mean)
-        ))
-        # sigma8 rescaling (only if theta has sigma8 key)
-        if "sigma8" in theta:
-            R8   = 8.0
-            M8   = (4.0 / 3.0) * np.pi * R8**3 * rho_mean
-            s2_8 = float(self._hmf._sigma2_z0(
-                jnp.array([M8]), pk_z0, jnp.array(rho_mean)
-            )[0])
-            rescale2 = theta["sigma8"] ** 2 / s2_8
-            s2_arr *= rescale2
-            s2_hi  *= rescale2
-            s2_lo  *= rescale2
 
-        sig0_arr = np.sqrt(s2_arr)
-        sig0_hi  = np.sqrt(s2_hi)
-        sig0_lo  = np.sqrt(s2_lo)
-        # Pre-compute dlns/dlnm at z=0 (growth factor cancels in ratio)
-        dlns_dlnm = (np.log(sig0_hi) - np.log(sig0_lo)) / (2.0 * dlnm)
+        _massless = "sum_mnu" not in theta
+        _cold_cache = {}
+
+        def _sigma_shape(z):
+            """(sigma(M, z)/D(z), dln sigma/dln M) on the cold field."""
+            key = 0.0 if _massless else round(float(z), 6)
+            if key not in _cold_cache:
+                pk_cold = pk_z0 * self._hmf._cold_factor(theta, key)
+                s2 = [np.array(self._hmf._sigma2_z0(
+                          jnp.array(mh_arr * f), pk_cold, jnp.array(rho_cold)))
+                      for f in (1.0, np.exp(dlnm), np.exp(-dlnm))]
+                sig0 = np.sqrt(s2[0])
+                dlns = (np.log(np.sqrt(s2[1])) - np.log(np.sqrt(s2[2]))) \
+                    / (2.0 * dlnm)
+                _cold_cache[key] = (sig0, dlns)
+            return _cold_cache[key]
 
         ham_table = np.zeros((len(z_grid), len(log10mh_grid)), dtype=np.float64)
 
         for i_z, z in enumerate(z_grid):
             # --- Cumulative HMF: n(> M_h) in (Mpc/h)^{-3}
             # Scale sigma by growth factor; dlns/dlnm is growth-factor-independent
-            growth   = _growth_factor_flat(z, omega_m)
+            # growth through the package dispatcher, so a w0waCDM theta gets the
+            # CPL ODE rather than the LCDM fitting formula
+            growth   = float(growth_factor(float(z), theta))
+            sig0_arr, dlns_dlnm = _sigma_shape(z)
             sig      = sig0_arr * growth
             fsig     = np.array(self._hmf._fsigma_fn(jnp.array(sig), z))
-            dndm_arr = fsig * (rho_mean / mh_arr ** 2) * np.abs(dlns_dlnm)
+            # cold density in the prefactor too, matching HaloMassFunction.dndm
+            dndm_arr = fsig * (rho_cold / mh_arr ** 2) * np.abs(dlns_dlnm)
             dndlogmh = dndm_arr * mh_arr * np.log(10.0)    # (Mpc/h)^{-3} dex^{-1}
             n_halo_cumul = np.cumsum(dndlogmh[::-1] * dlogmh[::-1])[::-1]
 
             # --- Cumulative XLF: n_AGN(> L_X) in (Mpc/h)^{-3}
-            xlf_val = self._xlf_func(log10lx_grid, z)       # Mpc^{-3} dex^{-1} at h=0.70
-            xlf_h3  = xlf_val * h_factor                    # → (Mpc/h)^{-3} dex^{-1}
+            xlf_h3  = _xlf_in_h_units(self._xlf_func, log10lx_grid, z,
+                                      h_planck)             # (Mpc/h)^{-3} dex^{-1}
             n_agn_cumul = np.cumsum(xlf_h3[::-1] * dlx[::-1])[::-1]
 
             # --- Duty cycle at this redshift

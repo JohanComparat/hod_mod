@@ -183,7 +183,7 @@ def main():
     lines.append("--- cumulative probe attribution ---")
     for label, s_c in r0["cumulative"].items():
         lines.append(f"{label:20s} sigma(Om)={s_c[_IDX['Omega_m']]:9.3e}  "
-                     f"sigma(s8)={s_c[_IDX['sigma8']]:9.3e}")
+                     f"sigma(lnAs)={s_c[_IDX['ln10^{10}A_s']]:9.3e}")
     lines.append("")
     lines.append("--- top degeneracies ---")
     for a, n1, n2, c in fisher.top_degeneracies(r0["corr"], names, k=10):

@@ -59,31 +59,192 @@ CosmoPower-JAX neural emulator (`Piras & Spurio Mancini 2023
 (no 30 s Boltzmann call per cosmology), and ships its trained networks inside
 the wheel, so offline compute nodes need no runtime download.  The backend is
 selected by the ``HOD_MOD_PK_BACKEND`` environment variable
-(``cosmopower`` — default — or ``camb``); there is deliberately **no silent
-fallback** when ``cosmopower-jax`` is missing, so the science can never depend
-on which packages happen to be installed.
+(``cosmopower`` — default — ``class``, or ``camb``); there is deliberately **no
+silent fallback** when ``cosmopower-jax`` is missing, so the science can never
+depend on which packages happen to be installed.
 
-.. warning::
+The emulator is trained on **massless neutrinos**.  It is corrected onto the
+massive-neutrino spectrum by the CLASS-distilled ratio of
+:mod:`hod_mod.core.nu_ratio` (below), so the amplitude offset against the
+Boltzmann backends that earlier releases carried is gone.
 
-   The emulator is trained on **massless neutrinos**, whereas the CAMB backend
-   runs with its default :math:`\Sigma m_\nu = 0.06` eV.  At fixed
-   :math:`A_s` the emulator's P(k) is therefore **~2.5% higher in amplitude**
-   (≈1.3% in :math:`\sigma_8`) than the CAMB path it replaced — a physics
-   difference, not emulator error (the two agree to ~0.06% when CAMB is also
-   run massless).  Results computed on the CAMB default (≤ 0.3.0) are pinned
-   back with ``HOD_MOD_PK_BACKEND=camb``; see :doc:`oarsub_campaign` for how
-   the re-run campaigns handle this.
+**CLASS backend** (reference; ``HOD_MOD_PK_BACKEND=class``)
 
-**CAMB backend** (reference; opt-in via ``HOD_MOD_PK_BACKEND=camb``)
+:class:`~hod_mod.core.power_spectrum.ClassPkLinear` wraps CLASS (`Blas,
+Lesgourgues & Tram 2011 <https://arxiv.org/abs/1104.2933>`_).  It is the
+reference for two reasons.  It is an *independent* Boltzmann solver, so
+differencing it against CAMB bounds the numerical error of the reference itself
+(0.28% in shape over :math:`10^{-3} < k < 10\;h/`\ Mpc at
+:math:`\Sigma m_\nu = 0.06` eV).  And it is the only backend that treats
+massive neutrinos exactly rather than through a fitting form, exposing the
+*cold* (CDM + baryon) spectrum through ``pk_linear_cb``.
+
+Neutrinos are configured as three degenerate species sharing
+:math:`N_{\rm eff} = 3.044` (``N_ncdm=1, deg_ncdm=3, N_ur=0.00441``), which is
+the convention that matches CAMB — the alternative ``deg_ncdm=3.044, N_ur=0``
+doubles the CAMB disagreement to 0.62%.
+
+One solve costs a few seconds and is dominated by ``compute()``; extracting
+P(k) afterwards is milliseconds.  The solver is therefore cached per cosmology,
+so every extra redshift and the cold spectrum come essentially free.  It is not
+differentiable and not for chains.
+
+**CAMB backend** (second Boltzmann solver; ``HOD_MOD_PK_BACKEND=camb``)
 
 The full Boltzmann code CAMB (`Lewis, Challinor & Lasenby 2000
 <https://arxiv.org/abs/astro-ph/0205436>`_) [Lewis2002]_ is invoked via
-``LinearPowerSpectrum.pk_linear(k, z, theta)``.  A single CAMB run takes ~30 s; for
-MCMC use the ``CachedPkLinear`` wrapper that interpolates on a pre-computed
-:math:`k`-grid keyed on :math:`(\Omega_m, h, \ln 10^{10}A_s, z)`.  CAMB remains
-the reference the emulator is validated against
-(``hod_mod/forecast/tests/test_pk_cosmopower.py``) and the engine behind the
-non-linear HMcode spectra and the ``pk_camb_ratio`` Fisher correction table.
+``LinearPowerSpectrum.pk_linear(k, z, theta)``.  A single CAMB run takes several
+seconds and is *not* memoised at the backend level; for MCMC use the
+``CachedPkLinear`` wrapper that interpolates on a pre-computed :math:`k`-grid
+keyed on :math:`(\Omega_m, h, \ln 10^{10}A_s, z)`.  CAMB is the engine behind
+the non-linear HMcode spectra and the ``pk_camb_ratio`` Fisher correction table.
+
+Massive neutrinos
+-----------------
+
+:math:`\Sigma m_\nu` is a first-class cosmological parameter, spelled
+``sum_mnu``, with a package default of **0.06 eV** — the minimal normal
+hierarchy.  ``mnu`` is accepted as a deprecated alias.
+
+The density budget closes by construction:
+
+.. math::
+
+   \Omega_\nu = \frac{\Sigma m_\nu}{93.14\,{\rm eV}\;h^2},
+   \qquad
+   \Omega_{\rm cdm} = \Omega_{\rm m} - \Omega_{\rm b} - \Omega_\nu .
+
+Planck's :math:`\Omega_{\rm m} = 0.3100` already *includes* the minimal
+neutrino mass, so the default :math:`\Omega_{\rm cdm}` is 0.2593, not 0.2607.
+Carrying 0.2607 alongside a massive neutrino — which is what releases before
+this did — put the reference spectrum at :math:`\Omega_{\rm m} \simeq 0.3114`
+while :math:`\bar\rho_{\rm m}`, :math:`E(z)` and :math:`D(z)` all still used
+0.3100.
+
+**Cold versus total.**  Neutrinos count in :math:`\Omega_{\rm m}` but do not
+cluster into halos, so the two fields are used for different things:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 20 50
+
+   * - Quantity
+     - Field
+     - Why
+   * - :math:`\sigma(M)`, :math:`dn/dM`, :math:`b(M)`
+     - cold
+     - halos collapse out of the CDM+baryon field; the Lagrangian radius uses
+       :math:`\bar\rho_{\rm cb}`
+   * - :math:`\sigma_8`
+     - total
+     - keeps its usual meaning, so existing priors stay interpretable
+   * - lensing, :math:`\Delta\Sigma`, the matter 2-halo term
+     - total
+     - light is deflected by all the matter, neutrinos included
+   * - halo mass definitions (:math:`\Delta \times \bar\rho`)
+     - total
+     - :math:`M_{200m}` is conventionally defined against total matter
+
+At :math:`\Sigma m_\nu = 0.06` eV the cold spectrum sits ~0.9% above the total
+at :math:`k = 1\;h/`\ Mpc, which raises :math:`\sigma(M)` by ~0.2–0.4% and
+moves :math:`dn/dM` by −0.7% at :math:`10^{11}\,M_\odot/h` to +2.3% at
+:math:`10^{15}`.
+
+**The distilled table.**  Only CLASS solves the neutrino sector exactly, and it
+is far too slow for a chain.  :mod:`hod_mod.core.nu_ratio` therefore ships
+``class_nu_ratio.npz``: CLASS-measured ratios
+:math:`P_{\rm m}(k,z;f_\nu)/P_{\rm m}(k,z;0)` and
+:math:`P_{\rm cb}(k,z;f_\nu)/P_{\rm m}(k,z;0)` on a
+:math:`(f_\nu, z, \ln k)` grid, interpolated with ``jnp.interp`` so the
+correction stays differentiable in :math:`\Sigma m_\nu`.  Indexing by
+:math:`f_\nu = \Omega_\nu/\Omega_{\rm m}` rather than :math:`\Sigma m_\nu`
+lets it transfer across :math:`h` and :math:`\Omega_{\rm m}`.  The
+:math:`f_\nu = 0` row is exactly one, so massless runs are bit-identical to an
+uncorrected spectrum.  Rebuild with ``python -m hod_mod.core.nu_ratio``
+(needs ``classy``; ~1 min).
+
+This replaced a closed first-order form,
+:math:`1 - 8f_\nu\cdot\tfrac12[1+\tanh(\ln(k/k_{\rm nr})/1.5)]`.  Its
+:math:`-8f_\nu` asymptote was sound, but centring the transition on the
+non-relativistic scale :math:`k_{\rm nr} \simeq 0.0014\;h/`\ Mpc saturated it
+about 1.5 decades of :math:`k` too early — against CLASS it over-suppressed by
+~2 percentage points at 0.06 eV and ~11 at 0.3 eV, across exactly the scales the
+mass function and the 2-halo term use.
+
+Strict parameter bounds
+-----------------------
+
+A Gaussian prior width cannot say *never negative*.  With
+:math:`\sigma = 0.25` eV about a 0.06 eV fiducial, roughly 40% of the prior mass
+on :math:`\Sigma m_\nu` sits below zero, and the forward model returns a number
+there rather than complaining.
+:data:`~hod_mod.forecast.params.PARAM_BOUNDS` is the piece the precision vector
+cannot express: a hard ``(lo, hi)`` for every one of the 111 forecast
+parameters.
+
+Each bound is tagged with what kind of statement it is, because that determines
+how freely it may be relaxed:
+
+``physical``
+    a law forbids the outside — a density or mass cannot be negative,
+    :math:`\Sigma m_\nu \ge 0`
+``definitional``
+    a fraction lies in [0, 1]; a width the model divides by is strictly
+    positive; an ordering holds
+``validity``
+    the calibration or training range of whatever consumes it — the
+    CosmoPower ``TRAINING_BOX``, the APEC table edges, the
+    :math:`f_\nu` grid the distilled neutrino ratios were measured on
+``prior``
+    a defensible but conventional range, used only where none of the above
+    applies.  These are the ones to argue with.
+
+The bounds are deliberately the *widest* defensible choice.  A bound that
+excludes a value the literature reports, or that this package itself fits to, is
+a bug — ``tests/test_param_bounds.py`` checks the shipped best-fit results
+against the table for exactly that reason, and carries an explicit list of
+result files whose keys collide with a forecast parameter name while meaning
+something else.
+
+Helpers, all in :mod:`hod_mod.forecast.params`:
+
+.. code-block:: python
+
+   bounds_vector()               # (111, 2) array in PARAM_NAMES order
+   bounds_pairs()                # [(lo, hi), ...] for scipy.optimize
+   bounds_violations(theta)      # [(name, value, lo, hi)], empty when clean
+   clip_to_bounds(theta)
+   log_prior_bounds(theta)       # 0.0 inside, -inf outside
+   perturb_inside_bounds(...)    # walker seeds that land strictly inside
+
+Enforcement reaches the samplers through
+:class:`~hod_mod.fitting.jax_inference.MultiProbeGaussianLikelihood`, whose
+``log_prior`` multiplies the Gaussian by the indicator of the box.  The bound is
+``jnp.where``-selected rather than added, so the gradient inside is exactly the
+Gaussian one and NUTS simply rejects a proposal that leaves it; MAP receives the
+same box through ``bounds_pairs()``.  Pass ``enforce_bounds=False`` to opt out.
+
+.. note::
+
+   :math:`\Sigma m_\nu` is index 64 of the forecast vector, bounded to
+   [0, 0.4] eV with a fiducial of 0.06 eV.  The upper bound is a *validity*
+   limit, not a cosmological one: above it the distilled table of
+   :mod:`hod_mod.core.nu_ratio` extrapolates flat off its :math:`f_\nu` grid and
+   would silently understate the suppression.
+
+.. note::
+
+   One fiducial sits *on* a bound by construction: ``eta_w_norm``, the wave-2
+   mass-loading normalisation, is zero because the wind sector is off by
+   default, and zero is also the physical wall.  A Fisher derivative there is
+   one-sided and a walker initialised there must be nudged inward.  Such cases
+   are declared in
+   :data:`~hod_mod.forecast.params.BOUNDARY_FIDUCIALS` and the test suite fails
+   if an *undeclared* one appears.
+
+   This is separate from the ``Sigma m_nu -> infinity`` direction listed in
+   :doc:`tier4_forecast`, which is an eigenvalue-floor artefact in
+   ``fisher.constraints`` rather than a prior problem — a bound does not fix it.
 
 **Eisenstein-Hu 1998 fitting formula** (fast)
 
@@ -101,12 +262,29 @@ in JAX; differentiable with respect to all cosmological parameters.
 
 **Growth factor**
 
-Linear growth is encoded as :math:`P(k,z) = D^2(z) P(k,0)` with the growth factor
+Linear growth is encoded as :math:`P(k,z) = D^2(z) P(k,0)`.  The growth factor
+itself comes from :mod:`hod_mod.core.growth`, which offers three routes —
+the ratio of the active backend's own spectra (the default), the flat-CPL growth
+ODE, and the Carroll+1992 fitting formula — selected by ``mode`` /
+``$HOD_MOD_GROWTH``.  :doc:`growth_factor` is the study that says which to use
+and what the others cost.
 
-.. math::
+.. warning::
 
-   D(z) = \frac{5\Omega_m}{2} H(z) / H_0
-   \int_z^\infty \frac{(1+z')}{[H(z')/H_0]^3}\,dz'.
+   **Corrected in 0.6.**  This section used to print the :math:`\Lambda`\ CDM
+   quadrature
+
+   .. math::
+
+      D(z) = \frac{5\Omega_m}{2} \frac{H(z)}{H_0}
+      \int_z^\infty \frac{(1+z')}{[H(z')/H_0]^3}\,{\rm d}z'
+
+   as though it were what ran.  It never was: the package implemented the
+   Carroll+1992 *fitting formula* to that integral, which is a different number
+   — off by 1.8e-3 at :math:`\Omega_m = 0.31` and 3.9e-3 at 0.24.  The
+   quadrature above is now used only as the independent reference the growth ODE
+   is checked against, in ``benchmarks/accuracy.json`` and
+   ``tests/test_growth.py``.
 
 .. note::
 
@@ -129,7 +307,14 @@ Linear growth is encoded as :math:`P(k,z) = D^2(z) P(k,0)` with the growth facto
    ``growth_factor`` on a flat :math:`w_0w_a`\ CDM fiducial, the two
    implementations agree to **< 0.05 % on values** (:math:`E(z)` 4e-4,
    :math:`\chi(z)` 2e-4, :math:`D(z)/D(0)` 1e-4) and **< 0.04 % on autodiff
-   gradients** (:math:`d\chi/dw_0` to 3.5e-4).  Integration caveats if ever
+   gradients** (:math:`d\chi/dw_0` to 3.5e-4).
+
+   The :math:`D(z)/D(0)` figure carries a caveat: it was measured on
+   2026-07-15, when this package's growth was the Carroll+1992 fitting formula,
+   so 1e-4 is a Carroll-versus-ODE number.  Both sides integrate the ODE since
+   0.6, and the agreement should now be better; it has not been re-measured
+   (``jaxace`` is not in the environment).  Do not quote it as a current
+   ODE-to-ODE cross-check.  Integration caveats if ever
    adopted: the Julia originals break the JAX autodiff chain, and ``jaxace``
    is parameterised by physical densities (:math:`\omega_b, \omega_c`)
    rather than this repo's :math:`(\Omega_m, h)`.

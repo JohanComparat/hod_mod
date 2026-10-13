@@ -63,6 +63,61 @@ from functools import partial
 
 _C_KM_S = 299_792.458  # speed of light [km/s]
 
+# --- radiation and the neutrino background --------------------------------
+#
+# Omega_gamma h^2 for a blackbody at T_cmb, from 4 sigma T^4 / (c^3 rho_crit).
+# 2.47282e-5 at T = 2.7255 K, matching astropy's ``Ogamma0``.
+_OMEGA_GAMMA_H2_2P7255 = 2.47282e-5
+#: Default CMB temperature [K].
+T_CMB_DEFAULT = 2.7255
+#: Effective number of neutrino species (Planck 2018 / CLASS convention; the
+#: package's ``ClassPkLinear`` runs ``deg_ncdm = 3``, ``N_ur = 0.00441``).
+N_EFF_DEFAULT = 3.044
+#: Number of massive species the mass sum is split over.
+N_NU_MASSIVE = 3
+
+# Komatsu et al. (2011, ApJS 192, 18) fitting function for the Fermi-Dirac
+# energy integral, f(y) = (1 + (k y)^p)^(1/p): exact in both asymptotes and
+# better than 0.1% through the transition.  Same constants astropy uses.
+_KOMATSU_K = 0.3173
+_KOMATSU_P = 1.83
+_KOMATSU_INVP = 1.0 / _KOMATSU_P
+
+#: m c^2 / (k_B T_nu,0) for a 1 eV neutrino, with T_nu,0 = (4/11)^(1/3) T_cmb.
+#: 1 eV / (k_B * (4/11)^(1/3) * 2.7255 K); scales as 1/T_cmb.
+_NU_Y_PER_EV_2P7255 = 1.0 / (8.617333262e-5 * (4.0 / 11.0) ** (1.0 / 3.0) * 2.7255)
+
+
+def omega_gamma(h: float, T_cmb: float = T_CMB_DEFAULT) -> float:
+    """Photon density parameter :math:`\Omega_\gamma` today."""
+    return _OMEGA_GAMMA_H2_2P7255 * (T_cmb / 2.7255) ** 4 / h ** 2
+
+
+def _nu_shape(z, sum_mnu: float, T_cmb: float = T_CMB_DEFAULT):
+    """:math:`F(z)/F(0)`, the neutrino energy density relative to its value today.
+
+    ``F(z) = sum_i f(y_i(z))`` with ``y(z) = y_0 / (1+z)``.  Multiplying by
+    ``(1+z)^4`` (the photon scaling the species shares while relativistic)
+    gives the full redshift dependence.  Both asymptotes are exact:
+
+    * relativistic, ``y -> 0``: ``f -> 1``, so ``rho_nu ~ (1+z)^4``;
+    * non-relativistic, ``y -> inf``: ``f -> k y ~ 1/(1+z)``, so
+      ``rho_nu ~ (1+z)^3`` -- pressureless, which is the limit the rest of the
+      package assumes.
+
+    Returned as a *ratio* so the amplitude stays the package's own
+    ``omega_nu = sum_mnu / (93.14 h^2)``.  Astropy's exact-integral
+    normalisation differs from that convention by 0.53%, and the density budget
+    (``Omega_b + Omega_cdm + Omega_nu == Omega_m``, asserted in
+    ``tests/test_neutrinos.py``) has to close against the package's own value,
+    not astropy's.
+    """
+    y0 = (sum_mnu / N_NU_MASSIVE) * _NU_Y_PER_EV_2P7255 * (2.7255 / T_cmb)
+    f0 = (1.0 + (_KOMATSU_K * y0) ** _KOMATSU_P) ** _KOMATSU_INVP
+    yz = y0 / (1.0 + z)
+    fz = (1.0 + (_KOMATSU_K * yz) ** _KOMATSU_P) ** _KOMATSU_INVP
+    return fz / f0
+
 # Pre-compute 256-point GL nodes/weights at import time (numpy, not JAX)
 import numpy as _np
 _GL_N = 256
@@ -77,6 +132,10 @@ def hubble_e(
     omega_m: float,
     w0: float = -1.0,
     wa: float = 0.0,
+    *,
+    h: float = None,
+    sum_mnu: float = 0.0,
+    T_cmb: float = T_CMB_DEFAULT,
 ) -> jnp.ndarray:
     """Dimensionless Hubble function :math:`E(z) = H(z)/H_0`.
 
@@ -98,24 +157,71 @@ def hubble_e(
         Dark energy equation-of-state today.  Default :math:`-1` (ΛCDM).
     wa : float
         CPL time-variation parameter.  Default :math:`0` (ΛCDM).
+    h : float, optional
+        Reduced Hubble constant.  **Supplying it turns on the radiation and
+        neutrino sectors**, which need :math:`h` to form :math:`\Omega_\gamma`
+        and :math:`\Omega_\nu` from physical densities.  Without it the
+        function keeps the two-component form: no radiation, and neutrinos
+        pressureless at all :math:`z` inside :math:`\Omega_m`.  Prefer
+        :func:`hubble_e_from_theta`, which always supplies both.
+    sum_mnu : float
+        :math:`\Sigma m_\nu` [eV].  Ignored when ``h`` is None.
+    T_cmb : float
+        CMB temperature [K].
 
     Returns
     -------
     E : jnp.ndarray
         :math:`H(z)/H_0`.
 
+    Notes
+    -----
+    With ``h`` supplied,
+
+    .. math::
+
+        E^2(z) = \Omega_\gamma (1+z)^4 + \Omega_{cb}(1+z)^3
+                 + \Omega_\nu(z) + \Omega_{DE} f_{DE}(z)
+
+    where :math:`\Omega_{cb} = \Omega_m - \Omega_\nu` — the package's
+    :math:`\Omega_m` *contains* the neutrinos — and :math:`\Omega_\nu(z)`
+    carries the relativistic transition through the Komatsu fitting function.
+
     Accuracy
     --------
-    E(z=0) = 1.0 exactly (flat ΛCDM: Ω_m + Ω_Λ = 1, f_DE(0) = 1).
+    E(z=0) = 1.0 exactly in both branches, by construction of the flatness
+    condition.  Against ``astropy.cosmology.FlatLambdaCDM`` with the same
+    ``m_nu``, ``Tcmb0`` and ``Neff``, the radiative branch agrees to better than
+    1e-3 over z in [0, 5] — the residual is the 0.53 percent difference between
+    this package's :math:`\Omega_\nu = \Sigma m_\nu/(93.14 h^2)` convention
+    and astropy's exact Fermi-Dirac integral, which is a convention choice, not
+    an error.  Recorded in ``benchmarks/accuracy.json``.
 
     Timing
     ------
     ~ 19 µs / call  (JIT-compiled, N=100 redshifts, CPU x86-64, 2026-04-23).
     """
-    omega_de = 1.0 - omega_m
     # CPL dark energy density factor — reduces to 1 for (w0=-1, wa=0)
     f_de = (1.0 + z) ** (3.0 * (1.0 + w0 + wa)) * jnp.exp(-3.0 * wa * z / (1.0 + z))
-    return jnp.sqrt(omega_m * (1.0 + z) ** 3 + omega_de * f_de)
+
+    if h is None:
+        # No radiation sector: neutrinos are inside Omega_m and stay
+        # pressureless at every z.  Kept for callers that genuinely have no h.
+        return jnp.sqrt(omega_m * (1.0 + z) ** 3 + (1.0 - omega_m) * f_de)
+
+    o_gamma = omega_gamma(h, T_cmb)
+    o_nu0 = sum_mnu / (93.14 * h ** 2)
+    o_cb = omega_m - o_nu0            # Omega_m CONTAINS the neutrinos
+    # Flatness, using the z = 0 values.  Omega_nu(0) = o_nu0 by construction of
+    # _nu_shape, so E(0) = 1 exactly.
+    o_de = 1.0 - o_gamma - omega_m
+
+    one_z = 1.0 + z
+    e2 = (o_gamma * one_z ** 4
+          + o_cb * one_z ** 3
+          + o_nu0 * one_z ** 4 * _nu_shape(z, sum_mnu, T_cmb)
+          + o_de * f_de)
+    return jnp.sqrt(e2)
 
 
 @jax.jit

@@ -132,6 +132,7 @@ echo "vtag=${VTAG}  results=${HOD_MOD_RESULTS}  commit=$(git rev-parse --short H
 # trivia.  Under `set -e` this also fails the job immediately (rather than deep
 # inside the fit) if cosmopower-jax is missing from the cluster env.
 echo "pk_backend=$(python -c 'from hod_mod.core.power_spectrum import default_pk_linear; print(type(default_pk_linear()).__name__)')"
+echo "sum_mnu=$(python -c 'from hod_mod.core.power_spectrum import LinearPowerSpectrum as L; print(L.default_cosmology()[\"sum_mnu\"])')"
 echo "cmd> ${CMD}"
 
 # The param line references $DATA_BGS / $RESULTS (defined above), so eval it.

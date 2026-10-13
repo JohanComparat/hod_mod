@@ -42,11 +42,11 @@ import jax.numpy as jnp
 
 from hod_mod.core.halo_mass_function import (
     HaloMassFunction,
-    _growth_factor_flat_jax,
     _RHO_CRIT0,
     growth_factor,
 )
 from hod_mod.core.halo_profiles import nfw_uk_jax, concentration_dutton14_jax
+from hod_mod.core.power_spectrum import NU_DENOM_EV
 from hod_mod.connection.hod.zumandelbaum15 import (
     _mh_from_mstar_zu15,
     _mstar_from_mh_zu15,
@@ -68,7 +68,7 @@ from hod_mod.forecast.pk_eisenstein_hu import EisensteinHu98PkLinear
 # ---------------------------------------------------------------------------
 
 PARAM_NAMES = [
-    "Omega_m", "sigma8", "h", "n_s", "Omega_b",
+    "Omega_m", "ln10^{10}A_s", "h", "n_s", "Omega_b",
     "lg_m1h", "lg_m0star", "beta", "delta", "gamma",
     "sigma_lnmstar", "eta", "fc", "bsat",
     "lx_norm", "lx_slope", "kt_norm", "kt_slope", "p2", "r_max",
@@ -164,10 +164,11 @@ OBSERVABLES = ["wp", "ds", "cl_gX", "cl_gy", "cl_XX", "cl_kk",
 _C_OVER_H0 = 2997.92   # c/H0 [Mpc/h]  (H0 = 100 h km/s/Mpc)
 
 # Fixed (non-varied) cosmology + HOD nuisance held at Planck18 / ZM15-MAP values.
-# w0/wa/sum_mnu fallbacks are the ΛCDM/massless limits (the missing-physics
-# extension promotes them into the vector with these same fiducials).
+# w0/wa are the ΛCDM limit and sum_mnu the minimal normal hierarchy (the
+# missing-physics extension promotes all three into the vector with these same
+# fiducials, and they match LinearPowerSpectrum.default_cosmology()).
 _FIXED_COSMO = {"h": 0.6736, "Omega_b": 0.0493, "n_s": 0.9649,
-                "w0": -1.0, "wa": 0.0, "sum_mnu": 0.0}
+                "w0": -1.0, "wa": 0.0, "sum_mnu": 0.06}
 _FIXED_HOD = {
     "log10m_star_thresh": 10.0,   # BGS M* > 10 threshold sample
     "beta_sat": 0.9, "bcut": 0.86, "beta_cut": 0.41, "alpha_sat": 1.0,
@@ -720,13 +721,17 @@ class ForwardModel:
             return theta[_IDX[name]] if name in _IDX else _FIXED_COSMO[name]
         Om = theta[_IDX["Omega_m"]]
         Ob = g("Omega_b")
+        hh = g("h")
+        # Omega_m includes the neutrinos, so the cold sector is what is left
+        # after Omega_nu = sum_mnu / (93.14 eV h^2) is taken out.
+        Onu = g("sum_mnu") / (NU_DENOM_EV * hh ** 2)
         return {
-            "h": g("h"),
+            "h": hh,
             "Omega_b": Ob,
             "Omega_m": Om,
-            "Omega_cdm": Om - Ob,
+            "Omega_cdm": Om - Ob - Onu,
             "n_s": g("n_s"),
-            "sigma8": theta[_IDX["sigma8"]],
+            "ln10^{10}A_s": theta[_IDX["ln10^{10}A_s"]],
             # beyond-ΛCDM sector (missing-physics extension).  Their presence
             # as dict KEYS statically routes growth to the CPL ODE and P(k) to
             # the ν-suppressed shape; the ΛCDM/massless fiducials keep both
@@ -845,7 +850,10 @@ class ForwardModel:
         uniform-in-ln k grid (jnp.gradient with scalar spacing).
         """
         kappa = 0.42
-        rho_m = _RHO_CRIT0 * c["Omega_m"]
+        # Cold density, to match the Lagrangian radius sigma(M) is built on.
+        # The slope itself is taken from the total-matter shape: ln(P_cb/P_m)
+        # varies by ~3e-3 over four decades of k, i.e. ~0.03% of n_eff.
+        rho_m = _RHO_CRIT0 * (c["Omega_m"] - c["sum_mnu"] / (NU_DENOM_EV * c["h"] ** 2))
         R = (3.0 * self.m / (4.0 * jnp.pi * rho_m)) ** (1.0 / 3.0)
         kg = jnp.logspace(-3.0, 2.0, 256)
         lnk = jnp.log(kg)
@@ -1068,10 +1076,38 @@ class ForwardModel:
         return u_shape * P_dpm[None, :]
 
     # ---- AGN spectral helpers (Γ power law + obscured fraction) ------
+    @staticmethod
+    def _pow_diff_over_p(a, b, p, _eps=1e-6):
+        r"""$(a^p - b^p)/p$, finite and differentiable through $p = 0$.
+
+        Every band ratio below is a quotient of two such differences, and at
+        :math:`\Gamma = 2` (so :math:`p = 0`) both go to zero: the quotient is
+        finite but the naive form evaluates 0/0 and returns NaN at exactly that
+        point while being perfectly smooth on either side of it. Dividing the
+        removable zero out first is what makes :math:`\Gamma = 2` --- an
+        entirely ordinary photon index --- usable rather than a hole in the
+        parameter space. The series is the limit
+        :math:`\ln(a/b) + \tfrac{p}{2}(\ln^2 a - \ln^2 b)`; the double
+        ``where`` keeps the gradient finite at the switch.
+        """
+        la, lb = jnp.log(a), jnp.log(b)
+        d = la - lb
+        x = p * d
+        # Factoring out b**p turns the catastrophic cancellation of
+        # a**p - b**p into expm1, which is accurate for small argument; only
+        # the final division by p still needs guarding.
+        small = jnp.abs(x) < _eps
+        safe_p = jnp.where(jnp.abs(p) < _eps, 1.0, p)
+        ratio = jnp.where(small,
+                          d * (1.0 + 0.5 * x + x * x / 6.0),
+                          jnp.expm1(x) / safe_p)
+        return jnp.exp(p * lb) * ratio
+
     def _k_h2s(self, theta):
         """Differentiable hard→soft flux ratio k_h2s(Γ), == _K_H2S_FID at Γ=1.8."""
         p = 2.0 - theta[_IDX["agn_gamma"]]
-        r = (2.0 ** p - 0.5 ** p) / (10.0 ** p - 2.0 ** p)
+        r = (self._pow_diff_over_p(2.0, 0.5, p)
+             / self._pow_diff_over_p(10.0, 2.0, p))
         return _K_H2S_FID * r / _R_H2S_FID
 
     def _agn_band_fractions(self, theta):
@@ -1079,7 +1115,8 @@ class ForwardModel:
         the 0.5–2 keV soft band (so bands spanning it sum to 1), (Nb,)."""
         p = 2.0 - theta[_IDX["agn_gamma"]]
         lo, hi = self._band_edges[:, 0], self._band_edges[:, 1]
-        return (hi ** p - lo ** p) / (2.0 ** p - 0.5 ** p)
+        return (self._pow_diff_over_p(hi, lo, p)
+                / self._pow_diff_over_p(2.0, 0.5, p))
 
     def _abs_survival_soft(self, theta):
         """Mean broad-soft-band flux survival of the AGN population:

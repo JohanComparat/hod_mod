@@ -6,7 +6,7 @@ ingredients shared by every observable pipeline.  Hot-gas/ICM fields live in
 :mod:`hod_mod.gas`; galaxy–halo occupation in :mod:`hod_mod.connection`.
 """
 
-from .power_spectrum import LinearPowerSpectrum
+from .power_spectrum import LinearPowerSpectrum, ClassPkLinear
 from .nonlinear import NonLinearPowerSpectrum, WHMSpectrum
 from .halo_mass_function import HaloMassFunction, make_hmf
 from .halo_profiles import HaloProfile, nfw_uk, einasto_rho, mdef_delta_rho
@@ -37,6 +37,7 @@ from .distances import (
 
 __all__ = [
     "LinearPowerSpectrum",
+    "ClassPkLinear",
     "NonLinearPowerSpectrum",
     "WHMSpectrum",
     "HaloMassFunction",

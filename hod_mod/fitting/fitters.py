@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import jax.numpy as jnp
 
-from hod_mod.core.power_spectrum import LinearPowerSpectrum, default_pk_linear
+from hod_mod.core.power_spectrum import (
+    LinearPowerSpectrum, default_pk_linear, mnu_sum, omega_nu)
 from hod_mod.core.halo_mass_function import make_hmf
 from hod_mod.core.halo_profiles import HaloProfile
 from hod_mod.core.beyond_linear_bias import BeyondLinearBiasMead21
@@ -145,11 +146,38 @@ def log_prob_joint(
 class _CachedPkLinear:
     """Interpolation cache around LinearPowerSpectrum for free-cosmo MCMC.
 
-    On the first call for a given (z, Ω_m, ln10As, h) key a reference P(k)
-    is computed on a fixed k grid via CAMB and log-log interpolated on all
-    subsequent calls.  This reduces per-sample cost from ~30 s to <1 ms once
-    the cache warms up.
+    On the first call for a given cosmology the reference P(k) is computed on a
+    fixed k grid by the wrapped backend and log-log interpolated on every
+    subsequent call.  With a Boltzmann backend this takes the per-sample cost
+    from seconds to <1 ms once the cache warms up.
+
+    The key must name every parameter the spectrum depends on.  It previously
+    covered only (z, Ω_m, ln10As, h), so a chain that varied Ω_b, n_s, w0/wa or
+    Σm_ν would silently be served a spectrum computed at a different cosmology.
     """
+
+    @property
+    def has_native_z(self):
+        """Delegate the redshift-capability declaration to the wrapped backend.
+
+        Without this the growth dispatcher sees an unrecognised class, refuses to
+        assume it is z-aware and falls back to the ODE -- precisely in the
+        free-cosmology runs that paid for a Boltzmann solver.  A wrapper must
+        answer for what it wraps.
+        """
+        from hod_mod.core.growth import backend_has_native_z
+        return backend_has_native_z(self._base)
+
+    def pk_linear_cb(self, k, z: float, theta: dict):
+        """Forward the cold spectrum when the wrapped backend has one.
+
+        Not cached: the cold path is used only by the growth ratio, which is
+        called once per (cosmology, redshift), not per likelihood evaluation.
+        """
+        if not hasattr(self._base, "pk_linear_cb"):
+            raise AttributeError(
+                f"{type(self._base).__name__} has no cold spectrum to forward")
+        return self._base.pk_linear_cb(k, z, theta)
 
     def __init__(self, pk_lin_obj, n_k: int = 512):
         self._base      = pk_lin_obj
@@ -161,8 +189,13 @@ class _CachedPkLinear:
         return (
             round(float(z), 4),
             round(float(theta["Omega_m"]), 5),
+            round(float(theta["Omega_b"]), 6),
             round(float(theta["ln10^{10}A_s"]), 4),
+            round(float(theta["n_s"]), 5),
             round(float(theta.get("h", 0.6736)), 4),
+            round(float(mnu_sum(theta)), 5),
+            round(float(theta.get("w0", -1.0)), 5),
+            round(float(theta.get("wa", 0.0)), 5),
         )
 
     def pk_linear(self, k, z: float, theta: dict):
@@ -211,28 +244,52 @@ class WpFitter:
         if config.use_free_cosmo:
             self._pk_lin = _CachedPkLinear(self._pk_lin)
 
+    #: Cosmological parameters a ``use_free_cosmo`` fit may sample.  A whitelist
+    #: rather than a pattern match, because the pattern match is what hid the
+    #: bug below: the previous implementation acted on exactly ``Omega_m`` and
+    #: ``S8``, so a YAML that freed ``h`` -- as
+    #: ``benchmark_more2015_logM11_12_freecosmo.yml`` does, its own header
+    #: claiming "5 (HOD) + 2 (Omega_m, S8) + 1 (h) = 8" -- sampled an ``h`` that
+    #: never reached the cosmology dict at all.  That fit ran 7 effective
+    #: parameters while reporting 8.
+    _COSMO_FREE = ("Omega_m", "Omega_b", "h", "n_s", "ln10^{10}A_s",
+                   "w0", "wa", "sum_mnu")
+
     def _theta_cosmo_call(self, all_params: dict) -> dict:
         """Build a per-call theta_cosmo when use_free_cosmo is enabled.
 
-        Extracts Omega_m and S8 from all_params, derives sigma8 and ln10As,
-        and returns an updated cosmology dict for the predictor call.
-        When use_free_cosmo is False, returns self.theta_cosmo unchanged.
+        Copies every free cosmological parameter straight through and re-derives
+        ``Omega_cdm`` last, so that a free ``h`` or ``sum_mnu`` -- both of which
+        move ``Omega_nu`` -- are accounted for.
+
+        The amplitude is ``ln10^{10}A_s``, sampled directly.  It used to be
+        ``S8``, converted here via ``sigma8 = S8 sqrt(0.3/Omega_m)`` and then a
+        linearised ``ln10As += 2 ln(sigma8/sigma8_fid)``.  That conversion wrote
+        only ``ln10^{10}A_s`` and left the fiducial ``sigma8`` sitting in ``tc``,
+        where both the P(k) backend and the mass function preferred it -- so the
+        sampled ``S8`` moved nothing.  Sampling the amplitude itself removes the
+        conversion, the stale key and the precedence question together.
+
+        When ``use_free_cosmo`` is False, returns ``self.theta_cosmo`` unchanged.
         """
         if not self.config.use_free_cosmo:
             return self.theta_cosmo
+        unknown = [k for k in ("sigma8", "S8") if k in all_params]
+        if unknown:
+            raise ValueError(
+                f"{type(self).__name__}: {unknown} is no longer a sampleable "
+                "cosmological parameter -- free 'ln10^{10}A_s' instead and "
+                "derive sigma8/S8 from the chain a posteriori with "
+                "hod_mod.core.amplitude.s8_from_theta.")
         tc = dict(self.theta_cosmo)
-        if "Omega_m" in all_params:
-            Omega_m = float(all_params["Omega_m"])
-            tc["Omega_m"]   = Omega_m
-            tc["Omega_cdm"] = Omega_m - float(tc["Omega_b"])
-        if "S8" in all_params:
-            S8      = float(all_params["S8"])
-            Omega_m = tc["Omega_m"]
-            sigma8  = S8 * np.sqrt(0.3 / Omega_m)
-            sigma8_fid = float(self.theta_cosmo.get("sigma8", 0.8111))
-            ln10As_fid = float(self.theta_cosmo["ln10^{10}A_s"])
-            # Fast update: sigma8 ∝ sqrt(As) → ln10As += 2*ln(sigma8_new/sigma8_fid)
-            tc["ln10^{10}A_s"] = ln10As_fid + 2.0 * np.log(sigma8 / sigma8_fid)
+        for name in self._COSMO_FREE:
+            if name in all_params:
+                tc[name] = float(all_params[name])
+        # Last, and only now: omega_nu depends on h and sum_mnu, both of which
+        # may just have moved.
+        if "Omega_m" in tc:
+            tc["Omega_cdm"] = (float(tc["Omega_m"]) - float(tc["Omega_b"])
+                               - float(omega_nu(tc)))
         return tc
 
     # ------------------------------------------------------------------
@@ -600,11 +657,19 @@ class WpFitter:
     # Predictions
 
     def predict_wp(self, params: dict) -> np.ndarray:
-        """Predicted wp(rp) [Mpc/h]."""
+        """Predicted wp(rp) [Mpc/h].
+
+        The per-call cosmology matters here: under ``use_free_cosmo`` this is a
+        read-out of the *sampled* point, and it used to read ``self.theta_cosmo``
+        -- the fiducial -- so it returned the same curve for every cosmology.
+        The likelihood and the optimiser were always right (they go through
+        ``_theta_cosmo_call``); only the read-out was wrong, which is why the
+        stored chi2 tables are sound and the plotted MAP curves were not.
+        """
         return np.asarray(
             self.predictor.wp(
                 jnp.array(self.rp_arr), self.config.pi_max,
-                self.config.z, self.theta_cosmo, params,
+                self.config.z, self._theta_cosmo_call(params), params,
             )
         )
 
@@ -743,16 +808,34 @@ class JointFitter(WpFitter):
         }
 
     def predict_ds(self, params: dict) -> np.ndarray:
-        """Predicted ΔΣ(R) [M_sun h pc⁻²]."""
+        """Predicted ΔΣ(R) [M_sun h pc⁻²].
+
+        The per-call cosmology matters here: under ``use_free_cosmo`` this is a
+        read-out of the *sampled* point, and it used to read ``self.theta_cosmo``
+        -- the fiducial -- so it returned the same curve for every cosmology.
+        The likelihood and the optimiser were always right (they go through
+        ``_theta_cosmo_call``); only the read-out was wrong, which is why the
+        stored chi2 tables are sound and the plotted MAP curves were not.
+        """
         return np.asarray(
             self.predictor.delta_sigma(
-                jnp.array(self.R_arr), self.config.z, self.theta_cosmo, params,
+                jnp.array(self.R_arr), self.config.z,
+                self._theta_cosmo_call(params), params,
             )
         )
 
     def predict_ng(self, params: dict) -> float:
-        """Predicted galaxy number density n̄_g [h³ Mpc⁻³]."""
-        return self.predictor.n_gal(self.config.z, self.theta_cosmo, params)
+        """Predicted galaxy number density n̄_g [h³ Mpc⁻³].
+
+        The per-call cosmology matters here: under ``use_free_cosmo`` this is a
+        read-out of the *sampled* point, and it used to read ``self.theta_cosmo``
+        -- the fiducial -- so it returned the same curve for every cosmology.
+        The likelihood and the optimiser were always right (they go through
+        ``_theta_cosmo_call``); only the read-out was wrong, which is why the
+        stored chi2 tables are sound and the plotted MAP curves were not.
+        """
+        return self.predictor.n_gal(
+            self.config.z, self._theta_cosmo_call(params), params)
 
     def chi2_joint(self, params: dict) -> dict:
         """Per-observable χ² contributions and total."""
@@ -871,10 +954,19 @@ class DeltaSigmaFitter(WpFitter):
         }
 
     def predict_ds(self, params: dict) -> np.ndarray:
-        """Predicted ΔΣ(R) [M_sun h pc⁻²]."""
+        """Predicted ΔΣ(R) [M_sun h pc⁻²].
+
+        The per-call cosmology matters here: under ``use_free_cosmo`` this is a
+        read-out of the *sampled* point, and it used to read ``self.theta_cosmo``
+        -- the fiducial -- so it returned the same curve for every cosmology.
+        The likelihood and the optimiser were always right (they go through
+        ``_theta_cosmo_call``); only the read-out was wrong, which is why the
+        stored chi2 tables are sound and the plotted MAP curves were not.
+        """
         return np.asarray(
             self.predictor.delta_sigma(
-                jnp.array(self.R_arr), self.config.z, self.theta_cosmo, params,
+                jnp.array(self.R_arr), self.config.z,
+                self._theta_cosmo_call(params), params,
             )
         )
 

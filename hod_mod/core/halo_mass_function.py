@@ -86,7 +86,8 @@ def _patch_cemulator_numpy2() -> None:
 
 _patch_cemulator_numpy2()
 
-from .power_spectrum import rho_critical_0
+from .amplitude import require_as_amplitude
+from .power_spectrum import rho_critical_0, mnu_sum, omega_nu, omega_cb, omega_cdm
 
 _RHO_CRIT0 = rho_critical_0()          # (Msun/h)/(Mpc/h)³
 _RHO_MEAN_PLANCK18 = _RHO_CRIT0 * 0.3100  # Planck 2018 Ω_m default
@@ -125,7 +126,8 @@ def _growth_factor_flat_jax(z: float, omega_m):
 # ---------------------------------------------------------------------------
 
 def _growth_factor_cpl_jax(z, omega_m, w0=-1.0, wa=0.0,
-                           n_steps: int = 160, lna_min: float = -7.0):
+                           n_steps: int = 160, lna_min: float = -7.0,
+                           normalise: bool = True):
     r"""Growth factor D(z)/D(0) for flat CPL dark energy, JAX-differentiable.
 
     Integrates the linear growth ODE in ``x = ln a``
@@ -175,20 +177,73 @@ def _growth_factor_cpl_jax(z, omega_m, w0=-1.0, wa=0.0,
     _, d_tail = jax.lax.scan(step, y0, lna[:-1])
     d_grid = jnp.concatenate([jnp.array([a0]), d_tail])
     x_z = -jnp.log1p(jnp.asarray(z))
-    return jnp.interp(x_z, lna, d_grid) / d_grid[-1]
+    d_z = jnp.interp(x_z, lna, d_grid)
+    # normalise=False returns the EdS-normalised D (D -> a as a -> 0), which is
+    # what an *absolute* amplitude needs: hod_mod.core.growth.growth_d0_eds asks
+    # for it, eisenstein_hu_pk_phys folds it into A_amp.  Every other caller
+    # wants the ratio and gets the default, on the same float operations as
+    # before -- verified bit-identical at z in {0, 0.1, 0.3, 1, 3}.
+    return d_z / d_grid[-1] if normalise else d_z
 
 
-def growth_factor(z, theta: dict):
-    """D(z)/D(0) dispatcher: CPL ODE when ``theta`` carries beyond-ΛCDM keys.
+def _concrete_cosmo_key(z, theta: dict):
+    """A hashable (z, theta) key, or ``None`` if anything is traced.
 
-    The branch is on dictionary *membership* (static under tracing): forecast
-    parameter dicts include ``w0``/``wa`` and get the differentiable ODE
-    growth; production ΛCDM dicts keep the Carroll+1992 formula bit-identical.
+    Rounding matches ``clustering._cosmo_cache_key``'s precision.  Unlike
+    ``fitters._CachedPkLinear._key`` this covers **every** entry of the dict, not
+    a hand-picked subset -- a key that omits a parameter the caller is varying
+    returns a stale spectrum with no error.
     """
-    if ("w0" in theta) or ("wa" in theta):
-        return _growth_factor_cpl_jax(z, theta["Omega_m"],
-                                      theta.get("w0", -1.0), theta.get("wa", 0.0))
-    return _growth_factor_flat_jax(z, theta["Omega_m"])
+    try:
+        items = []
+        for kk in sorted(theta):
+            vv = theta[kk]
+            if isinstance(vv, jax.core.Tracer):
+                return None
+            items.append((kk, round(float(vv), 9)))
+        return (round(float(z), 6), tuple(items))
+    except (TypeError, ValueError):
+        return None
+
+
+def growth_factor(z, theta: dict, pk=None, mode: str = None, variant: str = "total"):
+    """D(z)/D(0) — the package-wide dispatcher, now :mod:`hod_mod.core.growth`.
+
+    Kept here because it is the import path the package already uses.  All it
+    does is forward; see :func:`hod_mod.core.growth.growth_factor` for the
+    modes, the ``$HOD_MOD_GROWTH`` override and the cold/total variants.
+
+    .. warning::
+
+       **Behaviour changed.**  This used to branch on dictionary *membership* —
+       a ``theta`` carrying ``w0``/``wa`` got the CPL growth ODE, and everything
+       else got the Carroll+1992 fitting formula.  That handed YAML-configured
+       fits (no ``w0`` key) and code-configured ones (``default_cosmology()``
+       has one) two different growth models, with nothing in the output
+       recording which.  The branch is gone: ΛCDM now gets the accurate route
+       too.
+
+       Carroll+1992 was wrong by 1.8e-3 at Ω_m = 0.31 and 3.9e-3 at 0.24 — an
+       Ω_m-*dependent* error, so a free-cosmology fit could not absorb it — and
+       that amplifies through ``dln n/dln σ`` ≈ 10–24 to 1–3 % in ``dn/dM``.
+       Results computed before this change are not comparable with results
+       after it.  Set ``HOD_MOD_GROWTH=carroll`` to reproduce the old numbers.
+       See :doc:`the growth-factor study </growth_factor>`.
+
+    Parameters
+    ----------
+    z, theta
+        As before.
+    pk : object, optional
+        The active P(k) backend.  Supplying it enables the default ``pk_ratio``
+        mode, which reads D(z) off the backend's own spectra so the σ(M) leg and
+        the 2-halo leg agree by construction.  Without it the growth ODE is used
+        — silently, since most callers here are analytic sites with no backend.
+    mode, variant
+        Forwarded unchanged.
+    """
+    from hod_mod.core.growth import growth_factor as _dispatch
+    return _dispatch(z, theta, pk=pk, mode=mode, variant=variant)
 
 
 # ---------------------------------------------------------------------------
@@ -986,9 +1041,10 @@ _FSIGMA_MODELS = {
 class HaloMassFunction:
     """Halo mass function dn/dM and halo bias, JAX-accelerated.
 
-    Computes σ(M) from the linear power spectrum at z=0 (normalized to sigma8
-    if provided), applies the linear growth factor for z-evolution, then
-    evaluates the chosen multiplicity function.
+    Computes σ(M) from the linear power spectrum at z=0, applies the linear
+    growth factor for z-evolution, then evaluates the chosen multiplicity
+    function.  The spectrum arrives already normalised -- its amplitude is
+    ``theta['ln10^{10}A_s']``, the package's only amplitude parameter.
 
     Parameters
     ----------
@@ -1003,6 +1059,11 @@ class HaloMassFunction:
         Overdensity threshold w.r.t. mean density (used by tinker08 and bias).
     n_k : int
         Number of points in the k integration grid.
+    pk_obj : object, optional
+        The backend object behind ``pk_func``, used only to let :meth:`sigma`
+        obtain the growth from the backend's own spectra.  Auto-detected from
+        ``pk_func.__self__`` for the usual bound-method form, so it rarely needs
+        passing explicitly.
     **fsigma_kwargs
         Extra keyword arguments forwarded to the multiplicity function via
         ``functools.partial`` at construction time.  Examples:
@@ -1019,11 +1080,21 @@ class HaloMassFunction:
         Delta: float = 200.0,
         n_k: int = 512,
         bias_model: str | None = None,
+        pk_obj=None,
         **fsigma_kwargs,
     ):
         if model not in _FSIGMA_MODELS:
             raise ValueError(f"model must be one of {list(_FSIGMA_MODELS)}, got '{model}'")
         self._pk = pk_func
+        # The backend *object* behind pk_func, so sigma() can ask it for its own
+        # growth (mode="pk_ratio") instead of falling back to the ODE.  Almost
+        # every caller passes a bound method (`pk_lin.pk_linear`), whose __self__
+        # is exactly that object -- so this costs no call-site changes.  The
+        # forecast passes `pk.as_hmf_pk_func()`, a closure with no __self__, and
+        # that is the right answer there: those closures ignore their z argument
+        # and return a z=0 shape, so their "growth" would be identically 1.
+        self._pk_obj = pk_obj if pk_obj is not None else getattr(pk_func, "__self__", None)
+        self._growth_cache: dict = {}
         self.rho_mean = float(rho_mean)
         self.model = model
         self.Delta = float(Delta)
@@ -1063,41 +1134,131 @@ class HaloMassFunction:
         r = (3.0 * m_h / (4.0 * jnp.pi * rho_mean)) ** (1.0 / 3.0)
         return jax.vmap(_s2_single)(r)
 
+    # -- cold (CDM + baryon) sector ------------------------------------
+    # Neutrinos count in Omega_m but do not cluster into halos, so sigma(M),
+    # dn/dM and b(M) are built from the cold field: the Lagrangian radius uses
+    # rho_cb, and the spectrum is P_cb rather than P_m.  Both reduce exactly to
+    # the total-matter quantities when sum_mnu is absent or zero, so every
+    # massless call path stays bit-identical to before.
+
+    @staticmethod
+    def _rho_cold(theta: dict):
+        """Mean comoving *cold* density [(Msun/h)/(Mpc/h)^3]."""
+        if "sum_mnu" not in theta:
+            return theta["Omega_m"] * _RHO_CRIT0
+        return omega_cb(theta) * _RHO_CRIT0
+
+    def _cold_factor(self, theta: dict, z=0.0):
+        r"""Convert the backend's :math:`P_{\rm m}(k,0)` to the cold spectrum.
+
+        The backend supplies :math:`P_{\rm m}(k,0;f_\nu) = P_{\rm m}(k,0;0)\,
+        S_{\rm m}(k,0)`, and what is wanted is :math:`P_{\rm cb}(k,z)/D^2(z) =
+        P_{\rm m}(k,0;0)\,S_{\rm cb}(k,z)`, since the growth factor is applied
+        separately.  The factor is therefore :math:`S_{\rm cb}(k,z)/
+        S_{\rm m}(k,0)` -- note the two different redshifts.  Freezing both at
+        zero, as this did at first, drops the redshift evolution of the
+        cold-to-total ratio: 1.0091 at z=0 against 1.0152 at z=3, so
+        :math:`\sigma` would be low by 0.3% there.  Exactly 1 in the massless
+        limit either way.
+        """
+        if "sum_mnu" not in theta:
+            return 1.0
+        from hod_mod.core import nu_ratio          # deferred: reads the npz
+        return (nu_ratio.suppression_cb(self._k_int, theta, z)
+                / nu_ratio.suppression_m(self._k_int, theta, 0.0))
+
+    def _growth(self, z, theta: dict):
+        """D(z)/D(0) for this backend, memoised on (theta, z).
+
+        The growth is a scalar function of (theta, z), but ``dndm`` calls
+        ``sigma`` three times at the same (theta, z) for its
+        d ln sigma/d ln M finite difference and ``bias`` calls it once more.
+        With ``mode="pk_ratio"`` each of those re-evaluates the backend at *two*
+        redshifts, so an uncached growth turns one halo-model redshift from 4
+        backend evaluations into 12 -- and against CAMB, at ~2.4 s a solve, that
+        is the whole wall clock.
+
+        Cached only when every value is concrete: under ``jit`` the entries are
+        tracers with no usable identity, and there the cache is skipped and XLA's
+        own common-subexpression elimination does the same job.
+        """
+        # The mode belongs in the key.  $HOD_MOD_GROWTH is read per call, so a
+        # cache keyed only on (theta, z) would keep serving pk_ratio values after
+        # someone switched to carroll -- silently, and exactly when they were
+        # trying to compare the two.  tests/test_growth.py caught this.
+        from hod_mod.core.growth import resolve_mode
+        key = _concrete_cosmo_key(z, theta)
+        if key is None:                       # traced: let XLA handle it
+            return growth_factor(z, theta, pk=self._pk_obj, variant="total")
+        key = (resolve_mode(), key)
+        if key not in self._growth_cache:
+            if len(self._growth_cache) > 512:  # bound it; MCMC walks cosmologies
+                self._growth_cache.clear()
+            self._growth_cache[key] = growth_factor(
+                z, theta, pk=self._pk_obj, variant="total")
+        return self._growth_cache[key]
+
     def sigma(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
         """RMS linear density fluctuation σ(M, z) [dimensionless].
 
-        Computed at z=0 from the linear power spectrum, optionally rescaled to
-        match ``theta['sigma8']`` (needed when ``pk_func`` returns shape-only
-        spectra such as ``eisenstein_hu_pk``), then multiplied by the growth
-        factor D(z)/D(0):
+        Computed at z=0 from the linear power spectrum, converted to the cold
+        field, then multiplied by the growth factor D(z)/D(0):
 
         .. math::
 
-            \\sigma(M, z) = \\sigma(M, 0) \\times D(z) / D(0)
+            \\sigma(M, z) = \\sigma_{\\rm cb}(M, 0)\\,
+                            \\bigl[S_{\\rm cb}(k,z)/S_{\\rm m}(k,0)\\bigr]^{1/2}
+                            \\times D(z) / D(0)
+
+        .. warning::
+
+           **The growth here is deliberately the TOTAL-matter growth, and must
+           stay that way.**  It looks wrong -- σ is built on the *cold* field, so
+           the cold growth D_cb(z) looks like the right partner.  It is not.
+           :meth:`_cold_factor` returns :math:`S_{\\rm cb}(k,z)/S_{\\rm m}(k,0)`,
+           whose numerator already carries the full redshift evolution of the
+           cold-to-total ratio; that *is* the cold/total growth difference.
+           Passing ``variant="cold"`` to the growth call below while leaving
+           ``_cold_factor(theta, z)`` in place applies that evolution twice --
+           about +0.3 % in σ at z = 3, Σm_ν = 0.06 eV, the same size as the bug
+           dfa65e8 fixed and in the opposite direction.  Change one only by
+           changing both.
+
+        .. note::
+
+           σ(M, z) is **not** separable as σ(M, 0)·D(z) once Σm_ν > 0, precisely
+           because ``_cold_factor`` carries a redshift.  Massless it is exact to
+           2e-16.  A multi-z caller may hoist the k-integral only on the massless
+           path; ``tests/test_growth.py::TestGrowthRegressionPin`` pins both.
 
         Parameters
         ----------
         m_h : jnp.ndarray  Halo masses [M_sun/h].
         z : float  Redshift.
-        theta : dict  Cosmological parameters.  ``Omega_m`` required.
-                      ``sigma8`` optional — triggers amplitude normalisation.
+        theta : dict  Cosmological parameters.  ``Omega_m`` and
+                      ``ln10^{10}A_s`` required.
         """
-        omega_m = theta["Omega_m"]
-        growth = growth_factor(z, theta)   # CPL ODE if theta carries w0/wa
+        require_as_amplitude(theta, "HaloMassFunction.sigma")
+        # variant="total" on purpose -- see the warning above.  Passing the
+        # backend object lets the default pk_ratio mode read D(z) off the very
+        # spectra the 2-halo term grows by, closing the last 2.2e-4 inconsistency
+        # between the two legs of the halo model.  When there is no object (the
+        # forecast's z-ignoring closures) this resolves to the growth ODE.
+        growth = self._growth(z, theta)
 
-        # Dynamic rho_mean so grad w.r.t. Omega_m flows correctly
-        rho_mean = omega_m * _RHO_CRIT0
+        rho_cold = self._rho_cold(theta)       # cold — defines the halo radius
 
-        pk_z0 = self._pk(self._k_int, 0.0, theta)
-        s2 = self._sigma2_z0(m_h, pk_z0, rho_mean)
-
-        # Sigma8 rescaling: normalise spectrum so σ(8 Mpc/h, z=0) = sigma8
-        if "sigma8" in theta:
-            R8 = 8.0  # Mpc/h
-            M8 = (4.0 / 3.0) * jnp.pi * R8**3 * rho_mean
-            s2_8 = self._sigma2_z0(jnp.array([M8]), pk_z0, rho_mean)[0]
-            rescale2 = theta["sigma8"] ** 2 / s2_8
-            s2 = s2 * rescale2
+        # A sigma8 rescale used to sit below this, re-normalising the spectrum so
+        # that sigma(8 Mpc/h, 0) matched theta["sigma8"].  It existed because the
+        # forecast backends handed this method an amplitude-*free* shape; their
+        # as_hmf_pk_func now returns the physical P(k, 0), so the amplitude
+        # arrives with the spectrum and there is one amplitude in the package
+        # rather than two competing for precedence.  It also needed the
+        # total-matter rho_mean = Omega_m * _RHO_CRIT0 as its anchor, which is
+        # why that local is gone too.
+        pk_z0 = self._pk(self._k_int, 0.0, theta)      # total matter
+        pk_cold = pk_z0 * self._cold_factor(theta, z)  # cold, at this z
+        s2 = self._sigma2_z0(m_h, pk_cold, rho_cold)
 
         return jnp.sqrt(s2) * growth
 
@@ -1122,7 +1283,7 @@ class HaloMassFunction:
         z : float  Redshift.
         theta : dict  Cosmological parameters.
         """
-        rho_mean = theta["Omega_m"] * _RHO_CRIT0
+        rho_mean = self._rho_cold(theta)   # cold: halos form from the cold field
 
         dlnm = 0.01
         sig_hi = self.sigma(m_h * jnp.exp(dlnm), z, theta)
@@ -1215,13 +1376,13 @@ class CsstHaloMassFunction:
         import numpy as np
         emu.set_cosmos(
             Omegab=float(theta["Omega_b"]),
-            Omegac=float(theta["Omega_cdm"]),
+            Omegac=float(omega_cdm(theta)),
             H0=float(theta["h"]) * 100.0,
             As=np.exp(float(theta["ln10^{10}A_s"])) * 1e-10,
             ns=float(theta["n_s"]),
             w=float(theta.get("w0", -1.0)),
             wa=float(theta.get("wa", 0.0)),
-            mnu=float(theta.get("mnu", 0.06)),
+            mnu=float(mnu_sum(theta)),
         )
 
     def dndm(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
@@ -1241,12 +1402,32 @@ class CsstHaloMassFunction:
         import numpy as np
         self._set_cosmos(self._pk_emu, theta)
         omega_m = float(theta["Omega_m"])
-        growth  = _growth_factor_flat_jax(z, omega_m)
+        # Through the package dispatcher, as HaloMassFunction.sigma does.  This
+        # hard-wired Carroll+1992, so a w0waCDM theta silently got LCDM growth --
+        # the same defect fixed in intrinsic_alignment and agn/ham.  No P(k)
+        # backend object is available here (the CSST emulator is not one of the
+        # package backends), so this resolves to the growth ODE.
+        growth  = growth_factor(z, theta, mode="ode")
         k_np    = np.asarray(self._k_int)
         # type='CAMB' is required — the CEmulator GP backend for PkLin has a
         # scikit-learn API incompatibility that causes predict() to return arrays.
         pk2d    = self._pk_emu.get_pklin(z=0.0, k=k_np, type="CAMB")
         pk_z0   = jnp.asarray(pk2d[0])
+
+        # Cold field, matching HaloMassFunction.sigma: haloes collapse out of
+        # CDM and baryons.  Both reduce to the stored total-matter values when
+        # sum_mnu is absent, so the massless path is unchanged.
+        rho_mean = self.rho_mean
+        if "sum_mnu" in theta:
+            from hod_mod.core import nu_ratio
+            rho_mean = omega_cb(theta) * _RHO_CRIT0
+            # S_cb(k, z) / S_m(k, 0) -- the two redshifts differ on purpose, and
+            # matching HaloMassFunction._cold_factor is the whole point.  Both
+            # were frozen at z = 0 here, which drops the redshift evolution of
+            # the cold-to-total ratio (1.0091 at z=0 against 1.0152 at z=3) and
+            # left sigma 0.3% low at the top of the grid.
+            pk_z0 = pk_z0 * (nu_ratio.suppression_cb(self._k_int, theta, z)
+                             / nu_ratio.suppression_m(self._k_int, theta, 0.0))
 
         @partial(jax.jit, static_argnums=())
         def _s2(m_h_arr, pk_arr):
@@ -1257,7 +1438,7 @@ class CsstHaloMassFunction:
                 w = 3.0 * (jnp.sin(x) - x * jnp.cos(x)) / x ** 3
                 return jnp.trapezoid(pk_arr * w ** 2 * k ** 2, k) / (2.0 * jnp.pi ** 2)
 
-            r = (3.0 * m_h_arr / (4.0 * jnp.pi * self.rho_mean)) ** (1.0 / 3.0)
+            r = (3.0 * m_h_arr / (4.0 * jnp.pi * rho_mean)) ** (1.0 / 3.0)
             return jax.vmap(_s2_single)(r)
 
         s2 = _s2(m_h, pk_z0)
@@ -1354,8 +1535,8 @@ class AemulusNuHaloMassFunction:
             "H0":         h * 100.0,
             "w0":         float(theta.get("w0", -1.0)),
             "ombh2":      float(theta["Omega_b"])   * h**2,
-            "omch2":      float(theta["Omega_cdm"]) * h**2,
-            "nu_mass_ev": float(theta.get("mnu", 0.0)),
+            "omch2":      float(omega_cdm(theta)) * h**2,
+            "nu_mass_ev": float(mnu_sum(theta)),
         }
 
     def dndm(self, m_h: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
@@ -1415,6 +1596,7 @@ def make_hmf(
     pk_func=None,
     rho_mean: float = _RHO_MEAN_PLANCK18,
     Delta: float = 200.0,
+    pk_obj=None,
     **fsigma_kwargs,
 ):
     """Return a HaloMassFunction (or emulator wrapper) for the requested backend.
@@ -1462,4 +1644,5 @@ def make_hmf(
         )
     if pk_func is None:
         raise ValueError("pk_func is required for analytic backends")
-    return HaloMassFunction(pk_func, rho_mean=rho_mean, model=backend, Delta=Delta, **fsigma_kwargs)
+    return HaloMassFunction(pk_func, rho_mean=rho_mean, model=backend, Delta=Delta,
+                            pk_obj=pk_obj, **fsigma_kwargs)

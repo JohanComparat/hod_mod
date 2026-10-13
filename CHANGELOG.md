@@ -4,6 +4,348 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: one amplitude parameter, `ln10^{10}A_s`
+
+**`sigma8` and `S8` are no longer parameters.** They are derived quantities,
+computed from a normalised spectrum a posteriori with
+`hod_mod.core.amplitude.sigma8_from_theta` / `s8_from_theta`.
+
+The package carried two amplitude conventions at once and nothing reconciled
+them. CAMB, CLASS and the CSST emulator read `ln10^{10}A_s` and *silently
+ignored* a `sigma8`. `EisensteinHu98PkLinear.pk_linear` was sigma8-only, with no
+A_s branch at all. `CosmoPowerJaxPkLinear` branched on `sigma8` **first**. Which
+physics ran was decided by whether a YAML file happened to contain a key -- and
+the two branches are not the same physics: the A_s branch asks the backend for
+`P(k, z)` and gets the backend's own growth, while the sigma8 branch built
+`shape x sigma8^2/sigma8_shape^2 x D^2(z)` and got the growth ODE.
+
+**Every `use_free_cosmo` fit was affected.** `fitting/config.py` added an
+`ln10^{10}A_s` derived from a YAML `sigma8` without removing the `sigma8`;
+`_theta_cosmo_call` then updated only `ln10^{10}A_s` on an `S8` step; and both
+the backend and the mass function preferred `sigma8`. So the sampled `S8` moved
+nothing. `S8 = 0.70 -> 0.90` moves `ln10As 2.71659 -> 3.21922`, a 65 % intended
+amplitude change, and `P_lin(k,z)` and `sigma(M,z)` come out **bit-identical**.
+The 12 lange2025 free-cosmology fits on disk each recovered
+`S8 = 0.8320000047` against a prior mean of 0.832 -- eight significant figures,
+which is what a flat likelihood looks like. The "known issue" in
+`docs/benchmark_lange2025.rst`, that the optimiser pulled to Planck rather than
+the published DESI value, was not a tension. It was an inert parameter.
+
+- **`hod_mod/core/amplitude.py`** is the new home: the canonical
+  `sigma2_tophat` (five literal transcriptions of those three lines existed),
+  `sigma8_from_pk`, `sigma8_from_theta`, `s8_from_theta`, and
+  `require_as_amplitude`. It imports only `jax.numpy`, so it cannot close the
+  `core -> forecast` cycle and both sides can use it.
+- **`require_as_amplitude` guards seven entry points** -- the five backends'
+  `pk_linear`, `HaloMassFunction.sigma`, and `growth._as_amplitude_theta`.
+  `ValueError` for a retired key, `KeyError` for a missing amplitude.
+- **`as_hmf_pk_func` now returns the physical `P(k, 0)`,** not a shape. This is
+  the coupled half: `HaloMassFunction.sigma`'s sigma8 rescale existed *because*
+  the forecast backends handed it an amplitude-free shape. An HMF built on
+  `as_hmf_pk_func` and one built on `pk_linear(k, 0, theta)` now agree exactly.
+- **EH98 goes through `eisenstein_hu_pk_phys` directly.** That also fixes a
+  latent bug: `eisenstein_hu_pk` normalises itself by `P(0.05)` interpolated on
+  the *caller's* k grid, while the sigma8 denominator was always evaluated on
+  `_K_INT`, so the amplitude was wrong by the ratio of the two pivots whenever
+  the grids differed.
+- **Forecast vector:** `PARAM_NAMES` index 1 renamed **in place**, since six
+  tests pin `PARAM_NAMES` slices by index. Bounds `(1.61, 3.91)` = the
+  CosmoPower training box; Planck width 0.014, which is both the published value
+  and the exact propagation of the 0.0060 it replaces.
+- **`hod_mod/forecast/derived.py`** propagates sigma8/S8 Fisher errors through
+  `jax.grad`. Note `sigma(S8)` legitimately changes: the two `_s8_sigma` helpers
+  it replaces were **correct in their own basis**, where sigma8 was a Fisher
+  coordinate and the correlation lived in `cov`. Once sigma8 is derived the
+  *total* derivative applies (3.324 against 1.314 at Planck-2018). A different
+  derivative, not a corrected one -- so `sigma(sigma8)` should reproduce the
+  published number and `sigma(S8)` need not.
+- **50 config blocks migrated**: 37 `cosmology:` blocks name the amplitude
+  directly, with the original sigma8 in a comment; 13 fits sample
+  `ln10^{10}A_s` flat on `[2.0, 3.9]` instead of `S8` with a Planck prior.
+  Measuring an amplitude from data means not putting a prior on it. `load_config`
+  now raises on a retired key, and names the exact `ln10^{10}A_s` to substitute.
+  This also removes a CAMB solve from config-load time.
+
+**Fixed in passing, and it would have been invisible.** `eisenstein_hu_pk_phys`
+computed `D(z=0)` with `ol = 1.0 - om` -- flat LambdaCDM, no `w0`, no `wa`.
+Harmless while sigma8 pinned the z=0 amplitude and divided it straight back out.
+Under A_s it *is* the absolute amplitude, so it would have made
+`dsigma8/dw0` and `dsigma8/dwa` **identically zero** while both are free
+parameters in `SECTORS["cosmology"]` -- a Fisher matrix with two structurally
+blind directions and nothing in the output saying so.
+`core.growth.growth_d0_eds` now returns the exact LambdaCDM quadrature corrected
+by the CPL/LambdaCDM ratio of the growth ODE. At `(w0, wa) = (-1, 0)` the result
+is bit-identical through `eisenstein_hu_pk_phys` in float32 and float64;
+`dsigma8/dw0` goes from exactly 0.0 to -0.2076.
+
+**Migration.** Replace a `sigma8` in any `theta` or `cosmology:` block with the
+equivalent `ln10^{10}A_s` -- `hod_mod.fitting.config._sigma8_to_lnAs` converts,
+and the guard's error message quotes the value for you. `Cosmology` no longer
+takes `sigma8`, which **changes its positional signature**: construct with
+keywords. `make_hmf`/`HaloMassFunction` lose their inert `rho_mean` argument.
+
+### Fixed: free-cosmology predictions ignored the sampled cosmology (referee A20)
+
+`predict_wp`, `predict_ds` (both fitters) and `predict_ng` passed
+`self.theta_cosmo` -- the fiducial -- to the predictor instead of
+`_theta_cosmo_call(params)`, so under `use_free_cosmo` they returned the same
+curve for every cosmology in the chain.
+
+The likelihood and the optimiser were always right, so **stored chi2 and
+parameter tables are sound**; it is the plotted MAP curves that were not. On the
+stored lange2025 results the drawn curve is off by up to 8.9 % (`bgs2_bwpd_wp`)
+and 20.3 % (`lrg2_bwpd_wp`), with a real chi2 up to 5.7x the printed one.
+`benchmark_plots.mcmc_bands` would also have published credible bands with
+exactly zero width from the cosmological direction -- latent, since all 12
+configs are `method: map`, but live the moment any is run with `--mcmc`.
+Figures regenerate with `run_benchmark.py --plot-only`; no refit.
+
+The other half of A20, "free `h` is unwired", was worse than reported: `h`,
+`n_s`, `Omega_b`, `w0`, `wa` and `sum_mnu` were **all** unwired, because
+`_theta_cosmo_call` pattern-matched exactly `Omega_m` and `S8`. Such a parameter
+is a flat direction with zero likelihood gradient, so a chain random-walks it and
+the *prior* gets reported as a constraint. It is now a whitelist that raises on
+an unrecognised cosmological name.
+
+Still open, and stated rather than left silent: `HaloProfile.__init__` ignores
+its `cosmo_params` and calls `setCosmology("planck18")` unconditionally, so with
+the default `cm_relation='diemer19'` the free-cosmology response is incomplete by
+7-13 % in `c(M)`.
+
+### Fixed: a lazily-imported module leaked a tracer out of `jax.jit`
+
+`core/growth.py` built its wavenumber grid with `jnp.logspace` at module scope,
+and is imported *lazily*. When that first import happened inside a `jax.jit`
+trace -- `c_bhattacharya13` is jitted and reaches `growth_factor` through
+`HaloMassFunction.sigma` -- the module body was staged into the trace and the
+grid escaped as a leaked tracer, taking `ConcentrationModel("bhattacharya13")`
+with it. The grids now live in `core/amplitude.py`, which
+`core/halo_mass_function.py` imports at module scope, so they are built at
+package-import time. Pinned by
+`tests/test_growth.py::TestNoTracerLeakFromDeferredImport`.
+
+### Fixed: `omega_nu` required `h` to compute a quantity that was zero
+
+`omega_cb`/`omega_cdm` are called on cosmology dicts carrying only what their
+consumer needs -- `observables/baryon_fraction` is handed `{Omega_b, Omega_m}` --
+and `omega_nu` read `theta["h"]` unconditionally. It now returns `0.0` when there
+is no neutrino sector, branching on dict-key membership so it stays static under
+`jit`. Also: `fit_bgs_multiprobe.py` called `omega_cdm` without importing it, so
+every free-cosmology multiprobe fit died on its first likelihood call.
+
+### Changed: one growth factor, chosen on purpose
+
+The package computed the linear growth twice, by two different methods, and
+never checked that they agreed. `HaloMassFunction.sigma` evaluated the P(k)
+backend at z = 0 and multiplied by an analytic D(z); the 2-halo term asked the
+*same backend* for `pk_linear(k, z, theta)` and got the backend's own growth.
+Which analytic formula ran was decided by dictionary-key membership -- a `theta`
+carrying `w0`/`wa` got the CPL growth ODE, everything else got Carroll+1992 --
+so `default_cosmology()` and every YAML `cosmology:` block were on different
+growth models, with nothing in the output recording which.
+
+- **`hod_mod/core/growth.py`** is now the single home for D(z), with three named
+  routes: `pk_ratio` (default: read off the active backend's own spectra, so the
+  sigma leg and the 2-halo leg agree by construction), `ode` (flat-CPL RK4), and
+  `carroll` (kept only to reproduce pre-0.6 results). Selected by argument, then
+  `$HOD_MOD_GROWTH`, then the default. `variant="cold"|"total"` picks the field.
+- **The key-membership branch is gone.** `halo_mass_function.growth_factor` is a
+  thin forwarder; LambdaCDM now gets the accurate route too.
+
+  **This moves numbers.** Carroll was wrong by 1.8e-3 in D at Omega_m = 0.31 and
+  3.9e-3 at 0.24 -- an Omega_m-*dependent* error, so a free-cosmology fit could
+  not absorb it -- and `dln n/dln sigma` runs 10 to 24 across the mass grid, so
+  it amplifies to **1-3% in dn/dM** (0.7% in b^2, but only 0.03% in n_gal and
+  -0.27% in b_eff^2, so the effect on w_p is sub-percent). Results computed
+  before this are not comparable with results after it. `HOD_MOD_GROWTH=carroll`
+  reproduces the old numbers.
+- **Backends declare themselves.** `has_native_z` on all five, replacing a
+  class-name lookup table; `_CachedPkLinear` delegates it to what it wraps
+  (without that, free-cosmology fits -- the ones that pay for a Boltzmann solver
+  -- silently fell back to the ODE). `growth_pk_ratio` now refuses a backend
+  that declares `has_native_z = False` instead of raising `KeyError` from deep
+  inside EH98.
+- **Remaining Carroll bypassers routed:** `concentration.c_bhattacharya13` (now
+  takes an optional `theta`, so c(M,z) responds to w0/wa at all -- it could not
+  before) and `CsstHaloMassFunction.sigma`, which also still had the z-frozen
+  cold factor that dfa65e8 fixed in its sibling (sigma low by ~0.3% at z = 3,
+  Sigma m_nu = 0.06).
+- **A tripwire, because there was none.** Every sigma/dndm/bias assertion in the
+  suite is at z = 0, where D = 1 exactly in all three modes, and the tests that
+  reach z > 0 rebuild their reference through the same dispatcher, so a uniform
+  change cancels. A 1-3% shift in dn/dM sailed through the whole suite.
+  `tests/test_growth.py::TestGrowthRegressionPin` pins sigma, dn/dM and b at
+  z = 0.3 and 1.0, and asserts the pin has teeth by checking that Carroll moves
+  dn/dM by more than a percent.
+- `docs/growth_factor.rst` is the study: value, scale-dependence, derivative,
+  propagation, timing and a backend-evaluation ledger, regenerated by
+  `hod_mod/scripts/cosmology/growth_factor_study.py`. Five rows added to
+  `benchmarks/accuracy.json`, which had no D(z) entry at all.
+- Corrected along the way: `docs/cosmology.rst` printed the LambdaCDM quadrature
+  for D(z) as though it were what ran -- it never was. `docs/missing_physics.rst`
+  and `docs/missing_physics_implementation.rst` described the deleted
+  key-membership dispatcher. `tests/test_intrinsic_alignment.py` still called
+  `_linear_growth_factor` with a bare float at seven sites, four tests failing
+  since b47cc9a changed the signature.
+
+#### The result that mattered most
+
+Not the 1.8e-3 in the value: **Carroll's `dlnD/dOmega_m` is 9.8% wrong at
+z = 0.1**, 7.3% at z = 0.3, and its `dlnD/dw0` is *structurally zero* -- the
+formula has no dark-energy argument. That is the sensitivity a Fisher forecast
+differentiates through, and it is worst at exactly the redshifts BGS occupies.
+The accurate route costs ~50 microseconds against a 3.1 ms jitted forward model,
+so there was never a performance argument for the approximation.
+
+### Added: strict bounds on every forecast parameter
+
+A Gaussian prior width cannot say "never negative". With sigma = 0.25 eV about a
+0.06 eV fiducial, roughly 40% of the prior mass on `sum_mnu` sat below zero, and
+the forward model returned a number there rather than complaining. There were no
+bounds at all on the 111-parameter forecast vector -- only Gaussian precisions.
+
+- **`forecast/params.py::PARAM_BOUNDS`** gives every parameter a hard
+  `(lo, hi)`, each tagged `physical`, `definitional`, `validity` or `prior` so
+  that the difference between a law and a convention is explicit. The bounds are
+  the widest defensible choice: a bound that excludes a value the literature
+  reports, or that this package itself fits to, is a bug.
+- Helpers: `bounds_vector`, `bounds_pairs` (for `scipy.optimize`),
+  `bounds_violations`, `clip_to_bounds`, `log_prior_bounds`,
+  `perturb_inside_bounds`.
+- **Enforcement reaches the samplers.** `MultiProbeGaussianLikelihood.log_prior`
+  multiplies the Gaussian by the indicator of the box, `jnp.where`-selected so
+  the gradient inside is exactly the Gaussian one and NUTS rejects anything that
+  leaves it; the MAP optimiser gets the same box. `enforce_bounds=False` opts
+  out. `run_forecast_nuts` now passes the bounds to its MAP call and warns if
+  the result rails.
+- `sum_mnu` is bounded to [0, 0.4] eV. The upper bound is a *validity* limit:
+  above it the distilled table extrapolates flat off its f_nu grid and would
+  silently understate the suppression.
+- `tests/test_param_bounds.py` (24 tests) guards both directions -- every
+  parameter has a bound and every fiducial sits strictly inside it, *and* the
+  bounds admit the best-fit values in the shipped results tree. That second test
+  found two name collisions across parameter layouts, now recorded: the forecast
+  `beta_pressure` is a tilt on DPM's beta_P = 0.85 while the duty-cycle script
+  fits the absolute slope, and `_v2_pivotM1` results carry `kt_norm` under a
+  superseded pivot convention.
+- One fiducial sits on a bound by construction (`eta_w_norm`: the wind sector is
+  off by default and zero is also the physical wall). Such cases are declared in
+  `BOUNDARY_FIDUCIALS`; the suite fails if an undeclared one appears.
+
+### Fixed: the AGN k-correction returned NaN at Gamma = 2
+
+`_k_h2s` and `_agn_band_fractions` both evaluate `(a**p - b**p)` with
+`p = 2 - Gamma`, so at Gamma = 2 they compute 0/0 exactly, while being perfectly
+smooth on either side (0.81980 at 1.9999, 0.82005 at 2.0001). Gamma = 2 is an
+entirely ordinary photon index sitting 0.67 sigma from the fiducial, so this was
+a hole in the middle of the prior. Both now divide the removable zero out first,
+via an `expm1` form that stays accurate and differentiable through p = 0.
+
+### Fixed: the neutrino ratio table leaked a tracer
+
+`nu_ratio.load()` cached `jnp` arrays. When the first call happened inside a
+`jax.jit` trace -- which is what happens when the emulator is jitted before
+anything else touches the table -- the cached arrays carried that trace with
+them, and the next transformation died with `UnexpectedTracerError`. Gradients
+through the emulator were broken whenever jit came first. The cache now holds
+numpy; `jnp.asarray` at the point of use folds it into the jaxpr as a constant,
+which is also 1.6x faster eagerly.
+
+### Fixed: intrinsic alignment ignored w0/wa
+
+`intrinsic_alignment._linear_growth_factor` hard-wired the Carroll+1992 LCDM
+formula instead of the package-wide `growth_factor` dispatcher, so a w0waCDM fit
+silently used LCDM growth in the NLA amplitude: 1.5e-3 in D(z) at z = 0.2, and
+twice that in the D^-2 the amplitude carries. Caught by the paper's equation
+audit once the default dictionary started carrying w0/wa.
+
+### Fixed: the CSST mass function paired two definitions of sigma
+
+`CsstHaloMassFunction.sigma` kept a fixed total-matter density and the raw
+emulated spectrum, so its companion Tinker10 bias was evaluated on a different
+sigma(M) from the one its own dn/dM was trained against. It now takes the same
+cold-field path as `HaloMassFunction.sigma`.
+
+### Added: Sigma m_nu as a first-class parameter, and CLASS as the reference P(k)
+
+Neutrino mass was previously not a parameter of this package at all. The default
+cosmology dictionary had no neutrino key, and each backend substituted its own
+value: CAMB, HALOFIT and CSST assumed 0.06 eV, while Aemulus-nu, the forecast
+vector and the pytree `Cosmology` container assumed zero. Nothing ever wrote a
+key, so those defaults were what every run actually used.
+
+- **The density budget now closes.** `default_cosmology()` carries
+  `sum_mnu = 0.06` and `Omega_cdm = Omega_m - Omega_b - Omega_nu = 0.25928`.
+  It previously carried `0.2607`, i.e. `Omega_b + Omega_cdm == Omega_m` with no
+  room for neutrinos, while `LinearPowerSpectrum` let CAMB add its own 0.06 eV
+  on top — so the reference spectrum ran at `Omega_m ~ 0.3114` against a package
+  that used `0.3100` for rho_bar, `E(z)` and `D(z)`. New helpers `mnu_sum`,
+  `omega_nu`, `omega_cb` and `omega_cdm` in `core/power_spectrum.py` are the one
+  place this is computed.
+- **One key.** `sum_mnu` is canonical; `mnu` is a deprecated alias that warns
+  once. The four sites that read `mnu` (CSST P(k), CSST HMF, Aemulus-nu HMF,
+  the CSST non-linear path) were the only readers and had no writer.
+- **`Cosmology.to_theta()` no longer drops `sum_mnu`** — it silently returned a
+  massless dict for any `Cosmology(sum_mnu=...)`.
+- **The halo sector uses the cold field.** `sigma(M)`, `dn/dM` and `b(M)` are
+  built from the CDM+baryon spectrum with `rho_bar_cb`; `sigma8`, lensing, the
+  matter 2-halo term and halo mass definitions stay on total matter. At
+  0.06 eV this moves `dn/dM` by -0.7% at 1e11 Msun/h to +2.3% at 1e15.
+- **`ClassPkLinear`** (`HOD_MOD_PK_BACKEND=class`) is the new reference backend:
+  an independent Boltzmann solver that agrees with CAMB to 0.28% in shape, and
+  the only backend treating massive neutrinos exactly. It exposes the cold
+  spectrum via `pk_linear_cb` and caches its solver per cosmology, so extra
+  redshifts cost milliseconds. `classy` is an optional extra (`[reference]`).
+- **`core/nu_ratio.py`** ships `class_nu_ratio.npz`: CLASS-measured
+  `P_m(f_nu)/P_m(0)` and `P_cb(f_nu)/P_m(0)` on a `(f_nu, z, ln k)` grid,
+  differentiable via `jnp.interp`, exactly one at `f_nu = 0`.
+
+### Fixed: the massive-neutrino suppression saturated ~1.5 decades of k too early
+
+`_nu_suppression` used `1 - 8 f_nu * 0.5[1 + tanh(ln(k/k_nr)/1.5)]` centred on
+the non-relativistic scale `k_nr ~ 0.0014 h/Mpc`. The `-8 f_nu` asymptote was
+sound but the transition was not: measured against CLASS the form
+over-suppressed by ~2 percentage points at 0.06 eV and ~11 at 0.3 eV, across
+exactly the scales the mass function and the 2-halo term use. It is now read
+from the CLASS table. `test_nu_suppression_shape` only exercised 0.3 eV, where
+the error is least visible as a fraction; it now covers 0.06 eV too.
+
+### Fixed: the `sum_mnu` row of the CAMB/EH98 ratio table cancelled the signal
+
+`pk_camb_ratio.build()` passed CAMB a `"mnu"` key that `LinearPowerSpectrum`
+never read, so both finite-difference steps ran at the same neutrino mass and
+`d ln P_CAMB / d sum_mnu` was identically zero. The stored row was therefore
+exactly minus the EH98 suppression — `max|dlnR/dSigma m_nu| = 0.6142` against
+the analytic `8 f_nu / Sigma m_nu = 0.6106`. Under
+`pk_correction="camb_linear"` this **cancelled** the neutrino response of the
+linear shape to first order instead of making it CAMB-accurate. Rebuilt: the
+row is now 0.055. `test_camb_ratio_correction` asserted only the row *names*,
+which is why this stood.
+
+### Fixed: the P(k) caches could serve a spectrum from the wrong cosmology
+
+`_CachedPkLinear` and `CachedPkNonlinear` keyed on `(z, Omega_m, ln10As, h)`
+only. A free-cosmology chain that varied `Omega_b`, `n_s`, `w0`/`wa` — or now
+`sum_mnu` — was silently handed a cached spectrum computed at a different
+cosmology. All of those are in the key now. The three verbatim copies of
+`_CachedPkLinear` (`fitting/fitters.py`, `fit_bgs_multiprobe.py`,
+`plot_wp_survey.py`) are down to one; the scripts import it.
+
+### Changed
+
+- The forecast fiducial `sum_mnu` moves from 0.0 to 0.06 eV (`params.py`,
+  `forward_jax._FIXED_COSMO`), so tier-2/3/4 forecast numbers shift.
+- `HALOFITSpectrum` and `WHMSpectrum` now pass the neutrino mass to CAMB;
+  HALOFIT additionally gained the `w0`/`wa` it was silently dropping.
+- The accuracy budget's reference for `P_lin(k)` is CLASS rather than CAMB, and
+  it gained a `P_cb/P_m table` row checking the shipped npz against a live
+  solve. `P_lin(k) shape, CAMB` and `P_cb/P_m table` are now in `_MUST_COVER`,
+  so a classy-less environment can no longer drop them unnoticed.
+
+**Not bit-comparable.** Results produced before this change differ. Setting
+`sum_mnu = 0.0` explicitly recovers the massless behaviour exactly: every
+correction added here is the identity at zero neutrino mass.
+
 ### Fixed: `--ecf` ran every fit with no AGN component
 
 - **The S1 anchor was measured by a non-negative solve that clipped to zero.**

@@ -40,8 +40,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .power_spectrum import rho_critical_0, eisenstein_hu_pk
-from .halo_mass_function import _growth_factor_flat_jax
+from .power_spectrum import rho_critical_0, eisenstein_hu_pk, omega_cb
+from .halo_mass_function import growth_factor
 
 _RHO_CRIT0 = rho_critical_0()  # (Msun/h)/(Mpc/h)³
 
@@ -261,6 +261,7 @@ def c_bhattacharya13(
     omega_m: float,
     z: float,
     mdef: str = "200c",
+    theta: dict = None,
 ) -> jnp.ndarray:
     r"""Concentration–mass relation of Bhattacharya et al. 2013 (WMAP7).
 
@@ -295,6 +296,11 @@ def c_bhattacharya13(
         Redshift (static in JIT).
     mdef : str
         Mass definition: ``'200c'``, ``'vir'``, or ``'200m'`` (static in JIT).
+    theta : dict, optional
+        Full cosmology dict.  Preferred over ``omega_m`` alone: it lets the
+        growth factor see ``w0``/``wa``, which a bare Omega_m cannot.  Falls
+        back to ``{'Omega_m': omega_m}`` when omitted, so existing positional
+        callers keep working unchanged.
 
     Returns
     -------
@@ -316,7 +322,16 @@ def c_bhattacharya13(
     else:
         raise ValueError(f"mdef must be '200c', 'vir', or '200m', got {mdef!r}")
 
-    D = _growth_factor_flat_jax(z, omega_m)
+    # Through the package dispatcher rather than the Carroll+1992 formula this
+    # used to hard-wire.  With no P(k) backend to hand the dispatcher resolves to
+    # the growth ODE, which is 1.8e-3 closer to exact at Omega_m = 0.31 and, when
+    # ``theta`` carries w0/wa, actually responds to them -- the old call could
+    # not, so a w0waCDM fit silently got LCDM concentrations.  D enters as
+    # D**alpha with alpha <= 1.15, so the shift in c is sub-permille, far inside
+    # this model's own ~30% scatter; the point is not having two growth models in
+    # one pipeline, not the size of the move.
+    D = growth_factor(z, theta if theta is not None else {"Omega_m": omega_m},
+                      mode="ode", variant="total")
     nu = 1.686 / sigma
     return K * D**alpha * nu**beta
 
@@ -355,7 +370,9 @@ def _neff_eisenstein_hu(m_h: jnp.ndarray, theta: dict,
     -------
     n_eff : jnp.ndarray, shape (NM,), effective slope (typically −3 to 0)
     """
-    rho_m = _RHO_CRIT0 * theta["Omega_m"]
+    # Cold density, to match the Lagrangian radius sigma(M) is built on.
+    rho_m = _RHO_CRIT0 * (omega_cb(theta) if "sum_mnu" in theta
+                          else theta["Omega_m"])
     m = jnp.asarray(m_h)
     R = (3.0 * m / (4.0 * jnp.pi * rho_m)) ** (1.0 / 3.0)     # Mpc/h
     k_R = kappa * 2.0 * jnp.pi / R                             # h/Mpc
@@ -531,7 +548,8 @@ class ConcentrationModel:
         omega_m = float(theta["Omega_m"])
         sigma = self._hmf.sigma(m_h, float(z), theta)
         if self.model == "bhattacharya13":
-            return c_bhattacharya13(m_h, sigma, omega_m, float(z), self.mdef)
+            return c_bhattacharya13(m_h, sigma, omega_m, float(z), self.mdef,
+                                    theta=theta)
         # diemer15
         n_eff = _neff_eisenstein_hu(m_h, theta)
         return c_diemer15(m_h, sigma, n_eff, omega_m, float(z), self.statistic)

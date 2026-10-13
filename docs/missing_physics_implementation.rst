@@ -161,8 +161,11 @@ integrated by a fixed-grid RK4 through ``jax.lax.scan`` (160 steps from
 :math:`\ln a = -7`; jit/vmap/jacfwd-safe, no extra dependency) with the
 matter-domination growing mode :math:`D \propto a` as the initial condition
 (:func:`~hod_mod.core.halo_mass_function._growth_factor_cpl_jax`).  The
-dispatcher :func:`~hod_mod.core.halo_mass_function.growth_factor` selects it
-whenever the cosmology dict carries a ``w0``/``wa`` key; at
+dispatcher :func:`~hod_mod.core.growth.growth_factor` selects it whenever no
+P(k) backend is available to read the growth off directly.  (Until 0.6 the
+branch was on *dictionary-key membership* — a ``w0``/``wa`` key got the ODE and
+everything else got Carroll+1992 — which handed YAML-configured and
+code-configured fits two different growth models; see :doc:`growth_factor`.)  At
 :math:`(w_0, w_a) = (-1, 0)` it reproduces the Carroll et al. (1992) fitting
 formula to a few :math:`\times 10^{-4}` and the exact ΛCDM quadrature
 :math:`D \propto E \int {\rm d}a\,(aE)^{-3}` to <0.2% (both tested).  The CPL

@@ -30,12 +30,19 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
+from hod_mod.core.power_spectrum import (
+    LinearPowerSpectrum as _LPS)
+
+_default_cosmology = _LPS.default_cosmology
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _OUT = os.path.normpath(os.path.join(_HERE, "..", "..", "benchmarks", "accuracy.json"))
 
 Z = 0.2
-THETA = {"Omega_m": 0.3100, "Omega_b": 0.0493, "Omega_cdm": 0.2607,
-         "h": 0.6736, "n_s": 0.9649, "ln10^{10}A_s": 3.044, "sigma8": 0.8111}
+# The package default, with the budget closed: Omega_cdm = Om - Ob - Onu.
+# It already carries ln10^{10}A_s = 3.044; a sigma8 used to be injected on top,
+# which made this THETA carry two amplitudes and take the retired branch.
+THETA = dict(_default_cosmology())
 
 
 def _entry(quantity, reference, deviation, tolerance, metric, note,
@@ -123,45 +130,75 @@ def check_concentration_and_bias():
 
 
 def check_power_spectrum():
-    """Linear P(k) shape: the differentiable backends against CAMB, and CLASS against CAMB."""
+    """Linear P(k): every backend against the CLASS reference, plus the nu table."""
     out = []
     from hod_mod.core.power_spectrum import LinearPowerSpectrum, eisenstein_hu_pk
     k = np.logspace(-3, 1, 200)
     kj = jnp.array(k)
     i0 = int(np.argmin(abs(k - 0.05)))
     nrm = lambda p: np.asarray(p) / np.asarray(p)[i0]
-    ref = nrm(LinearPowerSpectrum().pk_linear(kj, 0.0, THETA))
+
+    # CLASS is the reference: an independent Boltzmann solver, and the only
+    # backend here that treats massive neutrinos exactly.  When classy is not
+    # installed the reference falls back to CAMB -- recorded in each row's
+    # "reference" field, so which solver was used is never implicit.
+    cl = None
+    try:
+        from hod_mod.core.power_spectrum import ClassPkLinear
+        cl = ClassPkLinear()
+        ref = nrm(cl.pk_linear(kj, 0.0, THETA))
+        ref_name = "CLASS"
+    except Exception:
+        ref = nrm(LinearPowerSpectrum().pk_linear(kj, 0.0, THETA))
+        ref_name = "CAMB"
+
+    if ref_name == "CLASS":
+        d = float(np.max(np.abs(nrm(LinearPowerSpectrum().pk_linear(kj, 0.0, THETA)) / ref - 1)))
+        out.append(_entry("P_lin(k) shape, CAMB", "CLASS", d, 0.02, "max |ratio-1|",
+                          "two Boltzmann solvers at matched N_eff and "
+                          "Sigma m_nu; bounds the reference's own error"))
+    else:
+        out.append(_entry("P_lin(k) shape, CAMB", "CLASS", None, 0.02,
+                          "max |ratio-1|", "unavailable: classy not installed",
+                          "skipped"))
+
     try:
         from hod_mod.forecast.pk_cosmopower import CosmoPowerJaxPkLinear
         d = float(np.max(np.abs(nrm(CosmoPowerJaxPkLinear().pk_shape(kj, THETA)) / ref - 1)))
-        out.append(_entry("P_lin(k) shape, CosmoPower-JAX", "CAMB", d, 0.05,
+        out.append(_entry("P_lin(k) shape, CosmoPower-JAX", ref_name, d, 0.05,
                           "max |ratio-1|",
-                          "normalised at k=0.05 h/Mpc; residual is the "
-                          "massless-neutrino training convention"))
+                          "normalised at k=0.05 h/Mpc; the emulator is trained "
+                          "massless and is corrected by the CLASS nu table"))
     except Exception as e:
-        out.append(_entry("P_lin(k) shape, CosmoPower-JAX", "CAMB", None, 0.05,
+        out.append(_entry("P_lin(k) shape, CosmoPower-JAX", ref_name, None, 0.05,
                           "max |ratio-1|", f"unavailable: {type(e).__name__}", "skipped"))
+
     d = float(np.max(np.abs(nrm(eisenstein_hu_pk(kj, THETA)) / ref - 1)))
-    out.append(_entry("P_lin(k) shape, EH98", "CAMB", d, 0.06, "max |ratio-1|",
+    out.append(_entry("P_lin(k) shape, EH98", ref_name, d, 0.06, "max |ratio-1|",
                       "oscillating acoustic-feature error of a fitting formula"))
-    try:
-        from classy import Class
-        h = THETA["h"]
-        c = Class()
-        c.set({"output": "mPk", "P_k_max_h/Mpc": 20.0, "h": h,
-               "omega_b": THETA["Omega_b"] * h ** 2,
-               "omega_cdm": THETA["Omega_cdm"] * h ** 2,
-               "n_s": THETA["n_s"], "ln10^{10}A_s": THETA["ln10^{10}A_s"],
-               "N_ncdm": 1, "m_ncdm": 0.06, "N_ur": 2.0328})
-        c.compute()
-        pc = np.array([c.pk_lin(kk * h, 0.0) * h ** 3 for kk in k])
-        c.struct_cleanup(); c.empty()
-        d = float(np.max(np.abs(nrm(pc) / ref - 1)))
-        out.append(_entry("P_lin(k) shape, CAMB", "CLASS", d, 0.02, "max |ratio-1|",
-                          "two Boltzmann solvers; bounds the reference's own error"))
-    except Exception as e:
-        out.append(_entry("P_lin(k) shape, CAMB", "CLASS", None, 0.02,
-                          "max |ratio-1|", f"unavailable: {type(e).__name__}", "skipped"))
+
+    # The distilled cold/total table against a live CLASS solve: this is what
+    # sigma(M) and the mass function are built on.
+    if cl is not None:
+        try:
+            from hod_mod.core.nu_ratio import suppression_cb, suppression_m
+            th = dict(THETA, sum_mnu=0.30)      # amplify the effect ~5x
+            live = (np.asarray(cl.pk_linear_cb(kj, 0.0, th))
+                    / np.asarray(cl.pk_linear(kj, 0.0, th)))
+            tab = (np.asarray(suppression_cb(kj, th))
+                   / np.asarray(suppression_m(kj, th)))
+            d = float(np.max(np.abs(tab / live - 1)))
+            out.append(_entry("P_cb/P_m table", "CLASS", d, 0.005, "max |ratio-1|",
+                              "shipped class_nu_ratio.npz vs a live solve at "
+                              "Sigma m_nu = 0.30 eV"))
+        except Exception as e:
+            out.append(_entry("P_cb/P_m table", "CLASS", None, 0.005,
+                              "max |ratio-1|", f"unavailable: {type(e).__name__}",
+                              "skipped"))
+        cl.clear_cache()
+    else:
+        out.append(_entry("P_cb/P_m table", "CLASS", None, 0.005, "max |ratio-1|",
+                          "unavailable: classy not installed", "skipped"))
     return out
 
 
@@ -277,10 +314,120 @@ def check_aum():
     ]
 
 
+def check_growth():
+    """D(z)/D(0): every route against the ones that can arbitrate it.
+
+    Four independent references, because no single one settles it:
+
+    * **exact flat-LCDM quadrature** -- ``D(a) ~ E(a) int da/(aE)^3``, plain
+      numpy on a fine grid.  Arbitrates the analytic routes in LCDM, and shares
+      no implementation with what it checks.
+    * **the backend P(k) ratio** -- what the 2-halo term actually grows by.  The
+      ODE agreeing with it is what makes the two legs of the halo model
+      consistent, which is the whole point of the dispatcher.
+    * **the k-spread of that ratio** -- recorded as informational because it is
+      not an error at all: with massive neutrinos the growth genuinely *is*
+      scale-dependent, and the number says how well a *scalar* D(z) is even
+      defined.  At Sigma m_nu = 0.06 it is 3.4e-3, an order of magnitude above
+      the ODE's own error -- so above that mass the choice of scalar route stops
+      being the dominant question.
+    * **Carroll+1992** -- carried as informational, not because anything should
+      use it, but so the budget records what the pre-0.6 default cost.
+    """
+    from hod_mod.core import growth as G
+    from hod_mod.core.halo_mass_function import _growth_factor_cpl_jax
+    from hod_mod.core.power_spectrum import default_pk_linear
+
+    zs = np.array([0.1, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0, 3.0])
+    om = float(THETA["Omega_m"])
+
+    # exact flat-LCDM growing mode, by quadrature
+    a = np.linspace(1e-6, 1.0, 400001)
+    e = np.sqrt(om / a ** 3 + 1.0 - om)
+    d = e * (np.cumsum(1.0 / (a * e) ** 3) * (a[1] - a[0]))
+    exact = np.interp(1.0 / (1.0 + zs), a, d / d[-1])
+
+    th_lcdm = {kk: vv for kk, vv in THETA.items() if kk != "sum_mnu"}
+    ode = np.asarray(_growth_factor_cpl_jax(jnp.asarray(zs), om, -1.0, 0.0))
+    car = np.array([float(G.growth_factor(z, th_lcdm, mode="carroll")) for z in zs])
+    d_ode_max, d_ode_med = _dev(ode, exact)
+    d_car_max, d_car_med = _dev(car, exact)
+
+    out = [
+        _entry("D(z), growth ODE", "exact flat-LCDM quadrature",
+               d_ode_max, 3e-4, "max |ratio-1|",
+               "z in [0.1, 3], Omega_m = 0.31; RK4 on 160 ln-a steps",
+               deviation_median=d_ode_med),
+        _entry("D(z), Carroll+1992", "exact flat-LCDM quadrature",
+               d_car_max, None, "max |ratio-1|",
+               "informational: the pre-0.6 default, kept only for reproducing "
+               "old results.  The error is Omega_m-dependent (3.9e-3 at 0.24, "
+               "5.5e-4 at 0.40), so a free-cosmology fit cannot absorb it",
+               deviation_median=d_car_med),
+    ]
+
+    try:
+        pk = default_pk_linear()
+    except Exception as e:
+        out.append(_entry("D(z), growth ODE", "backend P(k) ratio", None, 1e-3,
+                          "max |ratio-1|", f"backend unavailable: {e}", "skipped"))
+        return out
+
+    rat = np.array([float(G.growth_pk_ratio(z, th_lcdm, pk)) for z in zs])
+    r_max, r_med = _dev(ode, rat)
+    out.append(_entry(f"D(z), growth ODE", f"P(k) ratio, {type(pk).__name__}",
+                      r_max, 1e-3, "max |ratio-1|",
+                      "the consistency that matters: sigma(M) and the 2-halo "
+                      "P_lin must grow by the same number",
+                      deviation_median=r_med))
+
+    # how well-defined is a scalar D(z)?  informational by nature.
+    k = jnp.logspace(-3.0, 1.0, 128)
+    for mnu in (0.0, 0.06):
+        th = dict(th_lcdm)
+        if mnu > 0:
+            th["sum_mnu"] = mnu
+        tas = G._as_amplitude_theta(th)
+        spread = 0.0
+        for z in (1.0, 3.0):
+            dk = np.sqrt(np.asarray(pk.pk_linear(k, float(z), tas))
+                         / np.asarray(pk.pk_linear(k, 0.0, tas)))
+            spread = max(spread, float(dk.max() / dk.min() - 1.0))
+        out.append(_entry(f"D(z) scale-dependence, Sigma m_nu = {mnu} eV",
+                          "its own k-spread", spread, None,
+                          "max_k D / min_k D - 1",
+                          "informational: not an error but a statement that a "
+                          "scalar D(z) is only defined to this precision, over "
+                          "k in [1e-3, 10] h/Mpc at z = 1 and 3"))
+
+    # sigma(M,z) separability -- exact only in the massless limit now that the
+    # cold-to-total ratio carries a redshift.
+    from hod_mod.core.halo_mass_function import HaloMassFunction, _RHO_CRIT0
+    hmf = HaloMassFunction(pk.pk_linear, rho_mean=om * _RHO_CRIT0, model="tinker08")
+    m = jnp.logspace(11.0, 15.0, 48)
+    s0 = np.asarray(hmf.sigma(m, 0.0, th_lcdm))
+    s1 = np.asarray(hmf.sigma(m, 0.7, th_lcdm))
+    r = s1 / s0
+    out.append(_entry("sigma(M,z)/sigma(M,0) mass-independence, massless",
+                      "its own mass-spread", float(r.max() / r.min() - 1.0),
+                      1e-6, "max_M r / min_M r - 1",
+                      "the separability sigma(M,z) = sigma(M,0) D(z) that lets a "
+                      "multi-z caller hoist the k-integral.  The tolerance is "
+                      "float32 round-off, not physics: this script does not "
+                      "enable x64, so ~1.2e-7 is its floor for any exact "
+                      "identity.  In float64 the spread is 2e-16 -- see "
+                      "tests/test_growth.py.  Exact only while sum_mnu is "
+                      "absent: the cold-to-total ratio S_cb(k,z) carries a "
+                      "redshift, so with massive neutrinos this separability is "
+                      "broken by design"))
+    return out
+
+
 def main():
     entries = []
     for fn in (check_distances, check_concentration_and_bias, check_power_spectrum,
-               check_bias_consistency, check_mass_translation, check_aum):
+               check_growth, check_bias_consistency, check_mass_translation,
+               check_aum):
         try:
             entries.extend(fn())
         except Exception as e:                     # a broken check must not hide the rest

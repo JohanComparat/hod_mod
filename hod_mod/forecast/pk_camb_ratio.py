@@ -49,7 +49,7 @@ _K_GRID = np.logspace(-4.0, 1.45, 400)      # CAMB-safe k range [h/Mpc]
 def build(npz_path: str = _NPZ, verbose: bool = True) -> dict:
     """Build the ratio table with CAMB (once; ~1 min) and cache it as npz."""
     import jax
-    from hod_mod.core.power_spectrum import LinearPowerSpectrum
+    from hod_mod.core.power_spectrum import LinearPowerSpectrum, omega_cdm
     from hod_mod.forecast.pk_eisenstein_hu import EisensteinHu98PkLinear
     from hod_mod.forecast import params
 
@@ -60,13 +60,20 @@ def build(npz_path: str = _NPZ, verbose: bool = True) -> dict:
 
     def shapes(over: dict):
         th = dict(fid); th.update(over)
+        # NOTE the key must be "sum_mnu": LinearPowerSpectrum reads the
+        # canonical spelling.  Passing "mnu" here (as this did) meant CAMB
+        # silently ran every step at the same neutrino mass, so the sum_mnu row
+        # came out as exactly minus the EH98 suppression and cancelled the
+        # response it was supposed to correct.
         camb_th = dict(base, Omega_m=th["Omega_m"], Omega_b=th["Omega_b"],
-                       Omega_cdm=th["Omega_m"] - th["Omega_b"], h=th["h"],
-                       n_s=th["n_s"], mnu=th.get("sum_mnu", 0.0))
+                       h=th["h"], n_s=th["n_s"],
+                       sum_mnu=th.get("sum_mnu", 0.0))
+        camb_th.pop("Omega_cdm", None)      # let omega_cdm() close the budget
         p_c = np.asarray(lp.pk_linear(jnp.asarray(_K_GRID), 0.0, camb_th))
-        eh_th = {k: th[k] for k in ("Omega_m", "Omega_b", "h", "n_s", "sigma8")}
-        eh_th["Omega_cdm"] = th["Omega_m"] - th["Omega_b"]
+        eh_th = {k: th[k] for k in ("Omega_m", "Omega_b", "h", "n_s",
+                                    "ln10^{10}A_s")}
         eh_th["sum_mnu"] = th.get("sum_mnu", 0.0)
+        eh_th["Omega_cdm"] = float(omega_cdm(eh_th))
         p_e = np.asarray(eh.pk_shape(jnp.asarray(_K_GRID), eh_th))
         r = (p_c / np.interp(_K_PIVOT, _K_GRID, p_c)) \
             / (p_e / np.interp(_K_PIVOT, _K_GRID, p_e))

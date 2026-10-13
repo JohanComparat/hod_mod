@@ -17,21 +17,28 @@ not just fast.
 
 Interface (identical duck-typed contract to ``EisensteinHu98PkLinear``):
 
-* ``pk_shape(k, theta)`` — linear P(k) *shape* [amplitude arbitrary; it is
-  cancelled by the σ8 renormalisation, so this is fed to
-  :class:`~hod_mod.core.halo_mass_function.HaloMassFunction` as its ``pk_func``].
-* ``pk_linear(k, z, theta)`` — σ8-normalised physical P(k, z) [(Mpc/h)³] for the
-  2-halo term.  Same σ(R=8) top-hat renormalisation and Carroll/CPL growth as the
-  EH98 path, so the HMF and 2-halo paths stay consistent by construction.
-* ``as_hmf_pk_func()`` — a ``(k, z, theta) -> P_shape`` callable for the HMF.
+* ``pk_linear(k, z, theta)`` — physical P(k, z) [(Mpc/h)³] for the 2-halo term,
+  amplitude from ``ln10^{10}A_s``, growth from the network's own redshift.
+* ``as_hmf_pk_func()`` — a ``(k, z, theta) -> P(k, 0)`` callable for
+  :class:`~hod_mod.core.halo_mass_function.HaloMassFunction`, which applies its
+  own growth.  Physical, not a shape.
+* ``pk_shape(k, theta)`` — the amplitude-free shape, kept for callers that
+  normalise the amplitude away regardless.  No longer on the σ(M) path.
+
+``pk_linear`` used to branch on ``theta``: a ``sigma8`` key took a shape emulated
+at ``z = 0`` with a reference ``A_s`` and evolved by the analytic growth ODE,
+while ``ln10^{10}A_s`` took the network natively.  Different physics, chosen by
+dictionary key — and since ``theta`` routinely carried *both*, the σ8 branch won
+and changes to ``ln10^{10}A_s`` did nothing.  ``sigma8`` is retired; only the
+native path remains.
 
 Conventions.  The emulator is native in **1/Mpc** and **Mpc³** and takes
 ``[omega_b, omega_cdm, h, n_s, ln10^{10}A_s, z]`` (physical densities
-``omega_x = Ω_x h²``).  We call it at ``z=0`` with a fixed reference ``A_s``
-(amplitude is renormalised to σ8 downstream anyway) and convert
-``k → k/h`` [h/Mpc], ``P → P·h³`` [(Mpc/h)³].  The training box is ΛCDM with
-massless neutrinos; ``w0``/``wa`` enter only through the analytic growth factor
-and ``Σm_ν`` through the same first-order shape suppression as EH98.
+``omega_x = Ω_x h²``).  We convert ``k → k/h`` [h/Mpc], ``P → P·h³``
+[(Mpc/h)³].  The training box is ΛCDM with massless neutrinos; ``w0``/``wa``
+do **not** enter this backend at all (unlike EH98, whose amplitude carries
+``D(z=0)`` for flat CPL), and ``Σm_ν`` enters through the same CLASS-distilled
+shape suppression as EH98.
 """
 
 from __future__ import annotations
@@ -42,19 +49,19 @@ import warnings
 import jax
 import jax.numpy as jnp
 
-from hod_mod.core.halo_mass_function import growth_factor
-# Reuse the EH98 wrapper's σ8 machinery verbatim so the normalisation this class
-# derives is numerically identical to the one HaloMassFunction.sigma applies.
+from hod_mod.core.amplitude import require_as_amplitude
+from hod_mod.core.power_spectrum import (
+    omega_cdm_cold_equivalent as _omega_cdm_cold)
+# Shared with the EH98 wrapper: the σ(R=8) grid (both ultimately
+# hod_mod.core.amplitude.K_INT) and the CLASS-distilled ν suppression.
 from hod_mod.forecast.pk_eisenstein_hu import (
     _K_INT,
     _nu_suppression,
-    _sigma2_tophat,
 )
 
-# Reference ln(10^10 A_s) used for σ8-convention emulator calls.  The overall
-# amplitude is divided out by the σ8 renormalisation (`norm` in `pk_linear`), so
-# its value is immaterial; the Planck-2018 central value keeps the network near
-# its training centre for best accuracy.
+# Reference ln(10^10 A_s) for the amplitude-free :meth:`pk_shape`.  Its callers
+# normalise the overall amplitude away, so the value is immaterial; the
+# Planck-2018 central value keeps the network near its training centre.
 _REF_LN10_10_AS = 3.044
 
 #: Emulator training box — the emulator is a neural network and is only
@@ -145,18 +152,22 @@ def _loglog_interp(logk, logk_grid, logp_grid):
 
 
 class CosmoPowerJaxPkLinear:
-    """σ8-parameterised, JAX-differentiable CosmoPower-JAX linear P(k).
+    """A_s-parameterised, JAX-differentiable CosmoPower-JAX linear P(k).
 
     Parameters
     ----------
-    R8 : float
-        Top-hat radius for the σ8 normalisation [Mpc/h] (8 by convention).
     probe : str
         CosmoPower-JAX probe name for the linear matter spectrum (``"mpk_lin"``).
     """
 
-    def __init__(self, R8: float = 8.0, probe: str = "mpk_lin"):
-        self._R8 = float(R8)
+    #: The network is trained over ``z in [0, 5]`` and :meth:`pk_linear` calls it
+    #: at the requested ``z``, so it supplies its own growth.  Unconditionally
+    #: now: the sigma8 branch whose redshift dependence *was* the growth ODE --
+    #: and which made this attribute a statement about one branch rather than
+    #: about the class -- is gone.
+    has_native_z = True
+
+    def __init__(self, probe: str = "mpk_lin"):
         self._probe = str(probe)
         self._emu = _load_emulator(self._probe)
         # native emulator wavenumbers, in 1/Mpc (a fixed jnp constant)
@@ -164,12 +175,14 @@ class CosmoPowerJaxPkLinear:
 
     # -- shape spectrum, for the HMF -----------------------------------
     def pk_shape(self, k: jnp.ndarray, theta: dict) -> jnp.ndarray:
-        """Emulated linear P(k) shape [(Mpc/h)³ up to an arbitrary amplitude].
+        """Emulated linear P(k) at the reference ``A_s`` and z = 0.
 
-        The σ8 renormalisation downstream removes the overall amplitude, so only
-        the *shape* matters here.  When ``theta`` carries ``sum_mnu`` (a static
-        dict-membership branch) the same first-order massive-ν suppression as the
-        EH98 path multiplies the (massless-trained) emulator shape.
+        Amplitude-free by convention: every remaining caller normalises it away
+        (a pivot ratio, or a log-slope).  **Off the sigma(M) path** -- that is
+        :meth:`as_hmf_pk_func`, which now carries the real amplitude.  When
+        ``theta`` carries ``sum_mnu`` (a static dict-membership branch) the same
+        CLASS-distilled massive-ν suppression as the EH98 path multiplies the
+        (massless-trained) emulator output.
         """
         return self._emulate(k, theta, _REF_LN10_10_AS, 0.0)
 
@@ -178,10 +191,10 @@ class CosmoPowerJaxPkLinear:
         k = jnp.asarray(k)
         h = theta["h"]
         Ob = theta["Omega_b"]
-        if "Omega_cdm" in theta:
-            Ocdm = theta["Omega_cdm"]
-        else:
-            Ocdm = theta["Omega_m"] - Ob
+        # The network is massless-trained, so it is evaluated at the massless-
+        # equivalent cold density and corrected by the nu_ratio table; see
+        # power_spectrum.omega_cdm_cold_equivalent.
+        Ocdm = _omega_cdm_cold(theta)
         n_s = theta["n_s"]
         omega_b, omega_cdm = Ob * h ** 2, Ocdm * h ** 2
         check_training_box({"omega_b": omega_b, "omega_cdm": omega_cdm, "h": h,
@@ -198,52 +211,47 @@ class CosmoPowerJaxPkLinear:
         logp_grid = jnp.log(pk_native) + 3.0 * jnp.log(h)
         pk = jnp.exp(_loglog_interp(jnp.log(k), logk_grid, logp_grid))
         if "sum_mnu" in theta:
-            pk = pk * _nu_suppression(k, theta)
+            # The network is trained massless, so the correction is applied at
+            # the emulated redshift rather than only at z = 0.
+            pk = pk * _nu_suppression(k, theta, z)
         return pk
-
-    def _sigma8_shape2(self, theta: dict) -> jnp.ndarray:
-        """σ²(R8) of the shape spectrum — the denominator of the σ8 rescale."""
-        return _sigma2_tophat(self.pk_shape(_K_INT, theta), _K_INT, self._R8)
 
     # -- physical spectrum, for the 2-halo term ------------------------
     def pk_linear(self, k: jnp.ndarray, z: float, theta: dict) -> jnp.ndarray:
-        r"""Physical P(k, z) [(Mpc/h)³], in whichever amplitude convention ``theta`` uses.
+        r"""Physical P(k, z) [(Mpc/h)³], amplitude from ``ln10^{10}A_s``.
 
-        **σ8 convention** (``theta['sigma8']`` present — the forecast/EH98 layout):
+        The emulator is called with the actual ``A_s`` *and* the actual ``z``
+        (it is trained over ``z in [0, 5]``), so the amplitude and the growth
+        both come straight from the network -- no external growth factor, no
+        renormalisation.
 
-        .. math::
-
-            P(k, z) = P_\mathrm{shape}(k)\,
-                      \frac{\sigma_8^2}{\sigma_{8,\mathrm{shape}}^2}\,
-                      \left[\frac{D(z)}{D(0)}\right]^2
-
-        The shape is emulated at ``z=0`` and evolved with the analytic growth
-        factor, so σ(M) from the HMF and the 2-halo P(k) share one normalisation.
-
-        **A_s convention** (``theta['ln10^{10}A_s']`` — the CAMB/production layout,
-        see :class:`hod_mod.core.power_spectrum.LinearPowerSpectrum`): the emulator
-        is called with the actual ``A_s`` *and* the actual ``z`` (it is trained over
-        ``z∈[0,5]``), so the amplitude and growth both come straight from the
-        network — no external growth factor, no renormalisation.
+        There used to be a second branch here, taken first whenever ``theta``
+        carried a ``sigma8``: it emulated the *shape* at ``z = 0`` with a
+        reference ``A_s`` and evolved it with the analytic growth ODE.  That is
+        not the same physics as this one, and which of the two ran was decided
+        by a dictionary key.  Worse, ``theta`` routinely carried *both* keys, so
+        the branch order silently made ``sigma8`` win and any change to
+        ``ln10^{10}A_s`` -- including the one a free-cosmology sampler was
+        making -- do nothing at all.
         """
+        require_as_amplitude(theta, "CosmoPowerJaxPkLinear.pk_linear")
         k = jnp.asarray(k)
-        if "sigma8" in theta:
-            pk_shape = self.pk_shape(k, theta)
-            norm = theta["sigma8"] ** 2 / self._sigma8_shape2(theta)
-            growth = growth_factor(float(z), theta)  # D(z)/D(0); CPL ODE if w0/wa
-            return pk_shape * norm * growth ** 2
-        if "ln10^{10}A_s" in theta:
-            return self._emulate(k, theta, theta["ln10^{10}A_s"], z)
-        raise KeyError(
-            "CosmoPowerJaxPkLinear needs an amplitude: either 'sigma8' "
-            "(forecast convention) or 'ln10^{10}A_s' (CAMB/production "
-            f"convention); got keys {sorted(theta)}")
+        return self._emulate(k, theta, theta["ln10^{10}A_s"], z)
 
     # -- convenience: a plain callable for make_hmf(pk_func=...) --------
     def as_hmf_pk_func(self):
-        """Return a ``(k, z, theta) -> P_shape`` callable for the HMF."""
+        """Return a ``(k, z, theta) -> P(k, 0)`` callable for the HMF.
+
+        The z=0 **physical** spectrum, not a shape.  ``HaloMassFunction.sigma``
+        used to be handed ``pk_shape`` -- emulated at a reference ``A_s`` -- and
+        rescale it to ``theta['sigma8']``; with that rescale gone the amplitude
+        has to arrive here instead.  ``z`` is ignored because the HMF applies
+        its own growth, and it always calls with ``0.0``.
+        """
         def _pk_func(k, z, theta):
-            return self.pk_shape(k, theta)
+            require_as_amplitude(theta, "CosmoPowerJaxPkLinear.as_hmf_pk_func")
+            return self._emulate(jnp.asarray(k), theta,
+                                 theta["ln10^{10}A_s"], 0.0)
         return _pk_func
 
     @staticmethod

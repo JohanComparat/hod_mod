@@ -47,7 +47,7 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp  # noqa: E402
 
 from hod_mod.forecast.forward_jax import ForwardModel, PARAM_NAMES, OBSERVABLES, _IDX  # noqa: E402
-from hod_mod.forecast import params, fisher  # noqa: E402
+from hod_mod.forecast import params, fisher, derived  # noqa: E402
 
 # --- Stage-IV per-observable error model ----------------------------------
 # (survey label, f_sky, rN [noise-to-signal at the pivot], aN [growth exponent])
@@ -105,15 +105,14 @@ def per_bin_relerr(model, row_obs, row_x):
     return np.clip(out, 1e-4, 2.0)
 
 
-def _s8_sigma(cov, fid):
-    """σ(S8) with S8 = σ8 (Ω_m/0.3)^0.5, via linear error propagation."""
-    iom, is8 = _IDX["Omega_m"], _IDX["sigma8"]
-    Om, s8 = fid[iom], fid[is8]
-    g = np.zeros(cov.shape[0])
-    g[iom] = s8 * 0.5 * (Om / 0.3) ** (-0.5) / 0.3
-    g[is8] = (Om / 0.3) ** 0.5
-    var = float(g @ cov @ g)
-    return np.sqrt(max(var, 0.0)), s8 * (Om / 0.3) ** 0.5
+def _s8_sigma(cov, fid, model=None):
+    """σ(S8), and S8, with S8 = σ8 (Ω_m/0.3)^0.5.
+
+    σ8 is derived from the spectrum now rather than being a Fisher coordinate,
+    so the Jacobian row comes from autodiff and carries σ8's own Ω_m dependence.
+    See hod_mod.forecast.derived for why that changes the number.
+    """
+    return derived.s8_sigma(cov, fid, model)
 
 
 def _constraints(d0, J, relerr, mask, prior, cov_full=None):
@@ -155,7 +154,7 @@ def main():
     out = _out_dir()
     names = PARAM_NAMES
     fid = params.fiducial_vector()
-    iom, is8 = _IDX["Omega_m"], _IDX["sigma8"]
+    iom = _IDX["Omega_m"]
 
     print(f"[setup] Stage-IV forecast, {len(names)} params, {len(OBSERVABLES)} observables")
     model = ForwardModel(z_eff=0.2, n_k=args.n_k, n_m=args.n_m)
@@ -200,9 +199,15 @@ def main():
         rec = {}
         for tag, prior in (("lss", prior_lss), ("cmb", prior_cmb)):
             cov, sig, _ = _constraints(d0, J, relerr, smask, prior, cov_full)
-            s8sig, _ = _s8_sigma(cov, fid)
-            rec[tag] = dict(sigma=sig, cov=cov, s8=s8sig,
-                            fom=fisher.figure_of_merit(cov, iom, is8))
+            s8sig, _ = _s8_sigma(cov, fid, model)
+            s8only, _ = derived.sigma8_sigma(cov, fid, model)
+            # The (Omega_m, sigma8) FoM needs a DERIVED 2x2 -- sigma8 is not an
+            # axis of the parameter covariance any more, so a positional slice
+            # (fisher.figure_of_merit) cannot express this plane.
+            rec[tag] = dict(sigma=sig, cov=cov, s8=s8sig, sig8=s8only,
+                            fom=derived.fom_of(cov, fid, [
+                                lambda t: jnp.asarray(t)[iom],
+                                lambda t: derived.sigma8_of(t, model)]))
         # cumulative probe attribution (LSS-only)
         cum = {}
         for i in range(1, len(order) + 1):
@@ -210,12 +215,14 @@ def main():
             mm = smask & np.isin(row_obs, subset)
             cov, sig, _ = _constraints(d0, J, relerr, mm, prior_lss, cov_full)
             cum["+".join(subset)] = dict(
-                sOm=float(sig[iom]), sS8=float(_s8_sigma(cov, fid)[0]),
-                fom=float(fisher.figure_of_merit(cov, iom, is8)))
+                sOm=float(sig[iom]), sS8=float(_s8_sigma(cov, fid, model)[0]),
+                fom=float(derived.fom_of(cov, fid, [
+                    lambda t: jnp.asarray(t)[iom],
+                    lambda t: derived.sigma8_of(t, model)])))
         results[rmin] = dict(lss=rec["lss"], cmb=rec["cmb"], cumulative=cum)
         L, C = rec["lss"], rec["cmb"]
-        print(f"{rmin:6.2f} | {L['sigma'][iom]:9.3e} {L['sigma'][is8]:9.3e} {L['s8']:9.3e} "
-              f"{L['fom']:9.3g} | {C['sigma'][iom]:13.3e} {C['sigma'][is8]:9.3e} {C['s8']:9.3e}",
+        print(f"{rmin:6.2f} | {L['sigma'][iom]:9.3e} {L['sig8']:9.3e} {L['s8']:9.3e} "
+              f"{L['fom']:9.3g} | {C['sigma'][iom]:13.3e} {C['sig8']:9.3e} {C['s8']:9.3e}",
               flush=True)
 
     _save(out, args, names, fid, d0, J, relerr, row_obs, row_x, results, order)
@@ -230,11 +237,13 @@ def _save(out, args, names, fid, d0, J, relerr, row_obs, row_x, results, order):
                                           rN=_STAGE4[o][2], aN=_STAGE4[o][3]) for o in OBSERVABLES},
            "results": {f"{rm}": {
                "lss": {"sigma_Omega_m": float(results[rm]["lss"]["sigma"][_IDX["Omega_m"]]),
-                       "sigma_sigma8": float(results[rm]["lss"]["sigma"][_IDX["sigma8"]]),
+                       "sigma_ln10As": float(results[rm]["lss"]["sigma"][_IDX["ln10^{10}A_s"]]),
+                       "sigma_sigma8": float(results[rm]["lss"]["sig8"]),
                        "sigma_S8": float(results[rm]["lss"]["s8"]),
                        "FoM": float(results[rm]["lss"]["fom"])},
                "lss_plus_planck": {"sigma_Omega_m": float(results[rm]["cmb"]["sigma"][_IDX["Omega_m"]]),
-                                   "sigma_sigma8": float(results[rm]["cmb"]["sigma"][_IDX["sigma8"]]),
+                                   "sigma_ln10As": float(results[rm]["cmb"]["sigma"][_IDX["ln10^{10}A_s"]]),
+                                   "sigma_sigma8": float(results[rm]["cmb"]["sig8"]),
                                    "sigma_S8": float(results[rm]["cmb"]["s8"]),
                                    "FoM": float(results[rm]["cmb"]["fom"])},
                "cumulative": results[rm]["cumulative"]} for rm in args.rmin}}
@@ -251,7 +260,7 @@ def _make_plots(out, model, fid, d0, J, relerr, row_obs, row_x, results, args, o
     import matplotlib.pyplot as plt
 
     rmins = args.rmin
-    iom, is8 = _IDX["Omega_m"], _IDX["sigma8"]
+    iom = _IDX["Omega_m"]
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
 
     # panel 1: the assumed per-bin fractional errors per observable
@@ -275,7 +284,7 @@ def _make_plots(out, model, fid, d0, J, relerr, row_obs, row_x, results, args, o
     # panel 2: sigma(Om), sigma(s8), sigma(S8) vs scale cut (LSS-only + Planck)
     ax = axes[1]
     sOm = [results[rm]["lss"]["sigma"][iom] for rm in rmins]
-    ss8 = [results[rm]["lss"]["sigma"][is8] for rm in rmins]
+    ss8 = [results[rm]["lss"]["sig8"] for rm in rmins]
     sS8 = [results[rm]["lss"]["s8"] for rm in rmins]
     sOm_c = [results[rm]["cmb"]["sigma"][iom] for rm in rmins]
     ax.loglog(rmins, sOm, "o-", color="C0", label=r"$\sigma(\Omega_m)$ (LSS)")

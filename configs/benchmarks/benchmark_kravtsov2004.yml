@@ -15,7 +15,7 @@ data:
 cosmology:
   Omega_m: 0.272
   h:       0.704
-  sigma8:  0.810
+  ln10^{10}A_s: 3.060736  # from sigma8 = 0.810, converted via CAMB
   n_s:     0.966
   Omega_b: 0.044
 
